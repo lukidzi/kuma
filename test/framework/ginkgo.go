@@ -28,7 +28,5 @@ func E2EAfterSuite(fn func()) {
 }
 
 func E2EBeforeSuite(fn func()) {
-	ginkgo.BeforeSuite(func() {
-		fn()
-	})
+	ginkgo.BeforeSuite(fn)
 }
