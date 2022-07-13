@@ -80,12 +80,13 @@ type GatewayListenerInfo struct {
 	HostInfos []GatewayHostInfo
 }
 
-type Policy struct {
-	ResourceType model.ResourceType
-	Name         string
-}
+type Policy = map[model.ResourceType]string
 
-type ListenerExactPolicies = map[string][]Policy
+type ListenerExactPolicies struct {
+	ListenerName string
+	Hostname     string
+	Policies     Policy
+}
 
 // FilterChainGenerator is responsible for handling the filter chain for
 // a specific protocol.
@@ -116,7 +117,7 @@ func (g *filterChainGenerators) For(ctx xds_context.Context, info GatewayListene
 func GatewayListenerInfoFromProxy(
 	ctx xds_context.MeshContext, proxy *core_xds.Proxy, zone string,
 ) (
-	[]GatewayListenerInfo, map[string]ListenerExactPolicies, error,
+	[]GatewayListenerInfo, map[string][]ListenerExactPolicies, error,
 ) {
 	gateway := xds_topology.SelectGateway(ctx.Resources.Gateways().Items, proxy.Dataplane.Spec.Matches)
 
@@ -172,7 +173,7 @@ func GatewayListenerInfoFromProxy(
 		ctx.DataSourceLoader,
 	)
 
-	destinationPolicies := map[string]ListenerExactPolicies{}
+	destinationPolicies := map[string][]ListenerExactPolicies{}
 
 	for port, listeners := range collapsed {
 		// Force all listeners on the same port to have the same protocol.
@@ -218,44 +219,54 @@ func GatewayListenerInfoFromProxy(
 	return listenerInfos, destinationPolicies, nil
 }
 
-func getDestinationsPolicies(hostInfos []GatewayHostInfo, destinationPolicies map[string]ListenerExactPolicies, listenerName string) {
+func getDestinationsPolicies(hostInfos []GatewayHostInfo, destinationPolicies map[string][]ListenerExactPolicies, listenerName string) {
 	for _, info := range hostInfos {
 		for _, entry := range info.Entries {
-			for _, r := range entry.Action.Forward {
-				dest := r.Destination[mesh_proto.ServiceTag]
-				policies := []Policy{}
-				for _, val := range ClusterPolicyTypes {
-					if obj, found := r.Policies[val]; found {
-						policies = append(policies, Policy{
-							ResourceType: val,
-							Name:         obj.GetMeta().GetName(),
-						})
+			for _, dest := range entry.Action.Forward {
+				destinationName := dest.Destination[mesh_proto.ServiceTag]
+				policies := Policy{}
+				for _, resourceType := range ClusterPolicyTypes {
+					if policy, found := dest.Policies[resourceType]; found {
+						policies[resourceType] = policy.GetMeta().GetName()
 					}
 				}
-				if obj, found := destinationPolicies[dest]; found {
-					obj[listenerName] = policies
+				if val, found := destinationPolicies[destinationName]; found {
+					destinationPolicies[destinationName] = append(val, ListenerExactPolicies{
+						ListenerName: listenerName,
+						Hostname:     info.Host.Hostname,
+						Policies:     policies,
+					})
 				} else {
-					destinationPolicies[dest] = map[string][]Policy{
-						listenerName: policies,
+					destinationPolicies[destinationName] = []ListenerExactPolicies{
+						{
+							ListenerName: listenerName,
+							Hostname:     info.Host.Hostname,
+							Policies:     policies,
+						},
 					}
 				}
 			}
 			if entry.Mirror != nil {
-				dest := entry.Mirror.Forward.Destination[mesh_proto.ServiceTag]
-				policies := []Policy{}
-				for _, val := range ClusterPolicyTypes {
-					if obj, found := entry.Mirror.Forward.Policies[val]; found {
-						policies = append(policies, Policy{
-							ResourceType: val,
-							Name:         obj.GetMeta().GetName(),
-						})
+				destinationName := entry.Mirror.Forward.Destination[mesh_proto.ServiceTag]
+				policies := Policy{}
+				for _, resourceType := range ClusterPolicyTypes {
+					if policy, found := entry.Mirror.Forward.Policies[resourceType]; found {
+						policies[resourceType] = policy.GetMeta().GetName()
 					}
 				}
-				if obj, found := destinationPolicies[dest]; found {
-					obj[listenerName] = policies
+				if val, found := destinationPolicies[destinationName]; found {
+					destinationPolicies[destinationName] = append(val, ListenerExactPolicies{
+						ListenerName: listenerName,
+						Hostname:     info.Host.Hostname,
+						Policies:     policies,
+					})
 				} else {
-					destinationPolicies[dest] = map[string][]Policy{
-						listenerName: policies,
+					destinationPolicies[destinationName] = []ListenerExactPolicies{
+						{
+							ListenerName: listenerName,
+							Hostname:     info.Host.Hostname,
+							Policies:     policies,
+						},
 					}
 				}
 			}
@@ -331,7 +342,7 @@ func (g Generator) generateLDS(ctx xds_context.Context, info GatewayListenerInfo
 	return resources, nil
 }
 
-func (g Generator) generateCDS(ctx xds_context.Context, info GatewayListenerInfo, hostInfos []GatewayHostInfo, policies map[string]ListenerExactPolicies) (*core_xds.ResourceSet, error) {
+func (g Generator) generateCDS(ctx xds_context.Context, info GatewayListenerInfo, hostInfos []GatewayHostInfo, policies map[string][]ListenerExactPolicies) (*core_xds.ResourceSet, error) {
 	resources := core_xds.NewResourceSet()
 
 	for _, hostInfo := range hostInfos {

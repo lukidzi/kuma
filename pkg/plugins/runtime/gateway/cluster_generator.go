@@ -25,7 +25,7 @@ type ClusterGenerator struct {
 }
 
 // GenerateHost generates clusters for all the services targeted in the current route table.
-func (c *ClusterGenerator) GenerateClusters(ctx xds_context.Context, info GatewayListenerInfo, routes []route.Entry, policies map[string]ListenerExactPolicies) (*core_xds.ResourceSet, error) {
+func (c *ClusterGenerator) GenerateClusters(ctx xds_context.Context, info GatewayListenerInfo, routes []route.Entry, policies map[string][]ListenerExactPolicies) (*core_xds.ResourceSet, error) {
 	resources := core_xds.NewResourceSet()
 
 	// If there is a service name conflict between external services
@@ -54,12 +54,9 @@ func (c *ClusterGenerator) GenerateClusters(ctx xds_context.Context, info Gatewa
 		generateHashNameWithConfig := false
 		listernersPolicies := policies[service]
 		if len(listernersPolicies) > 1 {
-			currentListener := listernersPolicies[info.Listener.ResourceName]
-			for key, value := range listernersPolicies {
-				if key == info.Listener.ResourceName {
-					continue
-				}
-				if !reflect.DeepEqual(currentListener, value) {
+			currentListener := listernersPolicies[0]
+			for _, value := range listernersPolicies[1:] {
+				if !reflect.DeepEqual(currentListener.Policies, value.Policies) {
 					generateHashNameWithConfig = true
 					break
 				}

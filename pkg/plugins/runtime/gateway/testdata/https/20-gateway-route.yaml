@@ -1,6 +1,6 @@
 Clusters:
   Resources:
-    echo-service-ae1529d5b4aba85d:
+    echo-service-b5c2b60cba392c4e:
       circuitBreakers:
         thresholds:
         - maxConnections: 1024
@@ -12,7 +12,7 @@ Clusters:
         edsConfig:
           ads: {}
           resourceApiVersion: V3
-      name: echo-service-ae1529d5b4aba85d
+      name: echo-service-b5c2b60cba392c4e
       outlierDetection:
         enforcingConsecutive5xx: 0
         enforcingConsecutiveGatewayFailure: 0
@@ -27,10 +27,96 @@ Clusters:
             idleTimeout: 10s
           explicitHttpConfig:
             httpProtocolOptions: {}
+    echo-service-cff7b41a9764f367:
+      circuitBreakers:
+        thresholds:
+        - maxConnections: 1024
+          maxPendingRequests: 1024
+          maxRequests: 1024
+          maxRetries: 3
+      connectTimeout: 300s
+      edsClusterConfig:
+        edsConfig:
+          ads: {}
+          resourceApiVersion: V3
+      name: echo-service-cff7b41a9764f367
+      outlierDetection:
+        enforcingConsecutive5xx: 0
+        enforcingConsecutiveGatewayFailure: 0
+        enforcingConsecutiveLocalOriginFailure: 0
+        enforcingFailurePercentage: 0
+        enforcingSuccessRate: 0
+      type: EDS
+      typedExtensionProtocolOptions:
+        envoy.extensions.upstreams.http.v3.HttpProtocolOptions:
+          '@type': type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions
+          commonHttpProtocolOptions:
+            idleTimeout: 30s
+          explicitHttpConfig:
+            httpProtocolOptions: {}
+    echo-service-dbfe9218dfa3ba0c:
+      circuitBreakers:
+        thresholds:
+        - maxConnections: 1024
+          maxPendingRequests: 1024
+          maxRequests: 1024
+          maxRetries: 3
+      connectTimeout: 20s
+      edsClusterConfig:
+        edsConfig:
+          ads: {}
+          resourceApiVersion: V3
+      name: echo-service-dbfe9218dfa3ba0c
+      outlierDetection:
+        enforcingConsecutive5xx: 0
+        enforcingConsecutiveGatewayFailure: 0
+        enforcingConsecutiveLocalOriginFailure: 0
+        enforcingFailurePercentage: 0
+        enforcingSuccessRate: 0
+      type: EDS
+      typedExtensionProtocolOptions:
+        envoy.extensions.upstreams.http.v3.HttpProtocolOptions:
+          '@type': type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions
+          commonHttpProtocolOptions:
+            idleTimeout: 20s
+          explicitHttpConfig:
+            httpProtocolOptions: {}
 Endpoints:
   Resources:
-    echo-service-ae1529d5b4aba85d:
-      clusterName: echo-service-ae1529d5b4aba85d
+    echo-service-b5c2b60cba392c4e:
+      clusterName: echo-service-b5c2b60cba392c4e
+      endpoints:
+      - lbEndpoints:
+        - endpoint:
+            address:
+              socketAddress:
+                address: 192.168.1.6
+                portValue: 20006
+          loadBalancingWeight: 1
+          metadata:
+            filterMetadata:
+              envoy.lb:
+                kuma.io/protocol: http
+              envoy.transport_socket_match:
+                kuma.io/protocol: http
+    echo-service-cff7b41a9764f367:
+      clusterName: echo-service-cff7b41a9764f367
+      endpoints:
+      - lbEndpoints:
+        - endpoint:
+            address:
+              socketAddress:
+                address: 192.168.1.6
+                portValue: 20006
+          loadBalancingWeight: 1
+          metadata:
+            filterMetadata:
+              envoy.lb:
+                kuma.io/protocol: http
+              envoy.transport_socket_match:
+                kuma.io/protocol: http
+    echo-service-dbfe9218dfa3ba0c:
+      clusterName: echo-service-dbfe9218dfa3ba0c
       endpoints:
       - lbEndpoints:
         - endpoint:
@@ -278,7 +364,7 @@ Routes:
             timeout: 20s
             weightedClusters:
               clusters:
-              - name: echo-service-ae1529d5b4aba85d
+              - name: echo-service-dbfe9218dfa3ba0c
                 requestHeadersToAdd:
                 - header:
                     key: x-kuma-tags
@@ -308,7 +394,7 @@ Routes:
             timeout: 30s
             weightedClusters:
               clusters:
-              - name: echo-service-ae1529d5b4aba85d
+              - name: echo-service-cff7b41a9764f367
                 requestHeadersToAdd:
                 - header:
                     key: x-kuma-tags
@@ -338,7 +424,7 @@ Routes:
             timeout: 10s
             weightedClusters:
               clusters:
-              - name: echo-service-ae1529d5b4aba85d
+              - name: echo-service-b5c2b60cba392c4e
                 requestHeadersToAdd:
                 - header:
                     key: x-kuma-tags
