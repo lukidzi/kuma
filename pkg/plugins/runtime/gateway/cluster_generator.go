@@ -56,13 +56,13 @@ func (c *ClusterGenerator) GenerateClusters(ctx xds_context.Context, info Gatewa
 		if len(listernersPolicies) > 1 {
 			currentListener := listernersPolicies[info.Listener.ResourceName]
 			for key, value := range listernersPolicies {
-				if key != info.Listener.ResourceName {
-					if !reflect.DeepEqual(currentListener, value) {
-						generateHashNameWithConfig = true
-						break
-					}
+				if key == info.Listener.ResourceName {
+					continue
 				}
-
+				if !reflect.DeepEqual(currentListener, value) {
+					generateHashNameWithConfig = true
+					break
+				}
 			}
 		}
 

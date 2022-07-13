@@ -80,12 +80,12 @@ type GatewayListenerInfo struct {
 	HostInfos []GatewayHostInfo
 }
 
-// type ListenerExactPolicies struct {
-// 	ListenerName string
-// 	Policies     []match.RankedPolicy
-// }
+type Policy struct {
+	ResourceType model.ResourceType
+	Name         string
+}
 
-type ListenerExactPolicies = map[string][]string
+type ListenerExactPolicies = map[string][]Policy
 
 // FilterChainGenerator is responsible for handling the filter chain for
 // a specific protocol.
@@ -171,7 +171,8 @@ func GatewayListenerInfoFromProxy(
 		matchedExternalServices,
 		ctx.DataSourceLoader,
 	)
-	test := map[string]ListenerExactPolicies{}
+
+	destinationPolicies := map[string]ListenerExactPolicies{}
 
 	for port, listeners := range collapsed {
 		// Force all listeners on the same port to have the same protocol.
@@ -184,7 +185,7 @@ func GatewayListenerInfoFromProxy(
 			}
 		}
 
-		listener, hosts, err := MakeGatewayListener(ctx, gateway, proxy.Dataplane, listeners, test)
+		listener, hosts, err := MakeGatewayListener(ctx, gateway, proxy.Dataplane, listeners)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -202,42 +203,7 @@ func GatewayListenerInfoFromProxy(
 			})
 		}
 
-		for _, info := range hostInfos {
-			for _, entry := range info.Entries {
-				for _, r := range entry.Action.Forward {
-					dest := r.Destination[mesh_proto.ServiceTag]
-					policies := []string{}
-					for _, val := range ClusterPolicyTypes {
-						if obj, found := r.Policies[val]; found {
-							policies = append(policies, obj.GetMeta().GetName())
-						}
-					}
-					if obj, found := test[dest]; found {
-						obj[listener.ResourceName] = policies
-					} else {
-						test[dest] = map[string][]string{
-							listener.ResourceName: policies,
-						}
-					}
-				}
-				if entry.Mirror != nil {
-					dest := entry.Mirror.Forward.Destination[mesh_proto.ServiceTag]
-					policies := []string{}
-					for _, val := range ClusterPolicyTypes {
-						if obj, found := entry.Mirror.Forward.Policies[val]; found {
-							policies = append(policies, obj.GetMeta().GetName())
-						}
-					}
-					if obj, found := test[dest]; found {
-						obj[listener.ResourceName] = policies
-					} else {
-						test[dest] = map[string][]string{
-							listener.ResourceName: policies,
-						}
-					}
-				}
-			}
-		}
+		getDestinationsPolicies(hostInfos, destinationPolicies, listener.ResourceName)
 
 		listenerInfos = append(listenerInfos, GatewayListenerInfo{
 			Proxy:             proxy,
@@ -249,7 +215,52 @@ func GatewayListenerInfoFromProxy(
 		})
 	}
 
-	return listenerInfos, test, nil
+	return listenerInfos, destinationPolicies, nil
+}
+
+func getDestinationsPolicies(hostInfos []GatewayHostInfo, destinationPolicies map[string]ListenerExactPolicies, listenerName string) {
+	for _, info := range hostInfos {
+		for _, entry := range info.Entries {
+			for _, r := range entry.Action.Forward {
+				dest := r.Destination[mesh_proto.ServiceTag]
+				policies := []Policy{}
+				for _, val := range ClusterPolicyTypes {
+					if obj, found := r.Policies[val]; found {
+						policies = append(policies, Policy{
+							ResourceType: val,
+							Name:         obj.GetMeta().GetName(),
+						})
+					}
+				}
+				if obj, found := destinationPolicies[dest]; found {
+					obj[listenerName] = policies
+				} else {
+					destinationPolicies[dest] = map[string][]Policy{
+						listenerName: policies,
+					}
+				}
+			}
+			if entry.Mirror != nil {
+				dest := entry.Mirror.Forward.Destination[mesh_proto.ServiceTag]
+				policies := []Policy{}
+				for _, val := range ClusterPolicyTypes {
+					if obj, found := entry.Mirror.Forward.Policies[val]; found {
+						policies = append(policies, Policy{
+							ResourceType: val,
+							Name:         obj.GetMeta().GetName(),
+						})
+					}
+				}
+				if obj, found := destinationPolicies[dest]; found {
+					obj[listenerName] = policies
+				} else {
+					destinationPolicies[dest] = map[string][]Policy{
+						listenerName: policies,
+					}
+				}
+			}
+		}
+	}
 }
 
 func (g Generator) Generate(ctx xds_context.Context, proxy *core_xds.Proxy) (*core_xds.ResourceSet, error) {
@@ -372,7 +383,6 @@ func MakeGatewayListener(
 	gateway *core_mesh.MeshGatewayResource,
 	dataplane *core_mesh.DataplaneResource,
 	listeners []*mesh_proto.MeshGateway_Listener,
-	test map[string]ListenerExactPolicies,
 ) (GatewayListener, []GatewayHost, error) {
 	hostsByName := map[string]GatewayHost{}
 	listenerName := envoy_names.GetGatewayListenerName(

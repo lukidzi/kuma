@@ -10,7 +10,7 @@ import (
 )
 
 var _ = Describe("Test Gateway on Universal", Label("arm-not-supported"), gateway.GatewayOnUniversal)
-var _ = FDescribe("Test Gateway on Kubernetes", Label("arm-not-supported"), gateway.GatewayOnKubernetes)
+var _ = Describe("Test Gateway on Kubernetes", Label("arm-not-supported"), gateway.GatewayOnKubernetes)
 var _ = Describe("Test Gateway on Kubernetes with HELM", Label("arm-not-supported"), gateway.GatewayHELM)
 
 func TestE2E(t *testing.T) {

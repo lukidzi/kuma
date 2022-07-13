@@ -1463,7 +1463,7 @@ conf:
     max_stream_duration: 117s
 `,
 		),
-		Entry("should generate different clusters when 2 different configurations availiable",
+		Entry("should generate different clusters when 2 different configurations available",
 			"multilistener-gateway-route.yaml", `
 type: MeshGateway
 mesh: default

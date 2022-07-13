@@ -337,7 +337,7 @@ spec:
 			Expect(err).ToNot(HaveOccurred())
 		})
 
-		FIt("should proxy simple HTTP requests", func() {
+		It("should proxy simple HTTP requests", func() {
 			time.Sleep(100 * time.Hour)
 			ProxySimpleRequests(cluster, "es-test-server",
 				net.JoinHostPort(GatewayAddress("edge-gateway"), GatewayPort),
