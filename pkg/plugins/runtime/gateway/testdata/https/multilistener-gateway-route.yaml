@@ -1,6 +1,33 @@
 Clusters:
   Resources:
-    echo-service-ae1529d5b4aba85d:
+    echo-service-498a7b34fe792bac:
+      circuitBreakers:
+        thresholds:
+        - maxConnections: 1024
+          maxPendingRequests: 1024
+          maxRequests: 1024
+          maxRetries: 3
+      connectTimeout: 30s
+      edsClusterConfig:
+        edsConfig:
+          ads: {}
+          resourceApiVersion: V3
+      name: echo-service-498a7b34fe792bac
+      outlierDetection:
+        enforcingConsecutive5xx: 0
+        enforcingConsecutiveGatewayFailure: 0
+        enforcingConsecutiveLocalOriginFailure: 0
+        enforcingFailurePercentage: 0
+        enforcingSuccessRate: 0
+      type: EDS
+      typedExtensionProtocolOptions:
+        envoy.extensions.upstreams.http.v3.HttpProtocolOptions:
+          '@type': type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions
+          commonHttpProtocolOptions:
+            idleTimeout: 0s
+          explicitHttpConfig:
+            httpProtocolOptions: {}
+    echo-service-b5c2b60cba392c4e:
       circuitBreakers:
         thresholds:
         - maxConnections: 1024
@@ -12,7 +39,7 @@ Clusters:
         edsConfig:
           ads: {}
           resourceApiVersion: V3
-      name: echo-service-ae1529d5b4aba85d
+      name: echo-service-b5c2b60cba392c4e
       outlierDetection:
         enforcingConsecutive5xx: 0
         enforcingConsecutiveGatewayFailure: 0
@@ -29,8 +56,24 @@ Clusters:
             httpProtocolOptions: {}
 Endpoints:
   Resources:
-    echo-service-ae1529d5b4aba85d:
-      clusterName: echo-service-ae1529d5b4aba85d
+    echo-service-498a7b34fe792bac:
+      clusterName: echo-service-498a7b34fe792bac
+      endpoints:
+      - lbEndpoints:
+        - endpoint:
+            address:
+              socketAddress:
+                address: 192.168.1.6
+                portValue: 20006
+          loadBalancingWeight: 1
+          metadata:
+            filterMetadata:
+              envoy.lb:
+                kuma.io/protocol: http
+              envoy.transport_socket_match:
+                kuma.io/protocol: http
+    echo-service-b5c2b60cba392c4e:
+      clusterName: echo-service-b5c2b60cba392c4e
       endpoints:
       - lbEndpoints:
         - endpoint:
@@ -239,7 +282,7 @@ Routes:
               retryOn: gateway-error,connect-failure,refused-stream
             weightedClusters:
               clusters:
-              - name: echo-service-ae1529d5b4aba85d
+              - name: echo-service-b5c2b60cba392c4e
                 requestHeadersToAdd:
                 - header:
                     key: x-kuma-tags
@@ -262,7 +305,7 @@ Routes:
               retryOn: gateway-error,connect-failure,refused-stream
             weightedClusters:
               clusters:
-              - name: echo-service-ae1529d5b4aba85d
+              - name: echo-service-b5c2b60cba392c4e
                 requestHeadersToAdd:
                 - header:
                     key: x-kuma-tags
@@ -285,7 +328,7 @@ Routes:
               retryOn: gateway-error,connect-failure,refused-stream
             weightedClusters:
               clusters:
-              - name: echo-service-ae1529d5b4aba85d
+              - name: echo-service-b5c2b60cba392c4e
                 requestHeadersToAdd:
                 - header:
                     key: x-kuma-tags
@@ -317,7 +360,7 @@ Routes:
               retryOn: gateway-error,connect-failure,refused-stream
             weightedClusters:
               clusters:
-              - name: echo-service-ae1529d5b4aba85d
+              - name: echo-service-498a7b34fe792bac
                 requestHeadersToAdd:
                 - header:
                     key: x-kuma-tags
@@ -340,7 +383,7 @@ Routes:
               retryOn: gateway-error,connect-failure,refused-stream
             weightedClusters:
               clusters:
-              - name: echo-service-ae1529d5b4aba85d
+              - name: echo-service-498a7b34fe792bac
                 requestHeadersToAdd:
                 - header:
                     key: x-kuma-tags
@@ -372,7 +415,7 @@ Routes:
               retryOn: gateway-error,connect-failure,refused-stream
             weightedClusters:
               clusters:
-              - name: echo-service-ae1529d5b4aba85d
+              - name: echo-service-b5c2b60cba392c4e
                 requestHeadersToAdd:
                 - header:
                     key: x-kuma-tags
@@ -395,7 +438,7 @@ Routes:
               retryOn: gateway-error,connect-failure,refused-stream
             weightedClusters:
               clusters:
-              - name: echo-service-ae1529d5b4aba85d
+              - name: echo-service-b5c2b60cba392c4e
                 requestHeadersToAdd:
                 - header:
                     key: x-kuma-tags
@@ -418,7 +461,7 @@ Routes:
               retryOn: gateway-error,connect-failure,refused-stream
             weightedClusters:
               clusters:
-              - name: echo-service-ae1529d5b4aba85d
+              - name: echo-service-b5c2b60cba392c4e
                 requestHeadersToAdd:
                 - header:
                     key: x-kuma-tags

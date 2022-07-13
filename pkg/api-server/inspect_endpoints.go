@@ -52,7 +52,7 @@ func getMatchedPolicies(
 			}
 		}
 		if proxy.Dataplane.Spec.IsBuiltinGateway() {
-			entries, err := gateway.GatewayListenerInfoFromProxy(
+			entries, _, err := gateway.GatewayListenerInfoFromProxy(
 				meshContext, proxy, proxyBuilder.Zone,
 			)
 			if err != nil {

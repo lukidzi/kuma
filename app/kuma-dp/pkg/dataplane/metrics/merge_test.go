@@ -98,6 +98,7 @@ var _ = Describe("Detect mergable clusters", func() {
 				},
 			},
 			&envoy_cluster_v3.Cluster{},
+			false,
 		)
 		Expect(err).To(Succeed())
 		Expect(clusterName).ToNot(BeEmpty())

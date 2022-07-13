@@ -1,6 +1,6 @@
 Clusters:
   Resources:
-    echo-service-97e681ffa5605bde:
+    echo-service-498a7b34fe792bac:
       circuitBreakers:
         thresholds:
         - maxConnections: 1024
@@ -12,7 +12,7 @@ Clusters:
         edsConfig:
           ads: {}
           resourceApiVersion: V3
-      name: echo-service-97e681ffa5605bde
+      name: echo-service-498a7b34fe792bac
       outlierDetection:
         enforcingConsecutive5xx: 0
         enforcingConsecutiveGatewayFailure: 0
@@ -24,7 +24,7 @@ Clusters:
         envoy.extensions.upstreams.http.v3.HttpProtocolOptions:
           '@type': type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions
           commonHttpProtocolOptions:
-            idleTimeout: 30s
+            idleTimeout: 0s
           explicitHttpConfig:
             httpProtocolOptions: {}
     echo-service-b5c2b60cba392c4e:
@@ -56,8 +56,8 @@ Clusters:
             httpProtocolOptions: {}
 Endpoints:
   Resources:
-    echo-service-97e681ffa5605bde:
-      clusterName: echo-service-97e681ffa5605bde
+    echo-service-498a7b34fe792bac:
+      clusterName: echo-service-498a7b34fe792bac
       endpoints:
       - lbEndpoints:
         - endpoint:
@@ -202,6 +202,62 @@ Listeners:
       name: edge-gateway:HTTP:9090
       perConnectionBufferLimitBytes: 32768
       trafficDirection: INBOUND
+    edge-gateway:HTTP:10000:
+      address:
+        socketAddress:
+          address: 192.168.1.1
+          portValue: 10000
+      enableReusePort: true
+      filterChains:
+      - filters:
+        - name: envoy.filters.network.http_connection_manager
+          typedConfig:
+            '@type': type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
+            commonHttpProtocolOptions:
+              headersWithUnderscoresAction: REJECT_REQUEST
+              idleTimeout: 300s
+            http2ProtocolOptions:
+              allowConnect: true
+              initialConnectionWindowSize: 1048576
+              initialStreamWindowSize: 65536
+              maxConcurrentStreams: 100
+            httpFilters:
+            - name: envoy.filters.http.local_ratelimit
+              typedConfig:
+                '@type': type.googleapis.com/envoy.extensions.filters.http.local_ratelimit.v3.LocalRateLimit
+                statPrefix: rate_limit
+            - name: gzip-compress
+              typedConfig:
+                '@type': type.googleapis.com/envoy.extensions.filters.http.compressor.v3.Compressor
+                compressorLibrary:
+                  name: gzip
+                  typedConfig:
+                    '@type': type.googleapis.com/envoy.extensions.compression.gzip.compressor.v3.Gzip
+                responseDirectionConfig:
+                  disableOnEtagHeader: true
+            - name: envoy.filters.http.router
+              typedConfig:
+                '@type': type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
+            mergeSlashes: true
+            normalizePath: true
+            rds:
+              configSource:
+                ads: {}
+                resourceApiVersion: V3
+              routeConfigName: edge-gateway:HTTP:10000
+            requestHeadersTimeout: 0.500s
+            serverName: Kuma Gateway
+            statPrefix: gateway-default
+            streamIdleTimeout: 5s
+            stripAnyHostPort: true
+            useRemoteAddress: true
+      listenerFilters:
+      - name: envoy.filters.listener.tls_inspector
+        typedConfig:
+          '@type': type.googleapis.com/envoy.extensions.filters.listener.tls_inspector.v3.TlsInspector
+      name: edge-gateway:HTTP:10000
+      perConnectionBufferLimitBytes: 32768
+      trafficDirection: INBOUND
 Routes:
   Resources:
     edge-gateway:HTTP:8080:
@@ -224,7 +280,6 @@ Routes:
                 baseInterval: 0.025s
                 maxInterval: 0.250s
               retryOn: gateway-error,connect-failure,refused-stream
-            timeout: 10s
             weightedClusters:
               clusters:
               - name: echo-service-b5c2b60cba392c4e
@@ -248,7 +303,6 @@ Routes:
                 baseInterval: 0.025s
                 maxInterval: 0.250s
               retryOn: gateway-error,connect-failure,refused-stream
-            timeout: 10s
             weightedClusters:
               clusters:
               - name: echo-service-b5c2b60cba392c4e
@@ -272,7 +326,6 @@ Routes:
                 baseInterval: 0.025s
                 maxInterval: 0.250s
               retryOn: gateway-error,connect-failure,refused-stream
-            timeout: 10s
             weightedClusters:
               clusters:
               - name: echo-service-b5c2b60cba392c4e
@@ -305,10 +358,9 @@ Routes:
                 baseInterval: 0.025s
                 maxInterval: 0.250s
               retryOn: gateway-error,connect-failure,refused-stream
-            timeout: 30s
             weightedClusters:
               clusters:
-              - name: echo-service-97e681ffa5605bde
+              - name: echo-service-498a7b34fe792bac
                 requestHeadersToAdd:
                 - header:
                     key: x-kuma-tags
@@ -329,10 +381,87 @@ Routes:
                 baseInterval: 0.025s
                 maxInterval: 0.250s
               retryOn: gateway-error,connect-failure,refused-stream
-            timeout: 30s
             weightedClusters:
               clusters:
-              - name: echo-service-97e681ffa5605bde
+              - name: echo-service-498a7b34fe792bac
+                requestHeadersToAdd:
+                - header:
+                    key: x-kuma-tags
+                    value: '&kuma.io/service=gateway-default&'
+                weight: 1
+              totalWeight: 1
+      - domains:
+        - '*'
+        name: '*'
+    edge-gateway:HTTP:10000:
+      name: edge-gateway:HTTP:10000
+      requestHeadersToRemove:
+      - x-kuma-tags
+      validateClusters: false
+      virtualHosts:
+      - domains:
+        - foo.example.com
+        name: foo.example.com
+        routes:
+        - match:
+            path: /
+          route:
+            retryPolicy:
+              numRetries: 5
+              perTryTimeout: 16s
+              retryBackOff:
+                baseInterval: 0.025s
+                maxInterval: 0.250s
+              retryOn: gateway-error,connect-failure,refused-stream
+            weightedClusters:
+              clusters:
+              - name: echo-service-b5c2b60cba392c4e
+                requestHeadersToAdd:
+                - header:
+                    key: x-kuma-tags
+                    value: '&kuma.io/service=gateway-default&'
+                weight: 1
+              totalWeight: 1
+      - domains:
+        - bar.example.com
+        name: bar.example.com
+        routes:
+        - match:
+            path: /
+          route:
+            retryPolicy:
+              numRetries: 5
+              perTryTimeout: 16s
+              retryBackOff:
+                baseInterval: 0.025s
+                maxInterval: 0.250s
+              retryOn: gateway-error,connect-failure,refused-stream
+            weightedClusters:
+              clusters:
+              - name: echo-service-b5c2b60cba392c4e
+                requestHeadersToAdd:
+                - header:
+                    key: x-kuma-tags
+                    value: '&kuma.io/service=gateway-default&'
+                weight: 1
+              totalWeight: 1
+      - domains:
+        - '*.example.com'
+        name: '*.example.com'
+        routes:
+        - match:
+            path: /
+          route:
+            retryPolicy:
+              numRetries: 5
+              perTryTimeout: 16s
+              retryBackOff:
+                baseInterval: 0.025s
+                maxInterval: 0.250s
+              retryOn: gateway-error,connect-failure,refused-stream
+            weightedClusters:
+              clusters:
+              - name: echo-service-b5c2b60cba392c4e
                 requestHeadersToAdd:
                 - header:
                     key: x-kuma-tags
