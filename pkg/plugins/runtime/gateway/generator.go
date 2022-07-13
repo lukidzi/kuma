@@ -41,6 +41,12 @@ var ConnectionPolicyTypes = []model.ResourceType{
 	core_mesh.TimeoutType,
 }
 
+var ClusterPolicyTypes = []model.ResourceType{
+	core_mesh.CircuitBreakerType,
+	core_mesh.HealthCheckType,
+	core_mesh.TimeoutType,
+}
+
 type GatewayHostInfo struct {
 	Host    GatewayHost
 	Entries []route.Entry
@@ -74,6 +80,13 @@ type GatewayListenerInfo struct {
 	HostInfos []GatewayHostInfo
 }
 
+// type ListenerExactPolicies struct {
+// 	ListenerName string
+// 	Policies     []match.RankedPolicy
+// }
+
+type ListenerExactPolicies = map[string][]string
+
 // FilterChainGenerator is responsible for handling the filter chain for
 // a specific protocol.
 // A FilterChainGenerator can be host-specific or shared amongst hosts.
@@ -103,7 +116,7 @@ func (g *filterChainGenerators) For(ctx xds_context.Context, info GatewayListene
 func GatewayListenerInfoFromProxy(
 	ctx xds_context.MeshContext, proxy *core_xds.Proxy, zone string,
 ) (
-	[]GatewayListenerInfo, error,
+	[]GatewayListenerInfo, map[string]ListenerExactPolicies, error,
 ) {
 	gateway := xds_topology.SelectGateway(ctx.Resources.Gateways().Items, proxy.Dataplane.Spec.Matches)
 
@@ -114,7 +127,7 @@ func GatewayListenerInfoFromProxy(
 			"service", proxy.Dataplane.Spec.GetIdentifyingService(),
 		)
 
-		return nil, nil
+		return nil, nil, nil
 	}
 
 	log.V(1).Info(fmt.Sprintf("matched gateway %q to dataplane %q",
@@ -146,7 +159,7 @@ func GatewayListenerInfoFromProxy(
 		proxy.Dataplane, ctx.Resources.ExternalServices(), ctx.Resources.TrafficPermissions(),
 	)
 	if err != nil {
-		return nil, errors.Wrap(err, "unable to find external services matched by traffic permissions")
+		return nil, nil, errors.Wrap(err, "unable to find external services matched by traffic permissions")
 	}
 
 	outboundEndpoints := xds_topology.BuildEndpointMap(
@@ -158,21 +171,22 @@ func GatewayListenerInfoFromProxy(
 		matchedExternalServices,
 		ctx.DataSourceLoader,
 	)
+	test := map[string]ListenerExactPolicies{}
 
 	for port, listeners := range collapsed {
 		// Force all listeners on the same port to have the same protocol.
 		for i := range listeners {
 			if listeners[i].GetProtocol() != listeners[0].GetProtocol() {
-				return nil, errors.Errorf(
+				return nil, nil, errors.Errorf(
 					"cannot collapse listener protocols %s and %s on port %d",
 					listeners[i].GetProtocol(), listeners[0].GetProtocol(), port,
 				)
 			}
 		}
 
-		listener, hosts, err := MakeGatewayListener(ctx, gateway, proxy.Dataplane, listeners)
+		listener, hosts, err := MakeGatewayListener(ctx, gateway, proxy.Dataplane, listeners, test)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 
 		var hostInfos []GatewayHostInfo
@@ -188,6 +202,43 @@ func GatewayListenerInfoFromProxy(
 			})
 		}
 
+		for _, info := range hostInfos {
+			for _, entry := range info.Entries {
+				for _, r := range entry.Action.Forward {
+					dest := r.Destination[mesh_proto.ServiceTag]
+					policies := []string{}
+					for _, val := range ClusterPolicyTypes {
+						if obj, found := r.Policies[val]; found {
+							policies = append(policies, obj.GetMeta().GetName())
+						}
+					}
+					if obj, found := test[dest]; found {
+						obj[listener.ResourceName] = policies
+					} else {
+						test[dest] = map[string][]string{
+							listener.ResourceName: policies,
+						}
+					}
+				}
+				if entry.Mirror != nil {
+					dest := entry.Mirror.Forward.Destination[mesh_proto.ServiceTag]
+					policies := []string{}
+					for _, val := range ClusterPolicyTypes {
+						if obj, found := entry.Mirror.Forward.Policies[val]; found {
+							policies = append(policies, obj.GetMeta().GetName())
+						}
+					}
+					if obj, found := test[dest]; found {
+						obj[listener.ResourceName] = policies
+					} else {
+						test[dest] = map[string][]string{
+							listener.ResourceName: policies,
+						}
+					}
+				}
+			}
+		}
+
 		listenerInfos = append(listenerInfos, GatewayListenerInfo{
 			Proxy:             proxy,
 			Gateway:           gateway,
@@ -198,13 +249,13 @@ func GatewayListenerInfoFromProxy(
 		})
 	}
 
-	return listenerInfos, nil
+	return listenerInfos, test, nil
 }
 
 func (g Generator) Generate(ctx xds_context.Context, proxy *core_xds.Proxy) (*core_xds.ResourceSet, error) {
 	resources := core_xds.NewResourceSet()
 
-	listenerInfos, err := GatewayListenerInfoFromProxy(ctx.Mesh, proxy, g.Zone)
+	listenerInfos, policies, err := GatewayListenerInfoFromProxy(ctx.Mesh, proxy, g.Zone)
 	if err != nil {
 		return nil, errors.Wrap(err, "error generating listener info from Proxy")
 	}
@@ -215,7 +266,7 @@ func (g Generator) Generate(ctx xds_context.Context, proxy *core_xds.Proxy) (*co
 			return nil, errors.New("no support for protocol")
 		}
 
-		cdsResources, err := g.generateCDS(ctx, info, info.HostInfos)
+		cdsResources, err := g.generateCDS(ctx, info, info.HostInfos, policies)
 		if err != nil {
 			return nil, err
 		}
@@ -269,11 +320,11 @@ func (g Generator) generateLDS(ctx xds_context.Context, info GatewayListenerInfo
 	return resources, nil
 }
 
-func (g Generator) generateCDS(ctx xds_context.Context, info GatewayListenerInfo, hostInfos []GatewayHostInfo) (*core_xds.ResourceSet, error) {
+func (g Generator) generateCDS(ctx xds_context.Context, info GatewayListenerInfo, hostInfos []GatewayHostInfo, policies map[string]ListenerExactPolicies) (*core_xds.ResourceSet, error) {
 	resources := core_xds.NewResourceSet()
 
 	for _, hostInfo := range hostInfos {
-		clusterRes, err := g.ClusterGenerator.GenerateClusters(ctx, info, hostInfo.Entries)
+		clusterRes, err := g.ClusterGenerator.GenerateClusters(ctx, info, hostInfo.Entries, policies)
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to generate clusters for dataplane %q", info.Proxy.Id)
 		}
@@ -321,18 +372,19 @@ func MakeGatewayListener(
 	gateway *core_mesh.MeshGatewayResource,
 	dataplane *core_mesh.DataplaneResource,
 	listeners []*mesh_proto.MeshGateway_Listener,
+	test map[string]ListenerExactPolicies,
 ) (GatewayListener, []GatewayHost, error) {
 	hostsByName := map[string]GatewayHost{}
-
+	listenerName := envoy_names.GetGatewayListenerName(
+		gateway.Meta.GetName(),
+		listeners[0].GetProtocol().String(),
+		listeners[0].GetPort(),
+	)
 	listener := GatewayListener{
-		Port:     listeners[0].GetPort(),
-		Protocol: listeners[0].GetProtocol(),
-		ResourceName: envoy_names.GetGatewayListenerName(
-			gateway.Meta.GetName(),
-			listeners[0].GetProtocol().String(),
-			listeners[0].GetPort(),
-		),
-		CrossMesh: listeners[0].CrossMesh,
+		Port:         listeners[0].GetPort(),
+		Protocol:     listeners[0].GetProtocol(),
+		ResourceName: listenerName,
+		CrossMesh:    listeners[0].CrossMesh,
 	}
 
 	// Hostnames must be unique to a listener to remove ambiguity

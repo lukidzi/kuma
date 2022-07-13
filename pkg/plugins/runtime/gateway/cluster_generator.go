@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"context"
+	"reflect"
 
 	envoy_cluster_v3 "github.com/envoyproxy/go-control-plane/envoy/config/cluster/v3"
 	"github.com/pkg/errors"
@@ -24,7 +25,7 @@ type ClusterGenerator struct {
 }
 
 // GenerateHost generates clusters for all the services targeted in the current route table.
-func (c *ClusterGenerator) GenerateClusters(ctx xds_context.Context, info GatewayListenerInfo, routes []route.Entry) (*core_xds.ResourceSet, error) {
+func (c *ClusterGenerator) GenerateClusters(ctx xds_context.Context, info GatewayListenerInfo, routes []route.Entry, policies map[string]ListenerExactPolicies) (*core_xds.ResourceSet, error) {
 	resources := core_xds.NewResourceSet()
 
 	// If there is a service name conflict between external services
@@ -50,12 +51,27 @@ func (c *ClusterGenerator) GenerateClusters(ctx xds_context.Context, info Gatewa
 		var r *core_xds.Resource
 		var err error
 
+		generateHashNameWithConfig := false
+		listernersPolicies := policies[service]
+		if len(listernersPolicies) > 1 {
+			currentListener := listernersPolicies[info.Listener.ResourceName]
+			for key, value := range listernersPolicies {
+				if key != info.Listener.ResourceName {
+					if !reflect.DeepEqual(currentListener, value) {
+						generateHashNameWithConfig = true
+						break
+					}
+				}
+
+			}
+		}
+
 		if isDirectExternalService {
 			log.V(1).Info("generating external service cluster",
 				"service", service,
 			)
 
-			r, err = c.generateExternalCluster(ctx.Mesh, info, matched, dest)
+			r, err = c.generateExternalCluster(ctx.Mesh, info, matched, dest, generateHashNameWithConfig)
 		} else {
 			log.Info("generating mesh cluster resource",
 				"service", service,
@@ -66,7 +82,7 @@ func (c *ClusterGenerator) GenerateClusters(ctx xds_context.Context, info Gatewa
 				upstreamServiceName = mesh_proto.ZoneEgressServiceName
 			}
 
-			r, err = c.generateMeshCluster(ctx.Mesh.Resource, info, dest, upstreamServiceName)
+			r, err = c.generateMeshCluster(ctx.Mesh.Resource, info, dest, upstreamServiceName, generateHashNameWithConfig)
 		}
 
 		if err != nil {
@@ -115,6 +131,7 @@ func (c *ClusterGenerator) generateMeshCluster(
 	info GatewayListenerInfo,
 	dest *route.Destination,
 	upstreamServiceName string,
+	generateHashNameWithConfig bool,
 ) (*core_xds.Resource, error) {
 	protocol := route.InferServiceProtocol([]core_xds.Endpoint{{
 		Tags: dest.Destination,
@@ -132,7 +149,7 @@ func (c *ClusterGenerator) generateMeshCluster(
 	// the destination cluster before deciding whether to enable the filter.
 	// It's not clear whether that can be done.
 
-	return buildClusterResource(dest, builder)
+	return buildClusterResource(dest, builder, generateHashNameWithConfig)
 }
 
 func (c *ClusterGenerator) generateExternalCluster(
@@ -140,6 +157,7 @@ func (c *ClusterGenerator) generateExternalCluster(
 	info GatewayListenerInfo,
 	externalServices []*core_mesh.ExternalServiceResource,
 	dest *route.Destination,
+	generateHashNameWithConfig bool,
 ) (*core_xds.Resource, error) {
 	var endpoints []core_xds.Endpoint
 
@@ -160,6 +178,7 @@ func (c *ClusterGenerator) generateExternalCluster(
 			clusters.ProvidedEndpointCluster(dest.Destination[mesh_proto.ServiceTag], info.Proxy.Dataplane.IsIPv6(), endpoints...),
 			clusters.ClientSideTLS(endpoints),
 		),
+		generateHashNameWithConfig,
 	)
 }
 
@@ -199,7 +218,11 @@ func newClusterBuilder(
 // to a cluster can be different depending on the listener and the hostname,
 // we can't just build a cluster using the service name and tags, we have to
 // take the full configuration into account.
-func buildClusterResource(dest *route.Destination, c *clusters.ClusterBuilder) (*core_xds.Resource, error) {
+func buildClusterResource(
+	dest *route.Destination,
+	c *clusters.ClusterBuilder,
+	generateHashNameWithConfig bool,
+) (*core_xds.Resource, error) {
 	msg, err := c.Build()
 	if err != nil {
 		return nil, err
@@ -207,7 +230,7 @@ func buildClusterResource(dest *route.Destination, c *clusters.ClusterBuilder) (
 
 	cluster := msg.(*envoy_cluster_v3.Cluster)
 
-	name, err := route.DestinationClusterName(dest, cluster)
+	name, err := route.DestinationClusterName(dest, cluster, generateHashNameWithConfig)
 	if err != nil {
 		return nil, err
 	}

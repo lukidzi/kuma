@@ -7,6 +7,7 @@ import (
 	"net"
 	"strings"
 	"text/template"
+	"time"
 
 	"github.com/gruntwork-io/terratest/modules/k8s"
 	. "github.com/onsi/ginkgo/v2"
@@ -336,7 +337,8 @@ spec:
 			Expect(err).ToNot(HaveOccurred())
 		})
 
-		It("should proxy simple HTTP requests", func() {
+		FIt("should proxy simple HTTP requests", func() {
+			time.Sleep(100 * time.Hour)
 			ProxySimpleRequests(cluster, "es-test-server",
 				net.JoinHostPort(GatewayAddress("edge-gateway"), GatewayPort),
 				client.FromKubernetesPod(ClientNamespace, "gateway-client"),

@@ -63,7 +63,7 @@ func (f RouteMustConfigureFunc) Configure(r *envoy_config_route.Route) error {
 
 // DestinationClusterName generates a unique cluster name for the
 // destination. The destination must contain at least a service tag.
-func DestinationClusterName(d *Destination, c *envoy_cluster_v3.Cluster) (string, error) {
+func DestinationClusterName(d *Destination, c *envoy_cluster_v3.Cluster, generateHashNameWithConfig bool) (string, error) {
 	serviceName := d.Destination[mesh_proto.ServiceTag]
 	if serviceName == "" {
 		return "", errors.Errorf("missing %s tag", mesh_proto.ServiceTag)
@@ -85,13 +85,15 @@ func DestinationClusterName(d *Destination, c *envoy_cluster_v3.Cluster) (string
 		h.Write([]byte(d.Destination[k]))
 	}
 
-	any, err := util_proto.MarshalAnyDeterministic(c)
-	if err != nil {
-		return "", err
-	}
+	if generateHashNameWithConfig {
+		any, err := util_proto.MarshalAnyDeterministic(c)
+		if err != nil {
+			return "", err
+		}
 
-	h.Write([]byte(any.GetTypeUrl()))
-	h.Write(any.GetValue())
+		h.Write([]byte(any.GetTypeUrl()))
+		h.Write(any.GetValue())
+	}
 
 	// The qualifier is 16 hex digits. Unscientifically balancing the length
 	// of the hex against the likelihood of collisions.

@@ -23,7 +23,7 @@ var _ = Describe("Cluster name", func() {
 		}
 
 		c := envoy_cluster_v3.Cluster{}
-		name, err := route.DestinationClusterName(&d, &c)
+		name, err := route.DestinationClusterName(&d, &c, true)
 		Expect(err).To(Succeed())
 
 		return name
@@ -38,6 +38,7 @@ var _ = Describe("Cluster name", func() {
 				},
 			},
 			&envoy_cluster_v3.Cluster{},
+			false,
 		)
 
 		Expect(err).To(Not(Succeed()))
@@ -90,6 +91,7 @@ var _ = Describe("Cluster name", func() {
 				},
 			},
 			&envoy_cluster_v3.Cluster{RespectDnsTtl: true},
+			true,
 		)
 		Expect(err).To(Succeed())
 
@@ -100,6 +102,7 @@ var _ = Describe("Cluster name", func() {
 				},
 			},
 			&envoy_cluster_v3.Cluster{},
+			true,
 		)
 		Expect(err).To(Succeed())
 

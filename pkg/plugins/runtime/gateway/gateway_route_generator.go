@@ -121,7 +121,9 @@ func GenerateEnvoyRouteEntries(host GatewayHost) []route.Entry {
 		entries = append(entries, pathEntries...)
 	}
 
-	return PopulatePolicies(host, entries)
+	policies := PopulatePolicies(host, entries)
+
+	return policies
 }
 
 func makeTcpRouteEntry(name string, rule *mesh_proto.MeshGatewayRoute_TcpRoute_Rule) route.Entry {

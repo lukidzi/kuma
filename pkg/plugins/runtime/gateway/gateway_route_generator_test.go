@@ -130,6 +130,86 @@ conf:
           kuma.io/service: echo-service
 `,
 		),
+		FEntry("test",
+			"test-gateway-route.yaml", `
+type: MeshGateway
+mesh: default
+name: edge-gateway
+selectors:
+- match:
+    kuma.io/service: gateway-default
+conf:
+  listeners:
+  - port: 8080
+    protocol: HTTP
+    tags:
+      port: http/8080
+  - port: 9090
+    protocol: HTTP
+    tags:
+      port: http/9090
+  - port: 10000
+    protocol: HTTP
+    tags:
+      port: http/8080
+`, `
+type: MeshGatewayRoute
+mesh: default
+name: echo-service1
+selectors:
+- match:
+    kuma.io/service: gateway-default
+    port: http/8080
+conf:
+  http:
+    hostnames:
+    - foo.example.com
+    - bar.example.com
+    - "*.example.com"
+    rules:
+    - matches:
+      - path:
+          match: EXACT
+          value: /
+      backends:
+      - destination:
+          kuma.io/service: echo-service
+`, `
+type: MeshGatewayRoute
+mesh: default
+name: echo-service2
+selectors:
+- match:
+    kuma.io/service: gateway-default
+    port: http/9090
+conf:
+  http:
+    hostnames:
+    - foo.example.com
+    - "*.example.com"
+    rules:
+    - matches:
+      - path:
+          match: EXACT
+          value: /
+      backends:
+      - destination:
+          kuma.io/service: echo-service
+`, `
+type: Timeout
+mesh: default
+name: timeout-1
+sources:
+- match:
+    kuma.io/service: gateway-default
+destinations:
+- match:
+    kuma.io/service: echo-service
+conf:
+  connect_timeout: 10s
+  http:
+    idle_timeout: 10s`,
+		),
 
 		// Attaching a wildcard route (i.e. configured without
 		// any hostnames) to a wildcard Gateway listener should

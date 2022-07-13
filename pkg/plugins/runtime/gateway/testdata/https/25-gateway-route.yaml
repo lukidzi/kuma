@@ -1,6 +1,6 @@
 Clusters:
   Resources:
-    external-httpbin-622a08eefce6a721:
+    external-httpbin-904cca214d15dc9d:
       circuitBreakers:
         thresholds:
         - maxConnections: 1024
@@ -12,7 +12,7 @@ Clusters:
         edsConfig:
           ads: {}
           resourceApiVersion: V3
-      name: external-httpbin-622a08eefce6a721
+      name: external-httpbin-904cca214d15dc9d
       outlierDetection:
         enforcingConsecutive5xx: 0
         enforcingConsecutiveGatewayFailure: 0
@@ -51,8 +51,8 @@ Clusters:
             httpProtocolOptions: {}
 Endpoints:
   Resources:
-    external-httpbin-622a08eefce6a721:
-      clusterName: external-httpbin-622a08eefce6a721
+    external-httpbin-904cca214d15dc9d:
+      clusterName: external-httpbin-904cca214d15dc9d
       endpoints:
       - lbEndpoints:
         - endpoint:
@@ -176,7 +176,7 @@ Routes:
             timeout: 15s
             weightedClusters:
               clusters:
-              - name: external-httpbin-622a08eefce6a721
+              - name: external-httpbin-904cca214d15dc9d
                 requestHeadersToAdd:
                 - header:
                     key: x-kuma-tags

@@ -1,6 +1,6 @@
 Clusters:
   Resources:
-    exact-query-match-cc1370f58a3b5330:
+    exact-query-match-b83adab6168c594b:
       circuitBreakers:
         thresholds:
         - maxConnections: 1024
@@ -12,7 +12,7 @@ Clusters:
         edsConfig:
           ads: {}
           resourceApiVersion: V3
-      name: exact-query-match-cc1370f58a3b5330
+      name: exact-query-match-b83adab6168c594b
       outlierDetection:
         enforcingConsecutive5xx: 0
         enforcingConsecutiveGatewayFailure: 0
@@ -27,7 +27,7 @@ Clusters:
             idleTimeout: 3600s
           explicitHttpConfig:
             httpProtocolOptions: {}
-    regex-query-match-3804d7b8516d7323:
+    regex-query-match-3a2a1a0c6f9a4fb5:
       circuitBreakers:
         thresholds:
         - maxConnections: 1024
@@ -39,7 +39,7 @@ Clusters:
         edsConfig:
           ads: {}
           resourceApiVersion: V3
-      name: regex-query-match-3804d7b8516d7323
+      name: regex-query-match-3a2a1a0c6f9a4fb5
       outlierDetection:
         enforcingConsecutive5xx: 0
         enforcingConsecutiveGatewayFailure: 0
@@ -56,8 +56,8 @@ Clusters:
             httpProtocolOptions: {}
 Endpoints:
   Resources:
-    exact-query-match-cc1370f58a3b5330:
-      clusterName: exact-query-match-cc1370f58a3b5330
+    exact-query-match-b83adab6168c594b:
+      clusterName: exact-query-match-b83adab6168c594b
       endpoints:
       - lbEndpoints:
         - endpoint:
@@ -72,8 +72,8 @@ Endpoints:
                 kuma.io/protocol: http
               envoy.transport_socket_match:
                 kuma.io/protocol: http
-    regex-query-match-3804d7b8516d7323:
-      clusterName: regex-query-match-3804d7b8516d7323
+    regex-query-match-3a2a1a0c6f9a4fb5:
+      clusterName: regex-query-match-3a2a1a0c6f9a4fb5
       endpoints:
       - lbEndpoints:
         - endpoint:
@@ -208,7 +208,7 @@ Routes:
             timeout: 15s
             weightedClusters:
               clusters:
-              - name: regex-query-match-3804d7b8516d7323
+              - name: regex-query-match-3a2a1a0c6f9a4fb5
                 requestHeadersToAdd:
                 - header:
                     key: x-kuma-tags
@@ -232,7 +232,7 @@ Routes:
             timeout: 15s
             weightedClusters:
               clusters:
-              - name: exact-query-match-cc1370f58a3b5330
+              - name: exact-query-match-b83adab6168c594b
                 requestHeadersToAdd:
                 - header:
                     key: x-kuma-tags
@@ -256,7 +256,7 @@ Routes:
             timeout: 15s
             weightedClusters:
               clusters:
-              - name: exact-query-match-cc1370f58a3b5330
+              - name: exact-query-match-b83adab6168c594b
                 requestHeadersToAdd:
                 - header:
                     key: x-kuma-tags

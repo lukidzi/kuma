@@ -1,0 +1,15 @@
+type: Timeout
+mesh: default
+name: timeout-2
+sources:
+- match:
+    kuma.io/service: gateway-default
+    port: http/9090
+destinations:
+- match:
+    kuma.io/service: echo-service
+conf:
+  connect_timeout: 30s
+  http:
+    request_timeout: 10s
+    idle_timeout: 10s
