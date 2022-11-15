@@ -108,7 +108,7 @@ run/kuma-dp: build/kumactl ## Dev: Run `kuma-dp` locally
 
 .PHONY: run/xds-client
 run/xds-client:
-	go run ./tools/xds-client/... run --dps "${NUM_OF_DATAPLANES}" --services "${NUM_OF_SERVICES}" --xds-server-address "${KUMA_CP_ADDRESS}"
+	go run ./tools/xds-client/... run --dps "${NUM_OF_DATAPLANES}" --services "${NUM_OF_SERVICES}" --xds-server-address "${KUMA_CP_ADDRESS}" --dataplane-prefix "${DATAPLANE_NAME_PREFIX}" --service-prefix "${SERVICE_NAME_PREFIX}"
 
 .PHONY: run/echo-server
 run/echo-server:

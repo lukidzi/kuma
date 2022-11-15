@@ -44,6 +44,8 @@ func newRunCmd() *cobra.Command {
 		inbounds         int
 		outbounds        int
 		rampUpPeriod     time.Duration
+		servicePrefix    string
+		dataplanePrefix  string
 	}{
 		xdsServerAddress: "grpcs://localhost:5678",
 		dps:              100,
@@ -51,6 +53,8 @@ func newRunCmd() *cobra.Command {
 		inbounds:         1,
 		outbounds:        3,
 		rampUpPeriod:     30 * time.Second,
+		servicePrefix:    "sample",
+		dataplanePrefix:  "sample",
 	}
 	cmd := &cobra.Command{
 		Use:   "run",
@@ -76,7 +80,7 @@ func newRunCmd() *cobra.Command {
 						},
 					}
 					for j := 0; j < args.inbounds; j++ {
-						service := fmt.Sprintf("service-%d", rand.Int()%args.services)
+						service := fmt.Sprintf("%s-service-%d", args.servicePrefix, rand.Int()%args.services)
 						dpSpec.Networking.Inbound = append(dpSpec.Networking.Inbound, &v1alpha1.Dataplane_Networking_Inbound{
 							Port: uint32(8080 + j),
 							Tags: map[string]string{
@@ -85,15 +89,16 @@ func newRunCmd() *cobra.Command {
 							},
 						})
 					}
+
 					for j := 0; j < args.outbounds; j++ {
-						service := fmt.Sprintf("service-%d", rand.Int()%args.services)
+						service := fmt.Sprintf("%s-service-%d", args.servicePrefix, rand.Int()%args.services)
 						dpSpec.Networking.Outbound = append(dpSpec.Networking.Outbound, &v1alpha1.Dataplane_Networking_Outbound{
 							Port: uint32(10080 + j), Tags: map[string]string{"kuma.io/service": service},
 						})
 					}
 
 					dp := &unversioned.Resource{
-						Meta: rest_v1alpha1.ResourceMeta{Mesh: "default", Name: fmt.Sprintf("dataplane-%d", i), Type: "Dataplane"},
+						Meta: rest_v1alpha1.ResourceMeta{Mesh: "default", Name: fmt.Sprintf("%s-dataplane-%d", args.dataplanePrefix, i), Type: "Dataplane"},
 						Spec: dpSpec,
 					}
 
@@ -174,6 +179,8 @@ func newRunCmd() *cobra.Command {
 	cmd.PersistentFlags().IntVar(&args.inbounds, "inbounds", args.inbounds, "number of inbounds")
 	cmd.PersistentFlags().IntVar(&args.outbounds, "outbounds", args.outbounds, "number of outbounds")
 	cmd.PersistentFlags().DurationVar(&args.rampUpPeriod, "rampup-period", args.rampUpPeriod, "ramp up period")
+	cmd.PersistentFlags().StringVar(&args.dataplanePrefix, "dataplane-prefix", args.dataplanePrefix, "dataplane name prefix")
+	cmd.PersistentFlags().StringVar(&args.servicePrefix, "service-prefix", args.servicePrefix, "service name prefix")
 	return cmd
 }
 

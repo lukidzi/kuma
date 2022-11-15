@@ -19,3 +19,5 @@ make run/xds-client
 - `NUM_OF_DATAPLANES` - total number of Dataplanes to emulate
 - `NUM_OF_SERVICES` - total number of services to emulate
 - `KUMA_CP_ADDRESS` - address of Kuma CP 
+- `DATAPLANE_NAME_PREFIX` - names prefix of Dataplanes
+- `SERVICE_NAME_PREFIX` - names prefix of Service
