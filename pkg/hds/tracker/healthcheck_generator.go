@@ -105,6 +105,14 @@ func (g *SnapshotGenerator) GenerateSnapshot(node *envoy_core.Node) (util_xds_v3
 					},
 				}},
 			}},
+			UpstreamBindConfig: &envoy_core.BindConfig{
+				SourceAddress: &envoy_core.SocketAddress{
+					Address: "127.0.0.6",
+					PortSpecifier: &envoy_core.SocketAddress_PortValue{
+						PortValue: 0,
+					},
+				},
+			},
 			HealthChecks: []*envoy_core.HealthCheck{
 				{
 					Timeout:            timeout,
