@@ -7,6 +7,7 @@ import (
 
 	"github.com/pkg/errors"
 	kube_apps "k8s.io/api/apps/v1"
+	kube_batch "k8s.io/api/batch/v1"
 	kube_core "k8s.io/api/core/v1"
 	kube_client "sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -28,6 +29,7 @@ type PodConverter struct {
 	ServiceGetter       kube_client.Reader
 	NodeGetter          kube_client.Reader
 	ReplicaSetGetter    kube_client.Reader
+	JobGetter			kube_client.Reader
 	ResourceConverter   k8s_common.Converter
 	Zone                string
 	KubeOutboundsAsVIPs bool
@@ -239,6 +241,47 @@ func (p *PodConverter) GatewayByDeploymentFor(ctx context.Context, clusterName s
 	}, nil
 }
 
+func (p *PodConverter)RetrieveServiceName(ctx context.Context, pod *kube_core.Pod, namespace string) (string, error){
+	owners := pod.GetObjectMeta().GetOwnerReferences()
+	for _, owner := range owners {
+		switch owner.Kind {
+		case "ReplicaSet":
+			rs := &kube_apps.ReplicaSet{}
+			rsKey := kube_client.ObjectKey{Namespace: namespace, Name: owner.Name}
+			if err := p.ReplicaSetGetter.Get(ctx, rsKey, rs); err != nil {
+				return "", err
+			}
+			if len(rs.OwnerReferences) == 0{
+				return owner.Name, nil
+			}
+			rsOwners := rs.GetObjectMeta().GetOwnerReferences()
+			for _, o := range rsOwners {
+				if o.Kind == "Deployment" {
+					return o.Name, nil
+				}
+			}
+		case "Job":
+			cj := &kube_batch.Job{}
+			cjKey := kube_client.ObjectKey{Namespace: namespace, Name: owner.Name}
+			if err := p.JobGetter.Get(ctx, cjKey, cj); err != nil {
+				return "", err
+			}
+			if len(cj.OwnerReferences) == 0 {
+				return owner.Name, nil
+			}
+			jobOwners := cj.GetObjectMeta().GetOwnerReferences()
+			for _, o := range jobOwners {
+				if o.Kind == "CronJob" {
+					return o.Name, nil
+				}
+			}
+		default: 
+			return owner.Name, nil
+		}
+	}
+	return pod.Name, nil
+}
+
 func MetricsFor(pod *kube_core.Pod) (*mesh_proto.MetricsBackend, error) {
 	path, _ := metadata.Annotations(pod.Annotations).GetString(metadata.KumaMetricsPrometheusPath)
 	port, exist, err := metadata.Annotations(pod.Annotations).GetUint32(metadata.KumaMetricsPrometheusPort)
@@ -311,3 +354,4 @@ func MetricsAggregateFor(pod *kube_core.Pod) ([]*mesh_proto.PrometheusAggregateM
 	}
 	return aggregateConfig, nil
 }
+
