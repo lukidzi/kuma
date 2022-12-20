@@ -165,8 +165,12 @@ func addPodReconciler(mgr kube_ctrl.Manager, rt core_runtime.Runtime, converter 
 		PodConverter: k8s_controllers.PodConverter{
 			ServiceGetter:       mgr.GetClient(),
 			NodeGetter:          mgr.GetClient(),
-			ReplicaSetGetter:    mgr.GetClient(),
-			JobGetter: 			 mgr.GetClient(),
+			InboundConverter: 	 k8s_controllers.InboundConverter{
+				NameExtractor: k8s_controllers.NameExtractor{
+					ReplicaSetGetter:    mgr.GetClient(),
+					JobGetter: 			 mgr.GetClient(),
+				},
+			},
 			Zone:                rt.Config().Multizone.Zone.Name,
 			ResourceConverter:   converter,
 			KubeOutboundsAsVIPs: rt.Config().Experimental.KubeOutboundsAsVIPs,

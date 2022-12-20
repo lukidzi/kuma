@@ -10,6 +10,7 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/pkg/errors"
 	kube_apps "k8s.io/api/apps/v1"
+	kube_batch "k8s.io/api/batch/v1"
 	kube_core "k8s.io/api/core/v1"
 	kube_meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 	kube_intstr "k8s.io/apimachinery/pkg/util/intstr"
@@ -75,6 +76,18 @@ var _ = Describe("PodToDataplane(..)", func() {
 		return rsets, nil
 	}
 
+	ParseJobs := func(values []string) ([]*kube_batch.Job, error) {
+		jobs := make([]*kube_batch.Job, len(values))
+		for i, value := range values {
+			job := kube_batch.Job{}
+			if err := yaml.Unmarshal([]byte(value), &job); err != nil {
+				return nil, err
+			}
+			jobs[i] = &job
+		}
+		return jobs, nil
+	}
+
 	ParseDataplanes := func(values []string) ([]*mesh_k8s.Dataplane, error) {
 		dataplanes := make([]*mesh_k8s.Dataplane, len(values))
 		for i, value := range values {
@@ -93,6 +106,7 @@ var _ = Describe("PodToDataplane(..)", func() {
 		otherDataplanes  string
 		otherServices    string
 		otherReplicaSets string
+		otherJobs		 string
 		node             string
 		dataplane        string
 	}
@@ -148,6 +162,18 @@ var _ = Describe("PodToDataplane(..)", func() {
 				replicaSetGetter = reader
 			}
 
+			var jobGetter kube_client.Reader
+			if given.otherJobs != "" {
+				bytes, err = os.ReadFile(filepath.Join("testdata", given.otherJobs))
+				Expect(err).ToNot(HaveOccurred())
+				YAMLs := util_yaml.SplitYAML(string(bytes))
+				rsets, err := ParseJobs(YAMLs)
+				Expect(err).ToNot(HaveOccurred())
+				reader, err := newFakeJobReader(rsets)
+				Expect(err).ToNot(HaveOccurred())
+				jobGetter = reader
+			}
+
 			// other dataplanes
 			var otherDataplanes []*mesh_k8s.Dataplane
 			if given.otherDataplanes != "" {
@@ -160,7 +186,12 @@ var _ = Describe("PodToDataplane(..)", func() {
 
 			converter := PodConverter{
 				ServiceGetter:     serviceGetter,
-				ReplicaSetGetter:  replicaSetGetter,
+				InboundConverter: InboundConverter{
+					NameExtractor: NameExtractor{
+						ReplicaSetGetter: replicaSetGetter,
+						JobGetter: jobGetter,
+					},
+				},
 				Zone:              "zone-1",
 				ResourceConverter: k8s.NewSimpleConverter(),
 			}
@@ -383,6 +414,7 @@ var _ = Describe("PodToDataplane(..)", func() {
 			Expect(err).ToNot(HaveOccurred())
 			err = yaml.Unmarshal(bytes, pod)
 			Expect(err).ToNot(HaveOccurred())
+			ctx := context.Background()
 
 			// services for pod
 			bytes, err = os.ReadFile(filepath.Join("testdata", "egress", given.servicesForPod))
@@ -407,7 +439,7 @@ var _ = Describe("PodToDataplane(..)", func() {
 
 			// when
 			egress := &mesh_k8s.ZoneEgress{}
-			err = converter.PodToEgress(egress, pod, services)
+			err = converter.PodToEgress(ctx, egress, pod, services)
 
 			// then
 			Expect(err).ToNot(HaveOccurred())
@@ -945,6 +977,20 @@ func newFakeReplicaSetReader(replicaSets []*kube_apps.ReplicaSet) (fakeReplicaSe
 	return replicaSetsMap, nil
 }
 
+type fakeJobReader map[string]string
+
+func newFakeJobReader(jobs []*kube_batch.Job) (fakeJobReader, error) {
+	jobsMap := map[string]string{}
+	for _, job := range jobs {
+		bytes, err := yaml.Marshal(job)
+		if err != nil {
+			return nil, err
+		}
+		jobsMap[job.GetNamespace()+"/"+job.GetName()] = string(bytes)
+	}
+	return jobsMap, nil
+}
+
 var _ kube_client.Reader = fakeReplicaSetReader{}
 
 func (r fakeReplicaSetReader) Get(ctx context.Context, key kube_client.ObjectKey, obj kube_client.Object, _ ...kube_client.GetOption) error {
@@ -957,5 +1003,20 @@ func (r fakeReplicaSetReader) Get(ctx context.Context, key kube_client.ObjectKey
 }
 
 func (f fakeReplicaSetReader) List(ctx context.Context, list kube_client.ObjectList, opts ...kube_client.ListOption) error {
+	return errors.New("not implemented")
+}
+
+var _ kube_client.Reader = fakeJobReader{}
+
+func (r fakeJobReader) Get(ctx context.Context, key kube_client.ObjectKey, obj kube_client.Object, _ ...kube_client.GetOption) error {
+	fqName := fmt.Sprintf("%s/%s", key.Namespace, key.Name)
+	data, ok := r[fqName]
+	if !ok {
+		return errors.Errorf("job not found: %s", fqName)
+	}
+	return yaml.Unmarshal([]byte(data), obj)
+}
+
+func (f fakeJobReader) List(ctx context.Context, list kube_client.ObjectList, opts ...kube_client.ListOption) error {
 	return errors.New("not implemented")
 }

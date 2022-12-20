@@ -7,7 +7,6 @@ import (
 
 	"github.com/pkg/errors"
 	kube_apps "k8s.io/api/apps/v1"
-	kube_batch "k8s.io/api/batch/v1"
 	kube_core "k8s.io/api/core/v1"
 	kube_client "sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -28,9 +27,8 @@ var (
 type PodConverter struct {
 	ServiceGetter       kube_client.Reader
 	NodeGetter          kube_client.Reader
-	ReplicaSetGetter    kube_client.Reader
-	JobGetter			kube_client.Reader
 	ResourceConverter   k8s_common.Converter
+	InboundConverter	InboundConverter
 	Zone                string
 	KubeOutboundsAsVIPs bool
 }
@@ -62,10 +60,10 @@ func (p *PodConverter) PodToIngress(ctx context.Context, zoneIngress *mesh_k8s.Z
 	return nil
 }
 
-func (p *PodConverter) PodToEgress(zoneEgress *mesh_k8s.ZoneEgress, pod *kube_core.Pod, services []*kube_core.Service) error {
+func (p *PodConverter) PodToEgress(ctx context.Context, zoneEgress *mesh_k8s.ZoneEgress, pod *kube_core.Pod, services []*kube_core.Service) error {
 	zoneEgressProto := &mesh_proto.ZoneEgress{}
 	// Pass the current dataplane, so we won't override available services in Egress section
-	if err := p.EgressFor(zoneEgressProto, pod, services); err != nil {
+	if err := p.EgressFor(ctx, zoneEgressProto, pod, services); err != nil {
 		return err
 	}
 
@@ -130,7 +128,7 @@ func (p *PodConverter) dataplaneFor(
 	if exist {
 		switch gwType {
 		case "enabled":
-			gateway, err := GatewayByServiceFor(p.Zone, pod, services)
+			gateway, err := p.GatewayByServiceFor(ctx, p.Zone, pod, services)
 			if err != nil {
 				return nil, err
 			}
@@ -145,7 +143,7 @@ func (p *PodConverter) dataplaneFor(
 			return nil, errors.Errorf("invalid delegated gateway type '%s'", gwType)
 		}
 	} else {
-		ifaces, err := InboundInterfacesFor(p.Zone, pod, services)
+		ifaces, err := p.InboundConverter.InboundInterfacesFor(ctx, p.Zone, pod, services)
 		if err != nil {
 			return nil, err
 		}
@@ -183,8 +181,8 @@ func (p *PodConverter) dataplaneFor(
 	return dataplane, nil
 }
 
-func GatewayByServiceFor(clusterName string, pod *kube_core.Pod, services []*kube_core.Service) (*mesh_proto.Dataplane_Networking_Gateway, error) {
-	interfaces, err := InboundInterfacesFor(clusterName, pod, services)
+func (p *PodConverter) GatewayByServiceFor(ctx context.Context, clusterName string, pod *kube_core.Pod, services []*kube_core.Service) (*mesh_proto.Dataplane_Networking_Gateway, error) {
+	interfaces, err := p.InboundConverter.InboundInterfacesFor(ctx, clusterName, pod, services)
 	if err != nil {
 		return nil, err
 	}
@@ -204,7 +202,7 @@ func (p *PodConverter) DeploymentFor(ctx context.Context, namespace string, pod 
 		if owner.Kind == "ReplicaSet" {
 			rs = &kube_apps.ReplicaSet{}
 			rsKey := kube_client.ObjectKey{Namespace: namespace, Name: owner.Name}
-			if err := p.ReplicaSetGetter.Get(ctx, rsKey, rs); err != nil {
+			if err := p.InboundConverter.NameExtractor.ReplicaSetGetter.Get(ctx, rsKey, rs); err != nil {
 				return "", false, err
 			}
 			break
@@ -233,53 +231,12 @@ func (p *PodConverter) GatewayByDeploymentFor(ctx context.Context, clusterName s
 	}
 	if !found {
 		// Fall back on old service tags if Pod not part of Deployment
-		return GatewayByServiceFor(clusterName, pod, services)
+		return p.GatewayByServiceFor(ctx, clusterName, pod, services)
 	}
 	return &mesh_proto.Dataplane_Networking_Gateway{
 		Type: mesh_proto.Dataplane_Networking_Gateway_DELEGATED,
 		Tags: map[string]string{"kuma.io/service-name": fmt.Sprintf("%s_%s_svc", deployment, namespace)},
 	}, nil
-}
-
-func (p *PodConverter)RetrieveServiceName(ctx context.Context, pod *kube_core.Pod, namespace string) (string, error){
-	owners := pod.GetObjectMeta().GetOwnerReferences()
-	for _, owner := range owners {
-		switch owner.Kind {
-		case "ReplicaSet":
-			rs := &kube_apps.ReplicaSet{}
-			rsKey := kube_client.ObjectKey{Namespace: namespace, Name: owner.Name}
-			if err := p.ReplicaSetGetter.Get(ctx, rsKey, rs); err != nil {
-				return "", err
-			}
-			if len(rs.OwnerReferences) == 0{
-				return owner.Name, nil
-			}
-			rsOwners := rs.GetObjectMeta().GetOwnerReferences()
-			for _, o := range rsOwners {
-				if o.Kind == "Deployment" {
-					return o.Name, nil
-				}
-			}
-		case "Job":
-			cj := &kube_batch.Job{}
-			cjKey := kube_client.ObjectKey{Namespace: namespace, Name: owner.Name}
-			if err := p.JobGetter.Get(ctx, cjKey, cj); err != nil {
-				return "", err
-			}
-			if len(cj.OwnerReferences) == 0 {
-				return owner.Name, nil
-			}
-			jobOwners := cj.GetObjectMeta().GetOwnerReferences()
-			for _, o := range jobOwners {
-				if o.Kind == "CronJob" {
-					return o.Name, nil
-				}
-			}
-		default: 
-			return owner.Name, nil
-		}
-	}
-	return pod.Name, nil
 }
 
 func MetricsFor(pod *kube_core.Pod) (*mesh_proto.MetricsBackend, error) {
