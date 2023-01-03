@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"strings"
 
 	"github.com/pkg/errors"
-	kube_apps "k8s.io/api/apps/v1"
 	kube_core "k8s.io/api/core/v1"
 	kube_client "sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -28,7 +28,7 @@ type PodConverter struct {
 	ServiceGetter       kube_client.Reader
 	NodeGetter          kube_client.Reader
 	ResourceConverter   k8s_common.Converter
-	InboundConverter	InboundConverter
+	InboundConverter    InboundConverter
 	Zone                string
 	KubeOutboundsAsVIPs bool
 }
@@ -192,45 +192,13 @@ func (p *PodConverter) GatewayByServiceFor(ctx context.Context, clusterName stri
 	}, nil
 }
 
-// DeploymentFor returns the name of the deployment that the pod exists within. The second return
-// value indicates whether or not the deployment was found when no error occurs, otherwise an
-// error is returned as the third return value.
-func (p *PodConverter) DeploymentFor(ctx context.Context, namespace string, pod *kube_core.Pod) (string, bool, error) {
-	owners := pod.GetObjectMeta().GetOwnerReferences()
-	var rs *kube_apps.ReplicaSet
-	for _, owner := range owners {
-		if owner.Kind == "ReplicaSet" {
-			rs = &kube_apps.ReplicaSet{}
-			rsKey := kube_client.ObjectKey{Namespace: namespace, Name: owner.Name}
-			if err := p.InboundConverter.NameExtractor.ReplicaSetGetter.Get(ctx, rsKey, rs); err != nil {
-				return "", false, err
-			}
-			break
-		}
-	}
-
-	if rs == nil {
-		return "", false, nil
-	}
-
-	rsOwners := rs.GetObjectMeta().GetOwnerReferences()
-	for _, owner := range rsOwners {
-		if owner.Kind == "Deployment" {
-			return owner.Name, true, nil
-		}
-	}
-
-	return "", false, nil
-}
-
 func (p *PodConverter) GatewayByDeploymentFor(ctx context.Context, clusterName string, pod *kube_core.Pod, services []*kube_core.Service) (*mesh_proto.Dataplane_Networking_Gateway, error) {
 	namespace := pod.GetObjectMeta().GetNamespace()
-	deployment, found, err := p.DeploymentFor(ctx, namespace, pod)
+	deployment, kind, err := p.InboundConverter.NameExtractor.Name(ctx, pod)
 	if err != nil {
 		return nil, err
 	}
-	if !found {
-		// Fall back on old service tags if Pod not part of Deployment
+	if !strings.Contains(kind, "Deployment") {
 		return p.GatewayByServiceFor(ctx, clusterName, pod, services)
 	}
 	return &mesh_proto.Dataplane_Networking_Gateway{
@@ -311,4 +279,3 @@ func MetricsAggregateFor(pod *kube_core.Pod) ([]*mesh_proto.PrometheusAggregateM
 	}
 	return aggregateConfig, nil
 }
-

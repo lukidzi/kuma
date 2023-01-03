@@ -22,7 +22,7 @@ const (
 )
 
 type InboundConverter struct {
-	NameExtractor   NameExtractor
+	NameExtractor NameExtractor
 }
 
 func inboundForService(zone string, pod *kube_core.Pod, service *kube_core.Service) (ifaces []*mesh_proto.Dataplane_Networking_Inbound) {
@@ -134,7 +134,7 @@ func (i *InboundConverter) InboundInterfacesFor(ctx context.Context, zone string
 		if len(services) > 0 {
 			return nil, errors.Errorf("A service that selects pod %s was found, but it doesn't match any container ports.", pod.GetName())
 		}
-		name, err := i.NameExtractor.RetrieveName(ctx, pod)
+		name, _, err := i.NameExtractor.Name(ctx, pod)
 		if err != nil {
 			return nil, err
 		}
