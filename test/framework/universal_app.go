@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"syscall"
 
 	"github.com/asaskevich/govalidator"
 	"github.com/gruntwork-io/terratest/modules/docker"
@@ -12,6 +13,8 @@ import (
 	"github.com/gruntwork-io/terratest/modules/testing"
 	"github.com/pkg/errors"
 
+	"github.com/kumahq/kuma/test/framework/envoy_admin"
+	"github.com/kumahq/kuma/test/framework/envoy_admin/tunnel"
 	"github.com/kumahq/kuma/test/framework/ssh"
 )
 
@@ -310,6 +313,16 @@ func (s *UniversalApp) GetContainerName() string {
 	return s.containerName
 }
 
+func (s *UniversalApp) GetEnvoyAdminTunnel() (envoy_admin.Tunnel, error) {
+	t, err := tunnel.NewUniversalEnvoyAdminTunnel(
+		s.t, s.ports["22"], s.verbose,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return t, nil
+}
+
 func (s *UniversalApp) GetIP() string {
 	return s.ip
 }
@@ -333,13 +346,9 @@ func (s *UniversalApp) Stop() error {
 }
 
 func (s *UniversalApp) ReStart() error {
-	if err := s.mainApp.Kill(); err != nil {
+	if err := s.mainApp.Signal(syscall.SIGKILL, true); err != nil {
 		return err
 	}
-	if err := s.mainApp.ProcessWait(); err != nil {
-		return err
-	}
-
 	s.CreateMainApp(s.mainAppEnv, s.mainAppArgs)
 
 	if err := s.mainApp.Start(); err != nil {
@@ -458,12 +467,23 @@ func (s *UniversalApp) CreateDP(
 	s.dpApp = ssh.NewApp(s.containerName, s.verbose, s.ports[sshPort], nil, args)
 }
 
-func (s *UniversalApp) setupTransparent(cpIp string, builtindns bool) {
+func (s *UniversalApp) setupTransparent(cpIp string, builtindns bool, experimentalTransparentProxy bool) {
 	args := []string{
 		"/usr/bin/kumactl", "install", "transparent-proxy",
 		"--kuma-dp-user", "kuma-dp",
-		"--kuma-cp-ip", cpIp,
+		"--kuma-dp-uid", "5678",
 		"--skip-dns-conntrack-zone-split",
+	}
+
+	if experimentalTransparentProxy {
+		args = append(args,
+			"--exclude-inbound-ports", "22",
+			"--experimental-transparent-proxy-engine",
+		)
+	} else {
+		args = append(args,
+			"--kuma-cp-ip", cpIp,
+		)
 	}
 
 	if builtindns {

@@ -103,7 +103,7 @@ interCp:
 				return false, nil
 			}
 			return clustersStatus[0].Active, nil
-		}, time.Minute, DefaultTimeout).Should(BeTrue())
+		}, "1m", "1s").Should(BeTrue())
 
 		// then
 		active := true
@@ -172,5 +172,25 @@ interCp:
 				}
 			}, "30s", "1s").Should(Succeed())
 		})
+	})
+
+	It("should execute admin operations on Global CP", func() {
+		// given DP available on Global CP
+		Eventually(func(g Gomega) {
+			dataplanes, err := c1.GetKumactlOptions().KumactlList("dataplanes", "default")
+			g.Expect(err).ToNot(HaveOccurred())
+			// Dataplane names are generated, so we check for a partial match.
+			g.Expect(dataplanes).Should(ContainElement(ContainSubstring("demo-client")))
+		}, "30s", "250ms").Should(Succeed())
+
+		podName, err := PodNameOfApp(c2, "demo-client", TestNamespace)
+		Expect(err).ToNot(HaveOccurred())
+		dataplaneName := fmt.Sprintf("%s-zone.%s.%s.default", Kuma2, podName, TestNamespace)
+
+		// when
+		_, err = c1.GetKumactlOptions().RunKumactlAndGetOutput("inspect", "dataplane", dataplaneName, "--type", "config-dump")
+
+		// then
+		Expect(err).ToNot(HaveOccurred())
 	})
 }

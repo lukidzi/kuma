@@ -1,10 +1,10 @@
 package virtualoutbound
 
 import (
-	"github.com/gruntwork-io/terratest/modules/k8s"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	"github.com/kumahq/kuma/pkg/core/resources/apis/mesh"
 	"github.com/kumahq/kuma/test/e2e_env/kubernetes/env"
 	. "github.com/kumahq/kuma/test/framework"
 	"github.com/kumahq/kuma/test/framework/deployments/testserver"
@@ -35,12 +35,7 @@ func VirtualOutbound() {
 	})
 
 	BeforeEach(func() {
-		err := k8s.RunKubectlE(
-			env.Cluster.GetTesting(),
-			env.Cluster.GetKubectlOptions(),
-			"delete", "virtualoutbounds", "--all",
-		)
-		Expect(err).ToNot(HaveOccurred())
+		Expect(DeleteMeshResources(env.Cluster, meshName, mesh.VirtualOutboundResourceTypeDescriptor)).To(Succeed())
 	})
 
 	It("simple virtual outbound", func() {
@@ -68,11 +63,13 @@ spec:
 		Expect(err).ToNot(HaveOccurred())
 
 		// Succeed with virtual-outbound
-		stdout, stderr, err := env.Cluster.ExecWithRetries(namespace, clientPodName, "demo-client",
-			"curl", "-v", "-m", "3", "--fail", "test-server_virtual-outbounds_svc_80.foo:8080")
-		Expect(err).ToNot(HaveOccurred())
-		Expect(stderr).To(ContainSubstring("HTTP/1.1 200 OK"))
-		Expect(stdout).To(ContainSubstring(`"instance":"test-server`))
+		Eventually(func(g Gomega) {
+			stdout, stderr, err := env.Cluster.Exec(namespace, clientPodName, "demo-client",
+				"curl", "-v", "-m", "3", "--fail", "test-server_virtual-outbounds_svc_80.foo:8080")
+			g.Expect(err).ToNot(HaveOccurred())
+			g.Expect(stderr).To(ContainSubstring("HTTP/1.1 200 OK"))
+			g.Expect(stdout).To(ContainSubstring(`"instance":"test-server`))
+		}).Should(Succeed())
 	})
 
 	It("virtual outbounds on statefulSet", func() {
@@ -102,16 +99,20 @@ spec:
 		clientPodName, err := PodNameOfApp(env.Cluster, "demo-client", namespace)
 		Expect(err).ToNot(HaveOccurred())
 
-		stdout, stderr, err := env.Cluster.ExecWithRetries(namespace, clientPodName, "demo-client",
-			"curl", "-v", "-m", "3", "--fail", "test-server_virtual-outbounds_svc_80.test-server-0:8080")
-		Expect(err).ToNot(HaveOccurred())
-		Expect(stderr).To(ContainSubstring("HTTP/1.1 200 OK"))
-		Expect(stdout).To(ContainSubstring(`"instance":"test-server-0"`))
+		Eventually(func(g Gomega) {
+			stdout, stderr, err := env.Cluster.Exec(namespace, clientPodName, "demo-client",
+				"curl", "-v", "-m", "3", "--fail", "test-server_virtual-outbounds_svc_80.test-server-0:8080")
+			g.Expect(err).ToNot(HaveOccurred())
+			g.Expect(stderr).To(ContainSubstring("HTTP/1.1 200 OK"))
+			g.Expect(stdout).To(ContainSubstring(`"instance":"test-server-0"`))
+		}, "30s", "1s").Should(Succeed())
 
-		stdout, stderr, err = env.Cluster.ExecWithRetries(namespace, clientPodName, "demo-client",
-			"curl", "-v", "-m", "3", "--fail", "test-server_virtual-outbounds_svc_80.test-server-1:8080")
-		Expect(err).ToNot(HaveOccurred())
-		Expect(stderr).To(ContainSubstring("HTTP/1.1 200 OK"))
-		Expect(stdout).To(ContainSubstring(`"instance":"test-server-1"`))
+		Eventually(func(g Gomega) {
+			stdout, stderr, err := env.Cluster.Exec(namespace, clientPodName, "demo-client",
+				"curl", "-v", "-m", "3", "--fail", "test-server_virtual-outbounds_svc_80.test-server-1:8080")
+			g.Expect(err).ToNot(HaveOccurred())
+			g.Expect(stderr).To(ContainSubstring("HTTP/1.1 200 OK"))
+			g.Expect(stdout).To(ContainSubstring(`"instance":"test-server-1"`))
+		}, "30s", "1s").Should(Succeed())
 	})
 }
