@@ -122,7 +122,7 @@ func Callbacks(s sync_store.ResourceSyncer, k8sStore bool, kubeFactory resources
 					return errors.Wrap(err, "could not convert object")
 				}
 				if kubeObject.Scope() == k8s_model.ScopeNamespace {
-					util.AddSuffixToNames(rs.GetItems(), "default")
+					util.AddSuffixToNames(rs.GetItems(), "kuma-system")
 				}
 			}
 

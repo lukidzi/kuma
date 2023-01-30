@@ -1,6 +1,8 @@
 package resilience
 
 import (
+	"time"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
@@ -11,11 +13,14 @@ import (
 
 func ResilienceMultizoneK8s() {
 	var global, zone1 *K8sCluster
-
+	var zone4 *UniversalCluster
 	BeforeAll(func() {
 		clusters, err := NewK8sClusters([]string{Kuma1, Kuma2}, Silent)
 		Expect(err).ToNot(HaveOccurred())
-
+		universalClusters, err := NewUniversalClusters(
+			[]string{Kuma4},
+			Silent)
+		Expect(err).ToNot(HaveOccurred())
 		// Global
 		global = clusters.GetCluster(Kuma1).(*K8sCluster)
 		Expect(NewClusterSetup().
@@ -29,10 +34,37 @@ func ResilienceMultizoneK8s() {
 		zone1 = clusters.GetCluster(Kuma2).(*K8sCluster)
 
 		Expect(NewClusterSetup().
-			Install(Kuma(core.Zone, WithGlobalAddress(globalCP.GetKDSServerAddress()), WithCtlOpts(map[string]string{"--set": "controlPlane.terminationGracePeriodSeconds=5"}))).
+			Install(Kuma(core.Zone, 
+					WithGlobalAddress(globalCP.GetKDSServerAddress()), WithCtlOpts(map[string]string{"--set": "controlPlane.terminationGracePeriodSeconds=5"}),
+					WithIngress(),
+					WithIngressEnvoyAdminTunnel(),
+					WithEgress(),
+					WithEgressEnvoyAdminTunnel(),
+				)).
 			Install(NamespaceWithSidecarInjection(TestNamespace)).
+			Install(DemoClientK8s("default", TestNamespace)).
+			Install(testserver.Install(
+				testserver.WithName("es-test-server"),
+				testserver.WithNamespace("default"),
+				testserver.WithEchoArgs("echo", "--instance", "es-test-server"),
+			)).
 			Setup(zone1)).To(Succeed())
 		Expect(zone1.VerifyKuma()).To(Succeed())
+
+		zone4 = universalClusters.GetCluster(Kuma4).(*UniversalCluster)
+		Expect(err).ToNot(HaveOccurred())
+
+		Expect(NewClusterSetup().
+			Install(Kuma(core.Zone, WithGlobalAddress(globalCP.GetKDSServerAddress()))). // do not deploy Egress
+			Install(IngressUniversal(globalCP.GenerateZoneIngressLegacyToken)).
+			Install(EgressUniversal(globalCP.GenerateZoneEgressToken)).
+			Install(DemoClientUniversal(
+				"zone4-demo-client",
+				"default",
+			)).
+			Install(TestServerUniversal("test-server", "default", WithArgs([]string{"echo", "--instance", "universal-1"}), WithTransparentProxy(false))).
+			Setup(zone4),
+		).To(Succeed())
 	})
 
 	E2EAfterAll(func() {
@@ -57,7 +89,7 @@ metadata:
 		Eventually(func() error {
 			return zone1.GetKumactlOptions().RunKumactl("get", "mesh", "before-zone-restart")
 		}, "30s", "1s").Should(Succeed())
-
+		time.Sleep(3600 * time.Hour)
 		// Stop the zone
 		Expect(zone1.StopControlPlane()).ToNot(HaveOccurred())
 

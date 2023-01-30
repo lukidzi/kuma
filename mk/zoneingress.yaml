@@ -1,0 +1,23 @@
+apiVersion: kuma.io/v1alpha1
+kind: ZoneIngress
+metadata:
+  name: kuma-3-zone.kuma-ingress-cbf659d47-s2pzs.kuma-system
+  namespace: kuma-system 
+spec:
+  availableServices:
+  - instances: 1
+    mesh: default
+    tags:
+      app: demo-client
+      k8s.kuma.io/namespace: kuma-test
+      kuma.io/instance: demo-client-6d488dbd74-2ph57
+      kuma.io/protocol: tcp
+      kuma.io/service: demo-client_kuma-test_svc
+      kuma.io/zone: kuma-3-zone
+      pod-template-hash: 6d488dbd74
+  networking:
+    address: 10.42.0.11
+    advertisedAddress: 172.18.0.6
+    advertisedPort: 30605
+    port: 10001
+  zone: kuma-3-zone

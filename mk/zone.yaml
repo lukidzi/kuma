@@ -1,0 +1,6 @@
+apiVersion: kuma.io/v1alpha1
+kind: Zone
+metadata:
+  name: kuma-3-zone
+spec:
+  enabled: true

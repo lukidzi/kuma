@@ -1,0 +1,29 @@
+apiVersion: kuma.io/v1alpha1
+kind: Dataplane
+mesh: default
+metadata:
+  name: kuma-3-zone.demo-client-6d488dbd74-cs9f2.kuma-test
+  namespace: kuma-system
+spec:
+  networking:
+    address: 10.42.0.7
+    admin:
+      port: 9901
+    inbound:
+    - health:
+        ready: true
+      port: 49151
+      tags:
+        app: demo-client
+        k8s.kuma.io/namespace: kuma-test
+        kuma.io/instance: demo-client-6d488dbd74-cs9f2
+        kuma.io/protocol: tcp
+        kuma.io/service: demo-client_kuma-test_svc
+        kuma.io/zone: kuma-3-zone
+        pod-template-hash: 6d488dbd74
+    transparentProxying:
+      redirectPortInbound: 15006
+      redirectPortInboundV6: 15010
+      redirectPortOutbound: 15001
+  probes:
+    port: 9000
