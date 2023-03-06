@@ -2,7 +2,6 @@ package mux
 
 import (
 	"context"
-	"io"
 	"sync"
 	"time"
 
@@ -10,7 +9,6 @@ import (
 
 	envoy_sd "github.com/envoyproxy/go-control-plane/envoy/service/discovery/v3"
 	mesh_proto "github.com/kumahq/kuma/api/mesh/v1alpha1"
-	"github.com/kumahq/kuma/pkg/core"
 )
 
 type SessionV2 interface {
@@ -50,7 +48,8 @@ func NewSessionV2(peerID string, stream KDSSyncStream, bufferSize uint32, sendTi
 		err:    make(chan error),
 		serverStream: &kdsServerStreamV2{
 			ctx:          stream.Context(),
-			bufferStream: newBufferStreamV2(bufferSize),
+			sendBuffer: make(chan *envoy_sd.DiscoveryResponse, bufferSize),
+			recvBuffer: make(chan *envoy_sd.DiscoveryRequest, bufferSize),
 		},
 	}
 	go func() {
@@ -71,13 +70,13 @@ func (s *sessionV2) handleRecv(stream KDSSyncStream) {
 		msg, err := stream.Recv()
 		// core.Log.Info("HANDLE RECV", "msg", msg)
 		if err != nil {
-			s.serverStream.bufferStream.close()
+			s.serverStream.close()
 			// Recv always finishes with either an EOF or another error
 			s.setError(err)
 			return
 		}
 		// We can safely not care about locking as we're only closing the channel from this goroutine.
-		s.serverStream.bufferStream.recvBuffer <- msg
+		s.serverStream.recvBuffer <- msg
 	}
 }
 
@@ -87,7 +86,7 @@ func (s *sessionV2) handleSend(stream KDSSyncStream, sendTimeout time.Duration) 
 	for {
 		
 		var msgToSend *envoy_sd.DiscoveryResponse
-		msg, more := <-s.serverStream.bufferStream.sendBuffer
+		msg, more := <-s.serverStream.sendBuffer
 		if !more {
 			return
 		}
@@ -139,48 +138,3 @@ func (s *sessionV2) Error() <-chan error {
 	return s.err
 }
 
-type bufferStreamV2 struct {
-	sendBuffer chan *envoy_sd.DiscoveryResponse
-	recvBuffer chan *envoy_sd.DiscoveryRequest
-
-	// Protects the send-buffer against writing on a closed channel, this is needed as we don't control in which goroutine `Send` will be called.
-	lock   sync.Mutex
-	closed bool
-}
-
-func newBufferStreamV2(bufferSize uint32) *bufferStreamV2 {
-	return &bufferStreamV2{
-		sendBuffer: make(chan *envoy_sd.DiscoveryResponse, bufferSize),
-		recvBuffer: make(chan *envoy_sd.DiscoveryRequest, bufferSize),
-	}
-}
-
-func (k *bufferStreamV2) Send(message *envoy_sd.DiscoveryResponse) error {
-	k.lock.Lock()
-	defer k.lock.Unlock()
-	core.Log.Info("SENDDDDD")
-	if k.closed {
-		return io.EOF
-	}
-	k.sendBuffer <- message
-	return nil
-}
-
-func (k *bufferStreamV2) Recv() (*envoy_sd.DiscoveryRequest, error) {
-
-	core.Log.Info("RECVVVVVV")
-	r, more := <-k.recvBuffer
-	if !more {
-		return nil, io.EOF
-	}
-	return r, nil
-}
-
-func (k *bufferStreamV2) close() {
-	k.lock.Lock()
-	defer k.lock.Unlock()
-
-	k.closed = true
-	close(k.sendBuffer)
-	close(k.recvBuffer)
-}
