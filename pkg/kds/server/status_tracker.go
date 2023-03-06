@@ -165,7 +165,7 @@ func (c *statusTracker) OnStreamResponse(_ context.Context, streamID int64, req 
 	subscription.Status.Total.ResponsesSent++
 	util.StatsOf(subscription.Status, model.ResourceType(req.TypeUrl)).ResponsesSent++
 
-	c.log.V(1).Info("OnStreamResponse", "streamid", streamID, "request", req, "response", resp, "subscription", subscription)
+	c.log.Info("OnStreamResponse", "streamid", streamID, "request", req, "response", resp, "subscription", subscription)
 }
 
 func (c *statusTracker) GetStatusAccessor(streamID int64) (StatusAccessor, bool) {

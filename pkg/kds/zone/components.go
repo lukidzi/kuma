@@ -3,6 +3,7 @@ package zone
 import (
 	"github.com/pkg/errors"
 
+	mesh_proto "github.com/kumahq/kuma/api/mesh/v1alpha1"
 	"github.com/kumahq/kuma/pkg/config"
 	config_core "github.com/kumahq/kuma/pkg/config/core"
 	"github.com/kumahq/kuma/pkg/config/core/resources/store"
@@ -13,7 +14,7 @@ import (
 	"github.com/kumahq/kuma/pkg/core/resources/registry"
 	core_runtime "github.com/kumahq/kuma/pkg/core/runtime"
 	"github.com/kumahq/kuma/pkg/core/runtime/component"
-	kds_client "github.com/kumahq/kuma/pkg/kds/client"
+	kds_client "github.com/kumahq/kuma/pkg/kds/client/v2"
 	"github.com/kumahq/kuma/pkg/kds/mux"
 	kds_server "github.com/kumahq/kuma/pkg/kds/server"
 	"github.com/kumahq/kuma/pkg/kds/service"
@@ -85,11 +86,33 @@ func Setup(rt core_runtime.Runtime) error {
 		}()
 		return nil
 	})
+
+	onZoneToGlobalConnect := mux.OnZoneToGlobalConnectFunc(func(session mesh_proto.KDSSyncService_GlobalToZoneSyncClient) error {
+		log := kdsZoneLog.WithValues("peer-id", "test")
+		sink := kds_client.NewKDSSink(log, reg.ObjectTypes(model.HasKDSFlag(model.ConsumedByZone)), kds_client.NewKDSStream(session, zone, string(cfgJson)),
+			Callbacks(
+				rt.KDSContext().Configs,
+				resourceSyncer,
+				rt.Config().Store.Type == store.KubernetesStore,
+				zone,
+				kubeFactory,
+				rt.Config().Store.Kubernetes.SystemNamespace,
+			),
+		)
+		go func() {
+			if err := sink.Receive(); err != nil {
+				log.Error(err, "KDSSink finished with an error")
+			}
+		}()
+		return nil
+	})
+
 	muxClient := mux.NewClient(
 		rt.KDSContext().ZoneClientCtx,
 		rt.Config().Multizone.Zone.GlobalAddress,
 		zone,
 		onSessionStarted,
+		onZoneToGlobalConnect,
 		*rt.Config().Multizone.Zone.KDS,
 		rt.Metrics(),
 		service.NewEnvoyAdminProcessor(

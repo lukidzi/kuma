@@ -39,7 +39,7 @@ func New(
 		return nil, err
 	}
 	reconciler := reconcile.NewReconciler(hasher, cache, generator, versioner, rt.Config().Mode, statsCallbacks)
-	syncTracker, err := newSyncTracker(log, reconciler, refresh, rt.Metrics())
+	syncTracker, err := newSyncTracker(log, reconciler, refresh, rt.Metrics(), "kds")
 	if err != nil {
 		return nil, err
 	}
@@ -55,6 +55,44 @@ func New(
 		callbacks = append(callbacks, DefaultStatusTracker(rt, log))
 	}
 	return NewServer(cache, callbacks, log), nil
+}
+
+
+func NewV2(
+	log logr.Logger,
+	rt core_runtime.Runtime,
+	providedTypes []model.ResourceType,
+	serverID string,
+	refresh time.Duration,
+	filter reconcile.ResourceFilter,
+	mapper reconcile.ResourceMapper,
+	insight bool,
+	nackBackoff time.Duration,
+) (ServerV2, error) {
+	hasher, cache := newKDSContext(log)
+	generator := reconcile.NewSnapshotGenerator(rt.ReadOnlyResourceManager(), providedTypes, filter, mapper)
+	versioner := util_xds_v3.SnapshotAutoVersioner{UUID: core.NewUUID}
+	statsCallbacks, err := util_xds.NewStatsCallbacks(rt.Metrics(), "new_kds_test")
+	if err != nil {
+		return nil, err
+	}
+	reconciler := reconcile.NewReconciler(hasher, cache, generator, versioner, rt.Config().Mode, statsCallbacks)
+	syncTracker, err := newSyncTracker(log, reconciler, refresh, rt.Metrics(), "new_kds_test")
+	if err != nil {
+		return nil, err
+	}
+	callbacks := util_xds_v3.CallbacksChain{
+		&typeAdjustCallbacks{},
+		util_xds_v3.NewControlPlaneIdCallbacks(serverID),
+		util_xds_v3.AdaptCallbacks(util_xds.LoggingCallbacks{Log: log}),
+		util_xds_v3.AdaptCallbacks(statsCallbacks),
+		// util_xds_v3.AdaptCallbacks(NewNackBackoff(nackBackoff)), todo(jakubdyszkiewicz) temporarily disable to see if it's a reason for E2E flakes.
+		syncTracker,
+	}
+	if insight {
+		callbacks = append(callbacks, DefaultStatusTracker(rt, log))
+	}
+	return NewServerV2(cache, callbacks, log), nil
 }
 
 func DefaultStatusTracker(rt core_runtime.Runtime, log logr.Logger) StatusTracker {
@@ -73,9 +111,9 @@ func DefaultStatusTracker(rt core_runtime.Runtime, log logr.Logger) StatusTracke
 	}, log)
 }
 
-func newSyncTracker(log logr.Logger, reconciler reconcile.Reconciler, refresh time.Duration, metrics core_metrics.Metrics) (envoy_xds.Callbacks, error) {
+func newSyncTracker(log logr.Logger, reconciler reconcile.Reconciler, refresh time.Duration, metrics core_metrics.Metrics, dsType string) (envoy_xds.Callbacks, error) {
 	kdsGenerations := prometheus.NewSummary(prometheus.SummaryOpts{
-		Name:       "kds_generation",
+		Name:       dsType + "kds_generation",
 		Help:       "Summary of KDS Snapshot generation",
 		Objectives: core_metrics.DefaultObjectives,
 	})
@@ -84,7 +122,7 @@ func newSyncTracker(log logr.Logger, reconciler reconcile.Reconciler, refresh ti
 	}
 	kdsGenerationsErrors := prometheus.NewCounter(prometheus.CounterOpts{
 		Help: "Counter of errors during KDS generation",
-		Name: "kds_generation_errors",
+		Name: dsType + "kds_generation_errors",
 	})
 	if err := metrics.Register(kdsGenerationsErrors); err != nil {
 		return nil, err

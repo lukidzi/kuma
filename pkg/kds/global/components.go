@@ -21,8 +21,10 @@ import (
 	"github.com/kumahq/kuma/pkg/core/user"
 	"github.com/kumahq/kuma/pkg/kds/client"
 	"github.com/kumahq/kuma/pkg/kds/mux"
+	mux_v2 "github.com/kumahq/kuma/pkg/kds/mux/v2"
 	kds_server "github.com/kumahq/kuma/pkg/kds/server"
 	"github.com/kumahq/kuma/pkg/kds/service"
+	service_v2 "github.com/kumahq/kuma/pkg/kds/service/v2"
 	sync_store "github.com/kumahq/kuma/pkg/kds/store"
 	"github.com/kumahq/kuma/pkg/kds/util"
 	resources_k8s "github.com/kumahq/kuma/pkg/plugins/resources/k8s"
@@ -53,6 +55,22 @@ func Setup(rt runtime.Runtime) error {
 	if err != nil {
 		return err
 	}
+
+	kdsServer2, err := kds_server.NewV2(
+		kdsGlobalLog,
+		rt,
+		reg.ObjectTypes(model.HasKDSFlag(model.ProvidedByGlobal)),
+		"global",
+		rt.Config().Multizone.Global.KDS.RefreshInterval.Duration,
+		rt.KDSContext().GlobalProvidedFilter,
+		rt.KDSContext().GlobalResourceMapper,
+		true,
+		rt.Config().Multizone.Global.KDS.NackBackoff.Duration,
+	)
+	if err != nil {
+		return err
+	}
+
 	resourceSyncer := sync_store.NewResourceSyncer(kdsGlobalLog, rt.ResourceStore())
 	kubeFactory := resources_k8s.NewSimpleKubeFactory()
 	onSessionStarted := mux.OnSessionStartedFunc(func(session mux.Session) error {
@@ -80,12 +98,32 @@ func Setup(rt runtime.Runtime) error {
 		}()
 		return nil
 	})
+
+	onZoneToGlobalStarted := service_v2.OnGlobalToZoneConnectFunc(func(session mux_v2.SessionV2) error {
+		clientID := session.PeerID()
+		log := kdsGlobalLog.WithName("test-kds-logger")
+		log.Info("test-logger new session created", "tst", clientID)
+		go func() {
+			if err := kdsServer2.GlobalToZoneSync(session.ServerStream()); err != nil {
+				log.Error(err, "test-logger StreamKumaResources finished with an error")
+			} else {
+				log.V(1).Info("test-logger StreamKumaResources finished gracefully")
+			}
+		}()
+		if err := createZoneIfAbsent(clientID, rt.ResourceManager()); err != nil {
+			log.Error(err, "Global CP could not create a zone")
+			return errors.New("Global CP could not create a zone") // send back message without details. Zone CP will retry
+		}
+
+		return nil
+	})
 	return rt.Add(mux.NewServer(
 		onSessionStarted,
 		rt.KDSContext().GlobalServerFilters,
 		*rt.Config().Multizone.Global.KDS,
 		rt.Metrics(),
 		service.NewGlobalKDSServiceServer(rt.KDSContext().EnvoyAdminRPCs),
+		service_v2.NewKDSSyncServiceServer(onZoneToGlobalStarted, rt.Config().Multizone.Global.KDS.MsgSendTimeout.Duration),
 	))
 }
 

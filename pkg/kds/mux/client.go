@@ -30,6 +30,7 @@ var muxClientLog = core.Log.WithName("kds-mux-client")
 
 type client struct {
 	callbacks           Callbacks
+	callbacksZone		CallbacksZone
 	globalURL           string
 	clientID            string
 	config              multizone.KdsClientConfig
@@ -43,6 +44,7 @@ func NewClient(
 	globalURL string,
 	clientID string,
 	callbacks Callbacks,
+	callbacksZone CallbacksZone,
 	config multizone.KdsClientConfig,
 	metrics metrics.Metrics,
 	envoyAdminProcessor service.EnvoyAdminProcessor,
@@ -50,6 +52,7 @@ func NewClient(
 	return &client{
 		ctx:                 ctx,
 		callbacks:           callbacks,
+		callbacksZone: 		callbacksZone,
 		globalURL:           globalURL,
 		clientID:            clientID,
 		config:              config,
@@ -103,10 +106,11 @@ func (c *client) Start(stop <-chan struct{}) (errs error) {
 
 	log := muxClientLog.WithValues("client-id", c.clientID)
 	errorCh := make(chan error)
-	go c.startKDSMultiplex(withKDSCtx, log, conn, stop, errorCh)
+	// go c.startKDSMultiplex(withKDSCtx, log, conn, stop, errorCh)
 	go c.startXDSConfigs(withKDSCtx, log, conn, stop, errorCh)
 	go c.startStats(withKDSCtx, log, conn, stop, errorCh)
 	go c.startClusters(withKDSCtx, log, conn, stop, errorCh)
+	go c.startGlobalToZoneSync(withKDSCtx, log, conn, stop, errorCh)
 
 	select {
 	case <-stop:
@@ -150,6 +154,24 @@ func (c *client) startKDSMultiplex(ctx context.Context, log logr.Logger, conn *g
 		return
 	}
 }
+
+func (c *client) startGlobalToZoneSync(ctx context.Context, log logr.Logger, conn *grpc.ClientConn, stop <-chan struct{}, errorCh chan error) {
+	kdsClient := mesh_proto.NewKDSSyncServiceClient(conn)
+	log.Info("initializing Kuma Discovery Service (KDS) stream for global-zone sync of resources")
+	stream, err := kdsClient.GlobalToZoneSync(ctx)
+	if err != nil {
+		errorCh <- err
+		return
+	}
+	processingErrorsCh := make(chan error)
+	if err := c.callbacksZone.OnZoneToGlobalConnect(stream); err != nil {
+		log.Error(err, "closing KDS stream after callback error")
+		errorCh <- err
+		return
+	}
+	c.handleProcessingErrors(stream, log, stop, processingErrorsCh, errorCh)
+}
+
 
 func (c *client) startXDSConfigs(
 	ctx context.Context,
