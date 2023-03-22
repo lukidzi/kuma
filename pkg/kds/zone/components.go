@@ -21,6 +21,7 @@ import (
 	sync_store "github.com/kumahq/kuma/pkg/kds/store"
 	"github.com/kumahq/kuma/pkg/kds/util"
 	cache_v2 "github.com/kumahq/kuma/pkg/kds/v2/cache"
+	kds_server_v2 "github.com/kumahq/kuma/pkg/kds/v2/global/server"
 	sync_store_v2 "github.com/kumahq/kuma/pkg/kds/v2/store"
 	kds_client_v2 "github.com/kumahq/kuma/pkg/kds/v2/zone/client"
 	resources_k8s "github.com/kumahq/kuma/pkg/plugins/resources/k8s"
@@ -53,7 +54,22 @@ func Setup(rt core_runtime.Runtime) error {
 	if err != nil {
 		return err
 	}
-	resourceSyncer := sync_store.NewResourceSyncer(kdsZoneLog, rt.ResourceStore())
+
+	kdsServerV2, err := kds_server_v2.New(
+		kdsZoneLog,
+		rt,
+		reg.ObjectTypes(model.HasKDSFlag(model.ProvidedByZone)),
+		zone,
+		rt.Config().Multizone.Zone.KDS.RefreshInterval.Duration,
+		kdsCtx.ZoneProvidedFilter,
+		kdsCtx.ZoneResourceMapper,
+		false,
+		rt.Config().Multizone.Zone.KDS.NackBackoff.Duration,
+	)
+	if err != nil {
+		return err
+	}
+	// resourceSyncer := sync_store.NewResourceSyncer(kdsZoneLog, rt.ResourceStore())
 	kubeFactory := resources_k8s.NewSimpleKubeFactory()
 	cfg := rt.Config()
 	cfgForDisplay, err := config.ConfigForDisplay(&cfg)
@@ -72,21 +88,21 @@ func Setup(rt core_runtime.Runtime) error {
 				log.Error(err, "StreamKumaResources finished with an error")
 			}
 		}()
-		sink := kds_client.NewKDSSink(log, reg.ObjectTypes(model.HasKDSFlag(model.ConsumedByZone)), kds_client.NewKDSStream(session.ClientStream(), zone, string(cfgJson)),
-			Callbacks(
-				rt.KDSContext().Configs,
-				resourceSyncer,
-				rt.Config().Store.Type == store.KubernetesStore,
-				zone,
-				kubeFactory,
-				rt.Config().Store.Kubernetes.SystemNamespace,
-			),
-		)
-		go func() {
-			if err := sink.Receive(); err != nil {
-				log.Error(err, "KDSSink finished with an error")
-			}
-		}()
+		// sink := kds_client.NewKDSSink(log, reg.ObjectTypes(model.HasKDSFlag(model.ConsumedByZone)), kds_client.NewKDSStream(session.ClientStream(), zone, string(cfgJson)),
+		// 	Callbacks(
+		// 		rt.KDSContext().Configs,
+		// 		resourceSyncer,
+		// 		rt.Config().Store.Type == store.KubernetesStore,
+		// 		zone,
+		// 		kubeFactory,
+		// 		rt.Config().Store.Kubernetes.SystemNamespace,
+		// 	),
+		// )
+		// go func() {
+		// 	if err := sink.Receive(); err != nil {
+		// 		log.Error(err, "KDSSink finished with an error")
+		// 	}
+		// }()
 		return nil
 	})
 
@@ -110,12 +126,24 @@ func Setup(rt core_runtime.Runtime) error {
 		return nil
 	})
 
+	onZoneToGlobalSyncStarted := mux.OnZoneToGlobalSyncStartedFunc(func(stream mesh_proto.KDSSyncService_ZoneToGlobalSyncServer) error {
+		log := kdsZoneLog.WithValues("peer-id", "global")
+		log.Info("new session created")
+		go func() {
+			if err := kdsServerV2.ZoneToGlobalSync(stream); err != nil {
+				log.Error(err, "StreamKumaResources finished with an error")
+			}
+		}()
+		return nil
+	})
+
 	muxClient := mux.NewClient(
 		rt.KDSContext().ZoneClientCtx,
 		rt.Config().Multizone.Zone.GlobalAddress,
 		zone,
 		onSessionStarted,
 		onGlobalToZoneSyncStarted,
+		onZoneToGlobalSyncStarted,
 		*rt.Config().Multizone.Zone.KDS,
 		rt.Config().Experimental,
 		rt.Metrics(),

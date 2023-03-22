@@ -2,7 +2,9 @@ package server
 
 import (
 	"context"
+	"sync"
 
+	envoy_sd "github.com/envoyproxy/go-control-plane/envoy/service/discovery/v3"
 	envoy_cache "github.com/envoyproxy/go-control-plane/pkg/cache/v3"
 	"github.com/envoyproxy/go-control-plane/pkg/server/delta/v3"
 	envoy_server "github.com/envoyproxy/go-control-plane/pkg/server/v3"
@@ -29,4 +31,49 @@ type server struct {
 
 func (s *server) GlobalToZoneSync(stream mesh_proto.KDSSyncService_GlobalToZoneSyncServer) error {
 	return s.Server.DeltaStreamHandler(stream, "")
+}
+
+func (s *server) ZoneToGlobalSync(stream mesh_proto.KDSSyncService_ZoneToGlobalSyncServer) error {
+	return s.Server.DeltaStreamHandler(NewZoneSession(stream).ServerStream(), "")
+}
+
+type SessionZone interface {
+	ServerStream() mesh_proto.KDSSyncService_ZoneToGlobalSyncServer
+	ClientStream() mesh_proto.KDSSyncService_ZoneToGlobalSyncClient
+	PeerID() string
+	Error() <-chan error
+}
+
+type sessionZone struct {
+	serverStream *kdsServerStreamZone
+	clientStream *kdsClientStreamZone
+
+	err       chan error
+	sync.Once // protects err, so we only send the first error and close the channel
+}
+
+type ZoneStream interface {
+	Send(*envoy_sd.DeltaDiscoveryResponse) error
+	Recv() (*envoy_sd.DeltaDiscoveryRequest, error)
+	Context() context.Context
+}
+
+func NewZoneSession(stream ZoneStream) SessionZone {
+	s := &sessionZone{
+		serverStream: &kdsServerStreamZone{
+			ctx:          stream.Context(),
+			bufferStream: newBufferStreamZone(bufferSize),
+		},
+		clientStream: &kdsClientStreamZone{
+			ctx:          stream.Context(),
+			bufferStream: newBufferStreamZone(bufferSize),
+		},
+	}
+	go func() {
+		s.handleSend(stream, sendTimeout)
+	}()
+	go func() {
+		s.handleRecv(stream)
+	}()
+	return s
 }

@@ -23,12 +23,12 @@ import (
 	"github.com/kumahq/kuma/pkg/core/user"
 	"github.com/kumahq/kuma/pkg/kds/client"
 	"github.com/kumahq/kuma/pkg/kds/mux"
-	kds_server "github.com/kumahq/kuma/pkg/kds/server"
 	"github.com/kumahq/kuma/pkg/kds/service"
 	sync_store "github.com/kumahq/kuma/pkg/kds/store"
 	"github.com/kumahq/kuma/pkg/kds/util"
+	global_client "github.com/kumahq/kuma/pkg/kds/v2/global/client"
 	kds_global_server "github.com/kumahq/kuma/pkg/kds/v2/global/server"
-	global_service "github.com/kumahq/kuma/pkg/kds/v2/global/service"
+	sync_store_v2 "github.com/kumahq/kuma/pkg/kds/v2/store"
 	resources_k8s "github.com/kumahq/kuma/pkg/plugins/resources/k8s"
 	k8s_model "github.com/kumahq/kuma/pkg/plugins/resources/k8s/native/pkg/model"
 	util_proto "github.com/kumahq/kuma/pkg/util/proto"
@@ -46,20 +46,20 @@ func Setup(rt runtime.Runtime) error {
 		return nil
 	}
 	reg := registry.Global()
-	kdsServer, err := kds_server.New(
-		kdsGlobalLog,
-		rt,
-		reg.ObjectTypes(model.HasKDSFlag(model.ProvidedByGlobal)),
-		"global",
-		rt.Config().Multizone.Global.KDS.RefreshInterval.Duration,
-		rt.KDSContext().GlobalProvidedFilter,
-		rt.KDSContext().GlobalResourceMapper,
-		true,
-		rt.Config().Multizone.Global.KDS.NackBackoff.Duration,
-	)
-	if err != nil {
-		return err
-	}
+	// kdsServer, err := kds_server.New(
+	// 	kdsGlobalLog,
+	// 	rt,
+	// 	reg.ObjectTypes(model.HasKDSFlag(model.ProvidedByGlobal)),
+	// 	"global",
+	// 	rt.Config().Multizone.Global.KDS.RefreshInterval.Duration,
+	// 	rt.KDSContext().GlobalProvidedFilter,
+	// 	rt.KDSContext().GlobalResourceMapper,
+	// 	true,
+	// 	rt.Config().Multizone.Global.KDS.NackBackoff.Duration,
+	// )
+	// if err != nil {
+	// 	return err
+	// }
 
 	kdsServerV2, err := kds_global_server.New(
 		kdsDeltaGlobalLog,
@@ -77,17 +77,18 @@ func Setup(rt runtime.Runtime) error {
 	}
 
 	resourceSyncer := sync_store.NewResourceSyncer(kdsGlobalLog, rt.ResourceStore())
+	resourceSyncerV2 := sync_store_v2.NewResourceSyncer(kdsGlobalLog, rt.ResourceStore())
 	kubeFactory := resources_k8s.NewSimpleKubeFactory()
 	onSessionStarted := mux.OnSessionStartedFunc(func(session mux.Session) error {
 		log := kdsGlobalLog.WithValues("peer-id", session.PeerID())
 		log.Info("new session created")
-		go func() {
-			if err := kdsServer.StreamKumaResources(session.ServerStream()); err != nil {
-				log.Error(err, "StreamKumaResources finished with an error")
-			} else {
-				log.V(1).Info("StreamKumaResources finished gracefully")
-			}
-		}()
+		// go func() {
+		// 	if err := kdsServer.StreamKumaResources(session.ServerStream()); err != nil {
+		// 		log.Error(err, "StreamKumaResources finished with an error")
+		// 	} else {
+		// 		log.V(1).Info("StreamKumaResources finished gracefully")
+		// 	}
+		// }()
 		kdsStream := client.NewKDSStream(session.ClientStream(), session.PeerID(), "") // we only care about Zone CP config. Zone CP should not receive Global CP config.
 		if err := createZoneIfAbsent(log, session.PeerID(), rt.ResourceManager()); err != nil {
 			log.Error(err, "Global CP could not create a zone")
@@ -104,7 +105,7 @@ func Setup(rt runtime.Runtime) error {
 		return nil
 	})
 
-	onGlobalToZoneSyncConnect := global_service.OnGlobalToZoneSyncConnectFunc(func(stream mesh_proto.KDSSyncService_GlobalToZoneSyncServer, errChan chan error) {
+	onGlobalToZoneSyncConnect := mux.OnGlobalToZoneSyncConnectFunc(func(stream mesh_proto.KDSSyncService_GlobalToZoneSyncServer, errChan chan error) {
 		clientId, err := util.ClientIDFromIncomingCtx(stream.Context())
 		if err != nil {
 			errChan <- err
@@ -120,14 +121,33 @@ func Setup(rt runtime.Runtime) error {
 			log.V(1).Info("GlobalToZoneSync finished gracefully")
 		}
 	})
+
+	onZoneToGlobalSyncConnect := mux.OnZoneToGlobalSyncConnectFunc(func(stream mesh_proto.KDSSyncService_ZoneToGlobalSyncServer, errChan chan error) {
+		clientId, err := util.ClientIDFromIncomingCtx(stream.Context())
+		if err != nil {
+			errChan <- err
+		}
+		log := kdsGlobalLog.WithValues("peer-id", clientId)
+		kdsStream := global_client.NewDeltaKDSStream(stream, clientId, "") // we only care about Zone CP config. Zone CP should not receive Global CP config.
+		sink := global_client.NewKDSSyncClient(log, reg.ObjectTypes(model.HasKDSFlag(model.ConsumedByGlobal)), kdsStream, 
+			sync_store_v2.CallbacksGlobal(resourceSyncerV2, rt.Config().Store.Type == store_config.KubernetesStore, kubeFactory, rt.Config().Store.Kubernetes.SystemNamespace))
+		go func() {
+			if err := sink.Receive(); err != nil {
+				log.Error(err, "KDSSink finished with an error")
+			} else {
+				log.V(1).Info("KDSSink finished gracefully")
+			}
+		}()
+	})
 	return rt.Add(mux.NewServer(
 		onSessionStarted,
 		rt.KDSContext().GlobalServerFilters,
 		*rt.Config().Multizone.Global.KDS,
 		rt.Metrics(),
 		service.NewGlobalKDSServiceServer(rt.KDSContext().EnvoyAdminRPCs),
-		global_service.NewKDSSyncServiceServer(
+		mux.NewKDSSyncServiceServer(
 			onGlobalToZoneSyncConnect,
+			onZoneToGlobalSyncConnect,
 			rt.KDSContext().GlobalServerFiltersV2,
 		),
 	))

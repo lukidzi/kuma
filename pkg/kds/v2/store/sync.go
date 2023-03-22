@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 
@@ -9,7 +10,9 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/kumahq/kuma/pkg/core/resources/apis/mesh"
+	core_mesh "github.com/kumahq/kuma/pkg/core/resources/apis/mesh"
 	"github.com/kumahq/kuma/pkg/core/resources/apis/system"
+	"github.com/kumahq/kuma/pkg/core/resources/model"
 	core_model "github.com/kumahq/kuma/pkg/core/resources/model"
 	"github.com/kumahq/kuma/pkg/core/resources/registry"
 	"github.com/kumahq/kuma/pkg/core/resources/store"
@@ -273,6 +276,45 @@ func Callbacks(
 		},
 	}
 }
+
+func CallbacksGlobal(
+	syncer ResourceSyncer,
+	k8sStore bool,
+	kubeFactory resources_k8s.KubeFactory,
+	systemNamespace string,
+) *zone_client.Callbacks {
+	return &zone_client.Callbacks{
+		OnResourcesReceived: func(upstream zone_client.UpstreamResponse) error {
+			util.AddPrefixToNames(upstream.AddedResources.GetItems(), upstream.ControlPlaneId)
+			if k8sStore {
+				// if type of Store is Kubernetes then we want to store upstream resources in dedicated Namespace.
+				// KubernetesStore parses Name and considers substring after the last dot as a Namespace's Name.
+				kubeObject, err := kubeFactory.NewObject(upstream.AddedResources.NewItem())
+				if err != nil {
+					return errors.Wrap(err, "could not convert object")
+				}
+				if kubeObject.Scope() == k8s_model.ScopeNamespace {
+					util.AddSuffixToNames(upstream.AddedResources.GetItems(), "default")
+				}
+			}
+
+			if upstream.Type == core_mesh.ZoneIngressType {
+				for _, zi := range upstream.AddedResources.(*core_mesh.ZoneIngressResourceList).Items {
+					zi.Spec.Zone = upstream.ControlPlaneId
+				}
+			} else if upstream.Type == core_mesh.ZoneEgressType {
+				for _, ze := range upstream.AddedResources.(*core_mesh.ZoneEgressResourceList).Items {
+					ze.Spec.Zone = upstream.ControlPlaneId
+				}
+			}
+
+			return syncer.Sync(upstream, PrefilterBy(func(r model.Resource) bool {
+				return strings.HasPrefix(r.GetMeta().GetName(), fmt.Sprintf("%s.", upstream.ControlPlaneId))
+			}), Zone(upstream.ControlPlaneId))
+		},
+	}
+}
+
 
 func getRemovedResourceKeys(removedResourceNames []string) []core_model.ResourceKey {
 	removed := []core_model.ResourceKey{}
