@@ -1,4 +1,4 @@
-package zone_test
+package client_test
 
 import (
 	"testing"

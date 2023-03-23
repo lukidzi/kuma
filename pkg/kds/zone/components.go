@@ -20,10 +20,10 @@ import (
 	"github.com/kumahq/kuma/pkg/kds/service"
 	sync_store "github.com/kumahq/kuma/pkg/kds/store"
 	"github.com/kumahq/kuma/pkg/kds/util"
-	cache_v2 "github.com/kumahq/kuma/pkg/kds/v2/cache"
-	zone_client "github.com/kumahq/kuma/pkg/kds/v2/client/zone"
+	kds_cache_v2 "github.com/kumahq/kuma/pkg/kds/v2/cache"
+	kds_client_v2 "github.com/kumahq/kuma/pkg/kds/v2/client"
 	kds_server_v2 "github.com/kumahq/kuma/pkg/kds/v2/server"
-	sync_store_v2 "github.com/kumahq/kuma/pkg/kds/v2/store"
+	kds_sync_store_v2 "github.com/kumahq/kuma/pkg/kds/v2/store"
 	resources_k8s "github.com/kumahq/kuma/pkg/plugins/resources/k8s"
 	k8s_model "github.com/kumahq/kuma/pkg/plugins/resources/k8s/native/pkg/model"
 	zone_tokens "github.com/kumahq/kuma/pkg/tokens/builtin/zone"
@@ -70,6 +70,7 @@ func Setup(rt core_runtime.Runtime) error {
 		return err
 	}
 	resourceSyncer := sync_store.NewResourceSyncer(kdsZoneLog, rt.ResourceStore())
+	resourceSyncerV2 := kds_sync_store_v2.NewResourceSyncer(kdsZoneLog, rt.ResourceStore())
 	kubeFactory := resources_k8s.NewSimpleKubeFactory()
 	cfg := rt.Config()
 	cfgForDisplay, err := config.ConfigForDisplay(&cfg)
@@ -81,7 +82,7 @@ func Setup(rt core_runtime.Runtime) error {
 		return errors.Wrap(err, "could not marshall config to json")
 	}
 	onSessionStarted := mux.OnSessionStartedFunc(func(session mux.Session) error {
-		log := kdsZoneLog.WithValues("peer-id", session.PeerID())
+		log := kdsZoneLog.WithValues("peer-id", "global")
 		log.Info("new session created")
 		go func() {
 			if err := kdsServer.StreamKumaResources(session.ServerStream()); err != nil {
@@ -106,12 +107,12 @@ func Setup(rt core_runtime.Runtime) error {
 		return nil
 	})
 
-	onGlobalToZoneSyncStarted := mux.OnGlobalToZoneSyncStartedFunc(func(stream mesh_proto.KDSSyncService_GlobalToZoneSyncClient, deltaInitState cache_v2.ResourceVersionMap) error {
+	onGlobalToZoneSyncStarted := mux.OnGlobalToZoneSyncStartedFunc(func(stream mesh_proto.KDSSyncService_GlobalToZoneSyncClient, deltaInitState kds_cache_v2.ResourceVersionMap) error {
 		log := kdsZoneLog.WithValues("kds-version", "v2")
-		syncClient := zone_client.NewKDSSyncClient(log, reg.ObjectTypes(model.HasKDSFlag(model.ConsumedByZone)), zone_client.NewDeltaKDSStream(stream, zone, string(cfgJson), deltaInitState),
-			sync_store_v2.Callbacks(
+		syncClient := kds_client_v2.NewKDSSyncClient(log, reg.ObjectTypes(model.HasKDSFlag(model.ConsumedByZone)), kds_client_v2.NewDeltaKDSStream(stream, zone, string(cfgJson), deltaInitState),
+			kds_sync_store_v2.Callbacks(
 				rt.KDSContext().Configs,
-				sync_store_v2.NewResourceSyncer(kdsZoneLog, rt.ResourceStore()),
+				resourceSyncerV2,
 				rt.Config().Store.Type == store.KubernetesStore,
 				zone,
 				kubeFactory,
@@ -127,11 +128,7 @@ func Setup(rt core_runtime.Runtime) error {
 	})
 
 	onZoneToGlobalSyncStarted := mux.OnZoneToGlobalSyncStartedFunc(func(stream mesh_proto.KDSSyncService_ZoneToGlobalSyncClient) error {
-		clientId, err := util.ClientIDFromIncomingCtx(stream.Context())
-		if err != nil {
-			return err
-		}
-		log := kdsZoneLog.WithValues("peer-id", clientId)
+		log := kdsZoneLog.WithValues("peer-id", "global")
 		log.Info("ZoneToGlobalSync new session created")
 		session := kds_server_v2.NewServerStream(stream)
 		go func() {

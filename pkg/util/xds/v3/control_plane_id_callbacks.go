@@ -6,7 +6,6 @@ import (
 	envoy_core "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	envoy_discovery "github.com/envoyproxy/go-control-plane/envoy/service/discovery/v3"
 	envoy_xds "github.com/envoyproxy/go-control-plane/pkg/server/v3"
-	"github.com/kumahq/kuma/pkg/core"
 )
 
 // controlPlaneIdCallbacks adds Control Plane ID to the DiscoveryResponse
@@ -32,7 +31,6 @@ func (c *controlPlaneIdCallbacks) OnStreamResponse(ctx context.Context, streamID
 }
 
 func (c *controlPlaneIdCallbacks) OnStreamDeltaResponse(streamID int64, request *envoy_discovery.DeltaDiscoveryRequest, response *envoy_discovery.DeltaDiscoveryResponse) {
-	core.Log.Info("TESTLOG OnDeltaStreamResponse controlPlaneIdCallbacks", "resp", response, "c.id", c.id)
 	if c.id != "" {
 		response.ControlPlane = &envoy_core.ControlPlane{
 			Identifier: c.id,

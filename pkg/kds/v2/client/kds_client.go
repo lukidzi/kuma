@@ -1,4 +1,4 @@
-package global
+package client
 
 import (
 	"io"
@@ -6,8 +6,29 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
 
+	"github.com/kumahq/kuma/pkg/core/resources/model"
 	core_model "github.com/kumahq/kuma/pkg/core/resources/model"
 )
+
+type UpstreamResponse struct {
+	ControlPlaneId       string
+	Type                 model.ResourceType
+	AddedResources       model.ResourceList
+	RemovedResourceNames []string
+	IsInitialRequest     bool
+}
+
+type Callbacks struct {
+	OnResourcesReceived func(upstream UpstreamResponse) error
+}
+
+// All methods other than Receive() are non-blocking. It does not wait until the peer CP receives the message.
+type DeltaKDSStream interface {
+	DeltaDiscoveryRequest(resourceType model.ResourceType) error
+	Receive() (UpstreamResponse, error)
+	ACK(typ string) error
+	NACK(typ string, err error) error
+}
 
 type KDSSyncClient interface {
 	Receive() error
