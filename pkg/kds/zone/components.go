@@ -126,11 +126,22 @@ func Setup(rt core_runtime.Runtime) error {
 		return nil
 	})
 
-	onZoneToGlobalSyncStarted := mux.OnZoneToGlobalSyncStartedFunc(func(stream mesh_proto.KDSSyncService_ZoneToGlobalSyncServer) error {
+	onZoneToGlobalSyncStarted := mux.OnZoneToGlobalSyncStartedFunc(func(stream mesh_proto.KDSSyncService_ZoneToGlobalSyncClient) error {
 		log := kdsZoneLog.WithValues("peer-id", "global")
 		log.Info("new session created")
+		// Option 1 - working
+		// bufferSize := len(registry.Global().ObjectTypes())
+		// session := NewSession(stream, uint32(bufferSize), rt.Config().Multizone.Global.KDS.MsgSendTimeout.Duration)
+		// go func() {
+		// 	if err := kdsServerV2.Handle(session.ServerStream()); err != nil {
+		// 		log.Error(err, "StreamKumaResources finished with an error")
+		// 	}
+		// }()
+
+		// Option 2
+		session := NewServerStream(stream)
 		go func() {
-			if err := kdsServerV2.ZoneToGlobalSync(stream); err != nil {
+			if err := kdsServerV2.Handle(session); err != nil {
 				log.Error(err, "StreamKumaResources finished with an error")
 			}
 		}()

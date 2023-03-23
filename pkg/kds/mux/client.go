@@ -124,7 +124,7 @@ func (c *client) Start(stop <-chan struct{}) (errs error) {
 	go c.startStats(withKDSCtx, log, conn, stop, errorCh)
 	go c.startClusters(withKDSCtx, log, conn, stop, errorCh)
 	if c.experimantalConfig.DeltaEnabled {
-		// go c.startGlobalToZoneSync(withKDSCtx, log, conn, stop, errorCh)
+		go c.startGlobalToZoneSync(withKDSCtx, log, conn, stop, errorCh)
 		go c.startZoneToGlobalSync(withKDSCtx, log, conn, stop, errorCh)
 	} else {
 		go c.startKDSMultiplex(withKDSCtx, log, conn, stop, errorCh)
@@ -217,9 +217,9 @@ func (c *client) startZoneToGlobalSync(ctx context.Context, log logr.Logger, con
 		return
 	}
 	processingErrorsCh := make(chan error)
-	bufferSize := len(registry.Global().ObjectTypes())
-	zoneSession := NewZoneSession("global", stream, uint32(bufferSize), c.config.MsgSendTimeout.Duration)
-	if err := c.callbacksZone.OnZoneToGlobalSyncStarted(zoneSession.ServerStream()); err != nil {
+	// bufferSize := len(registry.Global().ObjectTypes())
+	// zoneSession := NewZoneSession("global", stream, uint32(bufferSize), c.config.MsgSendTimeout.Duration)
+	if err := c.callbacksZone.OnZoneToGlobalSyncStarted(stream); err != nil {
 		log.Error(err, "closing Global to Zone Sync stream after callback error")
 		errorCh <- err
 		return
