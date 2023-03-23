@@ -44,6 +44,7 @@ func New(
 	if err != nil {
 		return nil, err
 	}
+	core.Log.Info("server ID TEST", "server_id", serverID)
 	callbacks := util_xds_v3.CallbacksChain{
 		&typeAdjustCallbacks{},
 		util_xds_v3.NewControlPlaneIdCallbacks(serverID),

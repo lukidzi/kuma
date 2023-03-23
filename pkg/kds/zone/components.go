@@ -21,9 +21,9 @@ import (
 	sync_store "github.com/kumahq/kuma/pkg/kds/store"
 	"github.com/kumahq/kuma/pkg/kds/util"
 	cache_v2 "github.com/kumahq/kuma/pkg/kds/v2/cache"
-	kds_server_v2 "github.com/kumahq/kuma/pkg/kds/v2/global/server"
+	zone_client "github.com/kumahq/kuma/pkg/kds/v2/client/zone"
+	kds_server_v2 "github.com/kumahq/kuma/pkg/kds/v2/server"
 	sync_store_v2 "github.com/kumahq/kuma/pkg/kds/v2/store"
-	kds_client_v2 "github.com/kumahq/kuma/pkg/kds/v2/zone/client"
 	resources_k8s "github.com/kumahq/kuma/pkg/plugins/resources/k8s"
 	k8s_model "github.com/kumahq/kuma/pkg/plugins/resources/k8s/native/pkg/model"
 	zone_tokens "github.com/kumahq/kuma/pkg/tokens/builtin/zone"
@@ -108,7 +108,7 @@ func Setup(rt core_runtime.Runtime) error {
 
 	onGlobalToZoneSyncStarted := mux.OnGlobalToZoneSyncStartedFunc(func(stream mesh_proto.KDSSyncService_GlobalToZoneSyncClient, deltaInitState cache_v2.ResourceVersionMap) error {
 		log := kdsZoneLog.WithValues("kds-version", "v2")
-		syncClient := kds_client_v2.NewKDSSyncClient(log, reg.ObjectTypes(model.HasKDSFlag(model.ConsumedByZone)), kds_client_v2.NewDeltaKDSStream(stream, zone, string(cfgJson), deltaInitState),
+		syncClient := zone_client.NewKDSSyncClient(log, reg.ObjectTypes(model.HasKDSFlag(model.ConsumedByZone)), zone_client.NewDeltaKDSStream(stream, zone, string(cfgJson), deltaInitState),
 			sync_store_v2.Callbacks(
 				rt.KDSContext().Configs,
 				sync_store_v2.NewResourceSyncer(kdsZoneLog, rt.ResourceStore()),
@@ -141,7 +141,7 @@ func Setup(rt core_runtime.Runtime) error {
 		// Option 2
 		session := NewServerStream(stream)
 		go func() {
-			if err := kdsServerV2.Handle(session); err != nil {
+			if err := kdsServerV2.ZoneToGlobal(session); err != nil {
 				log.Error(err, "StreamKumaResources finished with an error")
 			}
 		}()

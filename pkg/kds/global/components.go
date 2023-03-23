@@ -26,8 +26,8 @@ import (
 	"github.com/kumahq/kuma/pkg/kds/service"
 	sync_store "github.com/kumahq/kuma/pkg/kds/store"
 	"github.com/kumahq/kuma/pkg/kds/util"
-	global_client "github.com/kumahq/kuma/pkg/kds/v2/global/client"
-	kds_global_server "github.com/kumahq/kuma/pkg/kds/v2/global/server"
+	global_client "github.com/kumahq/kuma/pkg/kds/v2/client/global"
+	kds_server_v2 "github.com/kumahq/kuma/pkg/kds/v2/server"
 	sync_store_v2 "github.com/kumahq/kuma/pkg/kds/v2/store"
 	resources_k8s "github.com/kumahq/kuma/pkg/plugins/resources/k8s"
 	k8s_model "github.com/kumahq/kuma/pkg/plugins/resources/k8s/native/pkg/model"
@@ -61,7 +61,7 @@ func Setup(rt runtime.Runtime) error {
 	// 	return err
 	// }
 
-	kdsServerV2, err := kds_global_server.New(
+	kdsServerV2, err := kds_server_v2.New(
 		kdsDeltaGlobalLog,
 		rt,
 		reg.ObjectTypes(model.HasKDSFlag(model.ProvidedByGlobal)),

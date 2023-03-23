@@ -18,7 +18,7 @@ import (
 	"github.com/kumahq/kuma/pkg/core/resources/store"
 	"github.com/kumahq/kuma/pkg/core/user"
 	"github.com/kumahq/kuma/pkg/kds/util"
-	zone_client "github.com/kumahq/kuma/pkg/kds/v2/zone/client"
+	global_client "github.com/kumahq/kuma/pkg/kds/v2/client/global"
 	resources_k8s "github.com/kumahq/kuma/pkg/plugins/resources/k8s"
 	k8s_model "github.com/kumahq/kuma/pkg/plugins/resources/k8s/native/pkg/model"
 	zone_tokens "github.com/kumahq/kuma/pkg/tokens/builtin/zone"
@@ -35,7 +35,7 @@ type ResourceSyncer interface {
 	//
 	// Sync takes into account only 'Name' and 'Mesh' when it comes to upstream's Meta.
 	// 'Version', 'CreationTime' and 'ModificationTime' are managed by downstream store.
-	Sync(upstream zone_client.UpstreamResponse, fs ...SyncOptionFunc) error
+	Sync(upstream global_client.UpstreamResponse, fs ...SyncOptionFunc) error
 }
 
 type SyncOption struct {
@@ -77,7 +77,7 @@ func NewResourceSyncer(log logr.Logger, resourceStore store.ResourceStore) Resou
 	}
 }
 
-func (s *syncResourceStore) Sync(upstreamResponse zone_client.UpstreamResponse, fs ...SyncOptionFunc) error {
+func (s *syncResourceStore) Sync(upstreamResponse global_client.UpstreamResponse, fs ...SyncOptionFunc) error {
 	opts := NewSyncOptions(fs...)
 	ctx := user.Ctx(context.TODO(), user.ControlPlane)
 	log := s.log.WithValues("type", upstreamResponse.Type)
@@ -238,9 +238,9 @@ func Callbacks(
 	localZone string,
 	kubeFactory resources_k8s.KubeFactory,
 	systemNamespace string,
-) *zone_client.Callbacks {
-	return &zone_client.Callbacks{
-		OnResourcesReceived: func(upstream zone_client.UpstreamResponse) error {
+) *global_client.Callbacks {
+	return &global_client.Callbacks{
+		OnResourcesReceived: func(upstream global_client.UpstreamResponse) error {
 			if k8sStore && upstream.Type != system.ConfigType && upstream.Type != system.SecretType && upstream.Type != system.GlobalSecretType {
 				// if type of Store is Kubernetes then we want to store upstream resources in dedicated Namespace.
 				// KubernetesStore parses Name and considers substring after the last dot as a Namespace's Name.
@@ -282,9 +282,9 @@ func CallbacksGlobal(
 	k8sStore bool,
 	kubeFactory resources_k8s.KubeFactory,
 	systemNamespace string,
-) *zone_client.Callbacks {
-	return &zone_client.Callbacks{
-		OnResourcesReceived: func(upstream zone_client.UpstreamResponse) error {
+) *global_client.Callbacks {
+	return &global_client.Callbacks{
+		OnResourcesReceived: func(upstream global_client.UpstreamResponse) error {
 			util.AddPrefixToNames(upstream.AddedResources.GetItems(), upstream.ControlPlaneId)
 			if k8sStore {
 				// if type of Store is Kubernetes then we want to store upstream resources in dedicated Namespace.

@@ -1,4 +1,4 @@
-package client
+package zone
 
 import (
 	"io"
@@ -7,11 +7,8 @@ import (
 	"github.com/pkg/errors"
 
 	core_model "github.com/kumahq/kuma/pkg/core/resources/model"
+	global_client "github.com/kumahq/kuma/pkg/kds/v2/client/global"
 )
-
-type Callbacks struct {
-	OnResourcesReceived func(upstream UpstreamResponse) error
-}
 
 type KDSSyncClient interface {
 	Receive() error
@@ -20,11 +17,11 @@ type KDSSyncClient interface {
 type kdsSyncClient struct {
 	log           logr.Logger
 	resourceTypes []core_model.ResourceType
-	callbacks     *Callbacks
+	callbacks     *global_client.Callbacks
 	kdsStream     DeltaKDSStream
 }
 
-func NewKDSSyncClient(log logr.Logger, rt []core_model.ResourceType, kdsStream DeltaKDSStream, cb *Callbacks) KDSSyncClient {
+func NewKDSSyncClient(log logr.Logger, rt []core_model.ResourceType, kdsStream DeltaKDSStream, cb *global_client.Callbacks) KDSSyncClient {
 	return &kdsSyncClient{
 		log:           log,
 		resourceTypes: rt,
