@@ -24,8 +24,6 @@ func NewServerStream(stream mesh_proto.KDSSyncService_ZoneToGlobalSyncClient) Se
 	}
 	return s
 }
-
-
 func (k *serverStream) Send(response *envoy_sd.DeltaDiscoveryResponse) error {
 	err := k.stream.Send(response)
 	return err

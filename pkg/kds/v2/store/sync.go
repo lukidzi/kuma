@@ -315,7 +315,6 @@ func CallbacksGlobal(
 	}
 }
 
-
 func getRemovedResourceKeys(removedResourceNames []string) []core_model.ResourceKey {
 	removed := []core_model.ResourceKey{}
 	for _, resourceName := range removedResourceNames {

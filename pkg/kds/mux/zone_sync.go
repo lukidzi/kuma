@@ -31,7 +31,7 @@ var clientLog = core.Log.WithName("kds-delta-client")
 type KDSSyncServiceServer struct {
 	globalToZoneCb OnGlobalToZoneSyncConnectFunc
 	zoneToGlobalCb OnZoneToGlobalSyncConnectFunc
-	filters  []FilterV2
+	filters        []FilterV2
 	mesh_proto.UnimplementedKDSSyncServiceServer
 }
 
@@ -39,7 +39,7 @@ func NewKDSSyncServiceServer(globalToZoneCb OnGlobalToZoneSyncConnectFunc, zoneT
 	return &KDSSyncServiceServer{
 		globalToZoneCb: globalToZoneCb,
 		zoneToGlobalCb: zoneToGlobalCb,
-		filters:  filters,
+		filters:        filters,
 	}
 }
 

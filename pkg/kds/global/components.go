@@ -131,7 +131,7 @@ func Setup(rt runtime.Runtime) error {
 		}
 		log := kdsGlobalLog.WithValues("peer-id", clientId)
 		kdsStream := kds_client_v2.NewDeltaKDSStream(stream, clientId, "", kds_cache_v2.ResourceVersionMap{})
-		sink := kds_client_v2.NewKDSSyncClient(log, reg.ObjectTypes(model.HasKDSFlag(model.ConsumedByGlobal)), kdsStream, 
+		sink := kds_client_v2.NewKDSSyncClient(log, reg.ObjectTypes(model.HasKDSFlag(model.ConsumedByGlobal)), kdsStream,
 			kds_sync_store_v2.CallbacksGlobal(resourceSyncerV2, rt.Config().Store.Type == store_config.KubernetesStore, kubeFactory, rt.Config().Store.Kubernetes.SystemNamespace))
 		go func() {
 			if err := sink.Receive(); err != nil {

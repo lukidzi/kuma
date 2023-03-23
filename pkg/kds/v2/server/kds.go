@@ -35,14 +35,14 @@ func (s *server) GlobalToZoneSync(stream mesh_proto.KDSSyncService_GlobalToZoneS
 }
 
 // Delta xDS server expects `KDSSyncService_ZoneToGlobalSyncServer` to have Send(*v3.DeltaDiscoveryResponse)
-// and Recv() (*v3.DeltaDiscoveryRequest, error) but proto has different definition to make it works for 
+// and Recv() (*v3.DeltaDiscoveryRequest, error) but proto has different definition to make it works for
 // synchronization from Zone to Global.
 func (s *server) ZoneToGlobalSync(stream mesh_proto.KDSSyncService_ZoneToGlobalSyncServer) error {
 	panic("not implemented")
 }
 
 // ZoneToGlobal is the custom implementation for `ZoneToGlobalSync` to support running delta server
-// on zone while kds.proto has different definition of `KDSSyncService_ZoneToGlobalSyncServer` then 
+// on zone while kds.proto has different definition of `KDSSyncService_ZoneToGlobalSyncServer` then
 // expected by delta xDS server.
 func (s *server) ZoneToGlobal(stream stream.DeltaStream) error {
 	return s.Server.DeltaStreamHandler(stream, "")
