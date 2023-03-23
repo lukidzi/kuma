@@ -13,7 +13,7 @@ import (
 )
 
 func SyncV2() {
-	var zone1, zone2, global Cluster
+	var zone1, zone2, global *UniversalCluster
 	const clusterNameGlobal = "kuma-sync-v2-global"
 	const clusterName1 = "kuma-sync-v2-1"
 	const clusterName2 = "kuma-sync-v2-2"
@@ -44,6 +44,9 @@ func SyncV2() {
 					WithGlobalAddress(globalCP.GetKDSServerAddress()),
 					WithHDS(false),
 				)).
+				Install(IngressUniversal(globalCP.GenerateZoneIngressToken)).
+				Install(EgressUniversal(globalCP.GenerateZoneEgressToken)).
+				Install(TestServerUniversal("test-service", meshName, WithServiceName("test-service"))).
 				Setup(zone1)
 			Expect(err).ToNot(HaveOccurred())
 		}()
@@ -59,13 +62,18 @@ func SyncV2() {
 					WithGlobalAddress(globalCP.GetKDSServerAddress()),
 					WithHDS(false),
 				)).
+				Install(IngressUniversal(globalCP.GenerateZoneIngressToken)).
+				Install(EgressUniversal(globalCP.GenerateZoneEgressToken)).
+				Install(TestServerUniversal("test-service-zone2", meshName, WithServiceName("test-service-zone2"))).
 				Setup(zone2)
 			Expect(err).ToNot(HaveOccurred())
 		}()
 		wg.Wait()
 	})
 	E2EAfterAll(func() {
+		Expect(zone2.DeleteMeshApps(meshName)).To(Succeed())
 		Expect(zone2.DismissCluster()).To(Succeed())
+		Expect(zone1.DeleteMeshApps(meshName)).To(Succeed())
 		Expect(zone1.DismissCluster()).To(Succeed())
 		Expect(global.DismissCluster()).To(Succeed())
 	})
@@ -165,7 +173,7 @@ conf:
 			Eventually(func(g Gomega) {
 				out, err := global.GetKumactlOptions().RunKumactlAndGetOutput("inspect", "zone-ingresses")
 				g.Expect(err).ToNot(HaveOccurred())
-				g.Expect(strings.Count(out, "Online")).To(Equal(4))
+				g.Expect(strings.Count(out, "Online")).To(Equal(2))
 			}, "30s", "1s").Should(Succeed())
 		})
 
@@ -173,7 +181,7 @@ conf:
 			Eventually(func(g Gomega) {
 				out, err := global.GetKumactlOptions().RunKumactlAndGetOutput("inspect", "zoneegresses")
 				g.Expect(err).ToNot(HaveOccurred())
-				g.Expect(strings.Count(out, "Online")).To(Equal(4))
+				g.Expect(strings.Count(out, "Online")).To(Equal(2))
 			}, "30s", "1s").Should(Succeed())
 		})
 
