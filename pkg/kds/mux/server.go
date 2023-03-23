@@ -43,18 +43,10 @@ func (f OnSessionStartedFunc) OnSessionStarted(session Session) error {
 	return f(session)
 }
 
-type CallbacksGlobal interface {
-	OnGlobalToZoneSyncStarted(session mesh_proto.KDSSyncService_GlobalToZoneSyncClient, deltaInitState cache_v2.ResourceVersionMap) error
-}
-
 type OnGlobalToZoneSyncStartedFunc func(session mesh_proto.KDSSyncService_GlobalToZoneSyncClient, deltaInitState cache_v2.ResourceVersionMap) error
 
 func (f OnGlobalToZoneSyncStartedFunc) OnGlobalToZoneSyncStarted(session mesh_proto.KDSSyncService_GlobalToZoneSyncClient, deltaInitState cache_v2.ResourceVersionMap) error {
 	return f(session, deltaInitState)
-}
-
-type CallbacksZone interface {
-	OnZoneToGlobalSyncStarted(session mesh_proto.KDSSyncService_ZoneToGlobalSyncClient) error
 }
 
 type OnZoneToGlobalSyncStartedFunc func(session mesh_proto.KDSSyncService_ZoneToGlobalSyncClient) error
@@ -63,12 +55,11 @@ func (f OnZoneToGlobalSyncStartedFunc) OnZoneToGlobalSyncStarted(session mesh_pr
 	return f(session)
 }
 
-
 type server struct {
 	config               multizone.KdsServerConfig
 	callbacks            Callbacks
-	CallbacksGlobal		 GlobalCallbacksGlobal
-	CallbacksZone		 GlobalCallbacksZone
+	CallbacksGlobal		 OnGlobalToZoneSyncConnectFunc
+	CallbacksZone		 OnZoneToGlobalSyncConnectFunc
 	filters              []Filter
 	metrics              core_metrics.Metrics
 	serviceServer        *service.GlobalKDSServiceServer

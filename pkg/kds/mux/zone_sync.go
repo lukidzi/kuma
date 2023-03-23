@@ -14,18 +14,10 @@ type FilterV2 interface {
 	InterceptClientStream(stream grpc.ClientStream) error
 }
 
-type GlobalCallbacksZone interface {
-	OnGlobalToZoneSyncConnect(stream mesh_proto.KDSSyncService_GlobalToZoneSyncServer, errorCh chan error)
-}
-
 type OnGlobalToZoneSyncConnectFunc func(stream mesh_proto.KDSSyncService_GlobalToZoneSyncServer, errorCh chan error)
 
 func (f OnGlobalToZoneSyncConnectFunc) OnGlobalToZoneSyncConnect(stream mesh_proto.KDSSyncService_GlobalToZoneSyncServer, errorCh chan error) {
 	f(stream, errorCh)
-}
-
-type GlobalCallbacksGlobal interface {
-	OnZoneToGlobalSyncConnect(stream mesh_proto.KDSSyncService_ZoneToGlobalSyncServer, errorCh chan error)
 }
 
 type OnZoneToGlobalSyncConnectFunc func(stream mesh_proto.KDSSyncService_ZoneToGlobalSyncServer, errorCh chan error)
@@ -37,16 +29,16 @@ func (f OnZoneToGlobalSyncConnectFunc) OnZoneToGlobalSyncConnect(stream mesh_pro
 var clientLog = core.Log.WithName("kds-delta-client")
 
 type KDSSyncServiceServer struct {
-	callback GlobalCallbacksZone
-	callbacksGlobal GlobalCallbacksGlobal
+	globalToZoneCb OnGlobalToZoneSyncConnectFunc
+	zoneToGlobalCb OnZoneToGlobalSyncConnectFunc
 	filters  []FilterV2
 	mesh_proto.UnimplementedKDSSyncServiceServer
 }
 
-func NewKDSSyncServiceServer(callback GlobalCallbacksZone, callbacksGlobal GlobalCallbacksGlobal, filters []FilterV2) *KDSSyncServiceServer {
+func NewKDSSyncServiceServer(globalToZoneCb OnGlobalToZoneSyncConnectFunc, zoneToGlobalCb OnZoneToGlobalSyncConnectFunc, filters []FilterV2) *KDSSyncServiceServer {
 	return &KDSSyncServiceServer{
-		callback: callback,
-		callbacksGlobal: callbacksGlobal,
+		globalToZoneCb: globalToZoneCb,
+		zoneToGlobalCb: zoneToGlobalCb,
 		filters:  filters,
 	}
 }
@@ -61,7 +53,7 @@ func (g *KDSSyncServiceServer) GlobalToZoneSync(stream mesh_proto.KDSSyncService
 		}
 	}
 	processingErrorsCh := make(chan error)
-	go g.callback.OnGlobalToZoneSyncConnect(stream, processingErrorsCh)
+	go g.globalToZoneCb.OnGlobalToZoneSyncConnect(stream, processingErrorsCh)
 	select {
 	case <-stream.Context().Done():
 		clientLog.Info("GlobalToZoneSync rpc stream stopped")
@@ -77,14 +69,14 @@ func (g *KDSSyncServiceServer) GlobalToZoneSync(stream mesh_proto.KDSSyncService
 }
 
 func (g *KDSSyncServiceServer) ZoneToGlobalSync(stream mesh_proto.KDSSyncService_ZoneToGlobalSyncServer) error {
-	// for _, filter := range g.filters {
-	// 	if err := filter.InterceptServerStream(stream); err != nil {
-	// 		clientLog.Error(err, "closing KDS stream following a callback error")
-	// 		return err
-	// 	}
-	// }
+	for _, filter := range g.filters {
+		if err := filter.InterceptServerStream(stream); err != nil {
+			clientLog.Error(err, "closing KDS stream following a callback error")
+			return err
+		}
+	}
 	processingErrorsCh := make(chan error)
-	go g.callbacksGlobal.OnZoneToGlobalSyncConnect(stream, processingErrorsCh)
+	go g.zoneToGlobalCb.OnZoneToGlobalSyncConnect(stream, processingErrorsCh)
 	select {
 	case <-stream.Context().Done():
 		clientLog.Info("GlobalToZoneSync rpc stream stopped")

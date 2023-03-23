@@ -10,7 +10,6 @@ import (
 
 	mesh_proto "github.com/kumahq/kuma/api/mesh/v1alpha1"
 	system_proto "github.com/kumahq/kuma/api/system/v1alpha1"
-	"github.com/kumahq/kuma/pkg/core"
 	"github.com/kumahq/kuma/pkg/core/resources/model"
 	core_model "github.com/kumahq/kuma/pkg/core/resources/model"
 	"github.com/kumahq/kuma/pkg/kds"
@@ -69,10 +68,8 @@ func (s *stream) DeltaDiscoveryRequest(resourceType model.ResourceType) error {
 	if err != nil {
 		return err
 	}
-	initialResources := map[string]string{}
-
 	req := &envoy_sd.DeltaDiscoveryRequest{
-		InitialResourceVersions: initialResources,
+		InitialResourceVersions: map[string]string{}, // TODO(lukidzi): consider if we want to keep map of current state so during reconnect cp receive only new data
 		ResponseNonce:           "",
 		Node: &envoy_core.Node{
 			Id: s.clientId,
@@ -103,16 +100,20 @@ func (s *stream) Receive() (UpstreamResponse, error) {
 	if err != nil {
 		return UpstreamResponse{}, err
 	}
+	// when there isn't nonce it means it's the first request
+	isInitialRequest := true
+	if _, found := s.latestNonce[rs.GetItemType()]; found {
+		isInitialRequest = false
+	}
 	s.latestNonce[rs.GetItemType()] = resp.Nonce
-	core.Log.Info("TEST_LOG", "resp", resp)
-	// when map is empty that means we are doing the first request
+
 	// it has to be called before `getVersionMap`
 	return UpstreamResponse{
 		ControlPlaneId:       resp.GetControlPlane().GetIdentifier(),
 		Type:                 rs.GetItemType(),
 		AddedResources:       rs,
 		RemovedResourceNames: resp.RemovedResources,
-		IsInitialRequest:     true,
+		IsInitialRequest:     isInitialRequest,
 	}, nil
 }
 

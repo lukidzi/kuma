@@ -23,6 +23,7 @@ import (
 	"github.com/kumahq/kuma/pkg/core/user"
 	"github.com/kumahq/kuma/pkg/kds/client"
 	"github.com/kumahq/kuma/pkg/kds/mux"
+	kds_server "github.com/kumahq/kuma/pkg/kds/server"
 	"github.com/kumahq/kuma/pkg/kds/service"
 	sync_store "github.com/kumahq/kuma/pkg/kds/store"
 	"github.com/kumahq/kuma/pkg/kds/util"
@@ -46,20 +47,20 @@ func Setup(rt runtime.Runtime) error {
 		return nil
 	}
 	reg := registry.Global()
-	// kdsServer, err := kds_server.New(
-	// 	kdsGlobalLog,
-	// 	rt,
-	// 	reg.ObjectTypes(model.HasKDSFlag(model.ProvidedByGlobal)),
-	// 	"global",
-	// 	rt.Config().Multizone.Global.KDS.RefreshInterval.Duration,
-	// 	rt.KDSContext().GlobalProvidedFilter,
-	// 	rt.KDSContext().GlobalResourceMapper,
-	// 	true,
-	// 	rt.Config().Multizone.Global.KDS.NackBackoff.Duration,
-	// )
-	// if err != nil {
-	// 	return err
-	// }
+	kdsServer, err := kds_server.New(
+		kdsGlobalLog,
+		rt,
+		reg.ObjectTypes(model.HasKDSFlag(model.ProvidedByGlobal)),
+		"global",
+		rt.Config().Multizone.Global.KDS.RefreshInterval.Duration,
+		rt.KDSContext().GlobalProvidedFilter,
+		rt.KDSContext().GlobalResourceMapper,
+		true,
+		rt.Config().Multizone.Global.KDS.NackBackoff.Duration,
+	)
+	if err != nil {
+		return err
+	}
 
 	kdsServerV2, err := kds_server_v2.New(
 		kdsDeltaGlobalLog,
@@ -82,13 +83,13 @@ func Setup(rt runtime.Runtime) error {
 	onSessionStarted := mux.OnSessionStartedFunc(func(session mux.Session) error {
 		log := kdsGlobalLog.WithValues("peer-id", session.PeerID())
 		log.Info("new session created")
-		// go func() {
-		// 	if err := kdsServer.StreamKumaResources(session.ServerStream()); err != nil {
-		// 		log.Error(err, "StreamKumaResources finished with an error")
-		// 	} else {
-		// 		log.V(1).Info("StreamKumaResources finished gracefully")
-		// 	}
-		// }()
+		go func() {
+			if err := kdsServer.StreamKumaResources(session.ServerStream()); err != nil {
+				log.Error(err, "StreamKumaResources finished with an error")
+			} else {
+				log.V(1).Info("StreamKumaResources finished gracefully")
+			}
+		}()
 		kdsStream := client.NewKDSStream(session.ClientStream(), session.PeerID(), "") // we only care about Zone CP config. Zone CP should not receive Global CP config.
 		if err := createZoneIfAbsent(log, session.PeerID(), rt.ResourceManager()); err != nil {
 			log.Error(err, "Global CP could not create a zone")

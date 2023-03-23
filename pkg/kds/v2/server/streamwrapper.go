@@ -1,4 +1,4 @@
-package zone
+package server
 
 import (
 	"context"

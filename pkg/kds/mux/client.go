@@ -32,8 +32,8 @@ var muxClientLog = core.Log.WithName("kds-mux-client")
 
 type client struct {
 	callbacks           Callbacks
-	callbacksGlobal     CallbacksGlobal
-	callbacksZone       CallbacksZone
+	globalToZoneCb      OnGlobalToZoneSyncStartedFunc
+	zoneToGlobalCb      OnZoneToGlobalSyncStartedFunc
 	globalURL           string
 	clientID            string
 	config              multizone.KdsClientConfig
@@ -52,8 +52,8 @@ func NewClient(
 	globalURL string,
 	clientID string,
 	callbacks Callbacks,
-	callbacksGlobal CallbacksGlobal,
-	callbacksZone CallbacksZone,
+	globalToZoneCb OnGlobalToZoneSyncStartedFunc,
+	zoneToGlobalCb OnZoneToGlobalSyncStartedFunc,
 	config multizone.KdsClientConfig,
 	experimantalConfig config.ExperimentalConfig,
 	metrics metrics.Metrics,
@@ -62,8 +62,8 @@ func NewClient(
 	return &client{
 		ctx:                 ctx,
 		callbacks:           callbacks,
-		callbacksGlobal:     callbacksGlobal,
-		callbacksZone:       callbacksZone,
+		globalToZoneCb:      globalToZoneCb,
+		zoneToGlobalCb:      zoneToGlobalCb,
 		globalURL:           globalURL,
 		clientID:            clientID,
 		config:              config,
@@ -182,7 +182,7 @@ func (c *client) startGlobalToZoneSync(ctx context.Context, log logr.Logger, con
 		return
 	}
 	processingErrorsCh := make(chan error)
-	if err := c.callbacksGlobal.OnGlobalToZoneSyncStarted(stream, c.deltaInitState); err != nil {
+	if err := c.globalToZoneCb.OnGlobalToZoneSyncStarted(stream, c.deltaInitState); err != nil {
 		log.Error(err, "closing Global to Zone Sync stream after callback error")
 		errorCh <- err
 		return
@@ -217,7 +217,7 @@ func (c *client) startZoneToGlobalSync(ctx context.Context, log logr.Logger, con
 		return
 	}
 	processingErrorsCh := make(chan error)
-	if err := c.callbacksZone.OnZoneToGlobalSyncStarted(stream); err != nil {
+	if err := c.zoneToGlobalCb.OnZoneToGlobalSyncStarted(stream); err != nil {
 		log.Error(err, "closing Global to Zone Sync stream after callback error")
 		errorCh <- err
 		return
