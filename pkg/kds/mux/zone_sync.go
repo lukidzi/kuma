@@ -79,14 +79,14 @@ func (g *KDSSyncServiceServer) ZoneToGlobalSync(stream mesh_proto.KDSSyncService
 	go g.zoneToGlobalCb.OnZoneToGlobalSyncConnect(stream, processingErrorsCh)
 	select {
 	case <-stream.Context().Done():
-		clientLog.Info("GlobalToZoneSync rpc stream stopped")
+		clientLog.Info("ZoneToGlobalSync rpc stream stopped")
 		return nil
 	case err := <-processingErrorsCh:
 		if status.Code(err) == codes.Unimplemented {
-			clientLog.Error(err, "GlobalToZoneSync rpc stream failed, because Global CP does not implement this rpc. Upgrade Global CP.")
+			clientLog.Error(err, "ZoneToGlobalSync rpc stream failed, because Global CP does not implement this rpc. Upgrade Global CP.")
 			return err
 		}
-		clientLog.Error(err, "GlobalToZoneSync rpc stream failed prematurely, will restart in background")
+		clientLog.Error(err, "ZoneToGlobalSync rpc stream failed prematurely, will restart in background")
 		return err
 	}
 }

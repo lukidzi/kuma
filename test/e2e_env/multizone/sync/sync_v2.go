@@ -159,4 +159,30 @@ conf:
 			})
 		})
 	})
+
+	Context("from Remote to Global", func() {
+		It("should sync Zone Ingress", func() {
+			Eventually(func(g Gomega) {
+				out, err := global.GetKumactlOptions().RunKumactlAndGetOutput("inspect", "zone-ingresses")
+				g.Expect(err).ToNot(HaveOccurred())
+				g.Expect(strings.Count(out, "Online")).To(Equal(4))
+			}, "30s", "1s").Should(Succeed())
+		})
+
+		It("should sync Zone Egresses", func() {
+			Eventually(func(g Gomega) {
+				out, err := global.GetKumactlOptions().RunKumactlAndGetOutput("inspect", "zoneegresses")
+				g.Expect(err).ToNot(HaveOccurred())
+				g.Expect(strings.Count(out, "Online")).To(Equal(4))
+			}, "30s", "1s").Should(Succeed())
+		})
+
+		It("should sync Dataplane with insight", func() {
+			Eventually(func(g Gomega) {
+				out, err := global.GetKumactlOptions().RunKumactlAndGetOutput("inspect", "dataplanes", "--mesh", meshName)
+				g.Expect(err).ToNot(HaveOccurred())
+				g.Expect(strings.Count(out, "Online")).To(Equal(2))
+			}, "30s", "1s").Should(Succeed())
+		})
+	})
 }
