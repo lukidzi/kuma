@@ -286,6 +286,7 @@ func CallbacksGlobal(
 	return &client_v2.Callbacks{
 		OnResourcesReceived: func(upstream client_v2.UpstreamResponse) error {
 			util.AddPrefixToNames(upstream.AddedResources.GetItems(), upstream.ControlPlaneId)
+			upstream.RemovedResourceNames = util.AddPrefixToRemovedResourceNames(upstream.RemovedResourceNames, upstream.ControlPlaneId)
 			if k8sStore {
 				// if type of Store is Kubernetes then we want to store upstream resources in dedicated Namespace.
 				// KubernetesStore parses Name and considers substring after the last dot as a Namespace's Name.

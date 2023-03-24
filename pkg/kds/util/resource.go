@@ -69,6 +69,13 @@ func AddPrefixToNames(rs []model.Resource, prefix string) {
 	}
 }
 
+func AddPrefixToRemovedResourceNames(removedResources []string, prefix string) []string {
+	for idx, r := range removedResources {
+		removedResources[idx] = fmt.Sprintf("%s.%s", prefix, r)
+	}
+	return removedResources
+}
+
 func AddSuffixToNames(rs []model.Resource, suffix string) {
 	for _, r := range rs {
 		newName := fmt.Sprintf("%s.%s", r.GetMeta().GetName(), suffix)
