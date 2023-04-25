@@ -169,6 +169,10 @@ func buildRuntime(appCtx context.Context, cfg kuma_cp.Config) (core_runtime.Runt
 		return nil, err
 	}
 
+	if err := initializeAPIServerAuthorizator(builder); err != nil {
+		return nil, err
+	}
+
 	initializeTokenIssuers(builder)
 
 	if err := initializeMeshCache(builder); err != nil {
@@ -355,6 +359,22 @@ func initializeAPIServerAuthenticator(builder *core_runtime.Builder) error {
 		return errors.Wrapf(err, "could not initiate authenticator %s", authnType)
 	}
 	builder.WithAPIServerAuthenticator(authenticator)
+	return nil
+}
+
+func initializeAPIServerAuthorizator(builder *core_runtime.Builder) error {
+	authzType := builder.Config().ApiServer.Authz.Type
+	if authzType != ""{
+		plugin, ok := core_plugins.Plugins().AuthzAPIServer()[core_plugins.PluginName(authzType)]
+		if !ok {
+			return errors.Errorf("there is not implementation of authz named %s", authzType)
+		}
+		authz, err := plugin.NewAuthorizator(builder)
+		if err != nil {
+			return errors.Wrapf(err, "could not initiate authenticator %s", authzType)
+		}
+		builder.WithAPIServerAuthorizator(authz)
+	}
 	return nil
 }
 

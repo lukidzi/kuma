@@ -26,6 +26,8 @@ type ApiServerConfig struct {
 	Auth ApiServerAuth `json:"auth"`
 	// Authentication configuration for API Server
 	Authn ApiServerAuthn `json:"authn"`
+	// Authorization configuration for API Server
+	Authz ApiServerAuthz `json:"authz"`
 	// BasePath the path to serve the API from
 	BasePath string `json:"basePath" envconfig:"kuma_api_server_base_path"`
 	// RootUrl can be used if you use a reverse proxy
@@ -142,6 +144,11 @@ type ApiServerAuthn struct {
 	LocalhostIsAdmin bool `json:"localhostIsAdmin" envconfig:"kuma_api_server_authn_localhost_is_admin"`
 	// Configuration for tokens authentication
 	Tokens ApiServerAuthnTokens `json:"tokens"`
+}
+
+// Api Server Authentication configuration
+type ApiServerAuthz struct {
+	Type string `json:"type" envconfig:"kuma_api_server_authz_type"`
 }
 
 func (a ApiServerAuthn) Validate() error {

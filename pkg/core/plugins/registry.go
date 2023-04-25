@@ -16,6 +16,7 @@ const (
 	runtimePlugin       pluginType = "runtime"
 	caPlugin            pluginType = "ca"
 	authnAPIServer      pluginType = "authn-api-server"
+	authzAPIServer      pluginType = "authz-api-server"
 	policyPlugin        pluginType = "policy"
 )
 
@@ -39,6 +40,7 @@ type Registry interface {
 	RuntimePlugins() map[PluginName]RuntimePlugin
 	CaPlugins() map[PluginName]CaPlugin
 	AuthnAPIServer() map[PluginName]AuthnAPIServerPlugin
+	AuthzAPIServer() map[PluginName]AuthzAPIServerPlugin
 	PolicyPlugins() map[PluginName]PolicyPlugin
 }
 
@@ -60,6 +62,7 @@ func NewRegistry() MutableRegistry {
 		runtime:        make(map[PluginName]RuntimePlugin),
 		ca:             make(map[PluginName]CaPlugin),
 		authnAPIServer: make(map[PluginName]AuthnAPIServerPlugin),
+		authzAPIServer: make(map[PluginName]AuthzAPIServerPlugin),
 		policy:         make(map[PluginName]PolicyPlugin),
 	}
 }
@@ -74,6 +77,7 @@ type registry struct {
 	runtime        map[PluginName]RuntimePlugin
 	ca             map[PluginName]CaPlugin
 	authnAPIServer map[PluginName]AuthnAPIServerPlugin
+	authzAPIServer map[PluginName]AuthzAPIServerPlugin
 	policy         map[PluginName]PolicyPlugin
 }
 
@@ -136,6 +140,10 @@ func (r *registry) AuthnAPIServer() map[PluginName]AuthnAPIServerPlugin {
 	return r.authnAPIServer
 }
 
+func (r *registry) AuthzAPIServer() map[PluginName]AuthzAPIServerPlugin {
+	return r.authzAPIServer
+}
+
 func (r *registry) Register(name PluginName, plugin Plugin) error {
 	if bp, ok := plugin.(BootstrapPlugin); ok {
 		if old, exists := r.bootstrap[name]; exists {
@@ -178,6 +186,12 @@ func (r *registry) Register(name PluginName, plugin Plugin) error {
 			return pluginAlreadyRegisteredError(authnAPIServer, name, old, authn)
 		}
 		r.authnAPIServer[name] = authn
+	}
+	if authz, ok := plugin.(AuthzAPIServerPlugin); ok {
+		if old, exists := r.authzAPIServer[name]; exists {
+			return pluginAlreadyRegisteredError(authzAPIServer, name, old, authz)
+		}
+		r.authzAPIServer[name] = authz
 	}
 	if policy, ok := plugin.(PolicyPlugin); ok {
 		if old, exists := r.policy[name]; exists {

@@ -9,6 +9,7 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/kumahq/kuma/pkg/api-server/authn"
+	"github.com/kumahq/kuma/pkg/api-server/authz"
 	api_server "github.com/kumahq/kuma/pkg/api-server/customization"
 	kuma_cp "github.com/kumahq/kuma/pkg/config/app/kuma-cp"
 	"github.com/kumahq/kuma/pkg/core"
@@ -52,6 +53,7 @@ type BuilderContext interface {
 	ResourceValidators() ResourceValidators
 	KDSContext() *kds_context.Context
 	APIServerAuthenticator() authn.Authenticator
+	APIServerAuthorizator() authz.Authorizator
 	Access() Access
 	TokenIssuers() builtin.TokenIssuers
 	MeshCache() *mesh.Cache
@@ -85,6 +87,7 @@ type Builder struct {
 	kdsctx         *kds_context.Context
 	rv             ResourceValidators
 	au             authn.Authenticator
+	az             authz.Authorizator
 	acc            Access
 	appCtx         context.Context
 	extraReportsFn ExtraReportsFn
@@ -232,6 +235,11 @@ func (b *Builder) WithAPIServerAuthenticator(au authn.Authenticator) *Builder {
 	return b
 }
 
+func (b *Builder) WithAPIServerAuthorizator(az authz.Authorizator) *Builder {
+	b.az = az
+	return b
+}
+
 func (b *Builder) WithAccess(acc Access) *Builder {
 	b.acc = acc
 	return b
@@ -348,6 +356,7 @@ func (b *Builder) Build() (Runtime, error) {
 			kdsctx:         b.kdsctx,
 			rv:             b.rv,
 			au:             b.au,
+			az: 			b.az,
 			acc:            b.acc,
 			appCtx:         b.appCtx,
 			extraReportsFn: b.extraReportsFn,
@@ -441,6 +450,10 @@ func (b *Builder) ResourceValidators() ResourceValidators {
 
 func (b *Builder) APIServerAuthenticator() authn.Authenticator {
 	return b.au
+}
+
+func (b *Builder) APIServerAuthorizator() authz.Authorizator {
+	return b.az
 }
 
 func (b *Builder) Access() Access {

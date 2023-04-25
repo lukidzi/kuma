@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/kumahq/kuma/pkg/api-server/authn"
+	"github.com/kumahq/kuma/pkg/api-server/authz"
 	api_server "github.com/kumahq/kuma/pkg/api-server/customization"
 	kuma_cp "github.com/kumahq/kuma/pkg/config/app/kuma-cp"
 	"github.com/kumahq/kuma/pkg/core/ca"
@@ -70,6 +71,7 @@ type RuntimeContext interface {
 	DpServer() *dp_server.DpServer
 	KDSContext() *kds_context.Context
 	APIServerAuthenticator() authn.Authenticator
+	APIServerAuthorizator() authz.Authorizator
 	ResourceValidators() ResourceValidators
 	Access() Access
 	// AppContext returns a context.Context which tracks the lifetime of the apps, it gets cancelled when the app is starting to shutdown.
@@ -157,6 +159,7 @@ type runtimeContext struct {
 	kdsctx         *kds_context.Context
 	rv             ResourceValidators
 	au             authn.Authenticator
+	az             authz.Authorizator
 	acc            Access
 	appCtx         context.Context
 	extraReportsFn ExtraReportsFn
@@ -251,6 +254,10 @@ func (rc *runtimeContext) ResourceValidators() ResourceValidators {
 
 func (rc *runtimeContext) APIServerAuthenticator() authn.Authenticator {
 	return rc.au
+}
+
+func (rc *runtimeContext) APIServerAuthorizator() authz.Authorizator {
+	return rc.az
 }
 
 func (rc *runtimeContext) Access() Access {

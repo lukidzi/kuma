@@ -4,6 +4,7 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/kumahq/kuma/pkg/api-server/authn"
+	"github.com/kumahq/kuma/pkg/api-server/authz"
 	core_ca "github.com/kumahq/kuma/pkg/core/ca"
 	core_mesh "github.com/kumahq/kuma/pkg/core/resources/apis/mesh"
 	core_store "github.com/kumahq/kuma/pkg/core/resources/store"
@@ -84,6 +85,12 @@ type CaPlugin interface {
 type AuthnAPIServerPlugin interface {
 	Plugin
 	NewAuthenticator(PluginContext) (authn.Authenticator, error)
+}
+
+// AuthnAPIServerPlugin is responsible for providing authenticator for API Server.
+type AuthzAPIServerPlugin interface {
+	Plugin
+	NewAuthorizator(PluginContext) (authz.Authorizator, error)
 }
 
 // PolicyPlugin a plugin to add a Policy to Kuma

@@ -22,6 +22,7 @@ import (
 	"github.com/slok/go-http-metrics/middleware"
 
 	"github.com/kumahq/kuma/pkg/api-server/authn"
+	"github.com/kumahq/kuma/pkg/api-server/authz"
 	"github.com/kumahq/kuma/pkg/api-server/customization"
 	api_server "github.com/kumahq/kuma/pkg/config/api-server"
 	kuma_cp "github.com/kumahq/kuma/pkg/config/app/kuma-cp"
@@ -91,6 +92,7 @@ func NewApiServer(
 	metrics metrics.Metrics,
 	getInstanceId func() string, getClusterId func() string,
 	authenticator authn.Authenticator,
+	authorizator authz.Authorizator,
 	access runtime.Access,
 	envoyAdminClient admin.EnvoyAdminClient,
 	tokenIssuers builtin.TokenIssuers,
@@ -109,6 +111,7 @@ func NewApiServer(
 		container.Filter(authn.LocalhostAuthenticator)
 	}
 	container.Filter(authenticator)
+	container.Filter(authorizator)
 
 	cors := restful.CrossOriginResourceSharing{
 		ExposeHeaders:  []string{restful.HEADER_AccessControlAllowOrigin},
@@ -447,6 +450,7 @@ func SetupServer(rt runtime.Runtime) error {
 		rt.GetInstanceId,
 		rt.GetClusterId,
 		rt.APIServerAuthenticator(),
+		rt.APIServerAuthorizator(),
 		rt.Access(),
 		rt.EnvoyAdminClient(),
 		rt.TokenIssuers(),
