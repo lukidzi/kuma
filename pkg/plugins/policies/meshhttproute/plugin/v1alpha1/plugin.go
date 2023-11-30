@@ -4,6 +4,7 @@ import (
 	"github.com/pkg/errors"
 
 	common_api "github.com/kumahq/kuma/api/common/v1alpha1"
+	"github.com/kumahq/kuma/pkg/core"
 	core_plugins "github.com/kumahq/kuma/pkg/core/plugins"
 	core_mesh "github.com/kumahq/kuma/pkg/core/resources/apis/mesh"
 	core_model "github.com/kumahq/kuma/pkg/core/resources/model"
@@ -51,10 +52,6 @@ func (p plugin) Apply(rs *core_xds.ResourceSet, ctx xds_context.Context, proxy *
 	// `ToRouteRule` type, where rules have been appended together.
 	policies := proxy.Policies.Dynamic[api.MeshHTTPRouteType]
 
-	if len(policies.ToRules.Rules) == 0 {
-		return nil
-	}
-
 	var toRules []ToRouteRule
 	for _, policy := range policies.ToRules.Rules {
 		toRules = append(toRules, ToRouteRule{
@@ -64,6 +61,7 @@ func (p plugin) Apply(rs *core_xds.ResourceSet, ctx xds_context.Context, proxy *
 		})
 	}
 
+	core.Log.Info("TEST MESH http ROUTE", "proxy", proxy, "ExternalServicesEndpointMap", ctx.Mesh.ExternalServicesEndpointMap, "EndpointMap", ctx.Mesh.EndpointMap)
 	if err := ApplyToOutbounds(proxy, rs, ctx, toRules); err != nil {
 		return err
 	}
@@ -95,6 +93,13 @@ func ApplyToOutbounds(
 		return errors.Wrap(err, "couldn't generate cluster resources")
 	}
 	rs.AddSet(clusters)
+
+	// outbound_proxy_generator creates empty eds for ExternalService
+	// in case we create a cluster for an ExternalService in meshhttproute
+	// snapshot won't be consistant because ExternalService cluster
+	// has STRICT_DNS and we are not generating EDS, so we need to remove it
+	// to keep snapshot consistant
+	meshroute.CleanupEDS(proxy, services, rs)
 
 	endpoints, err := meshroute.GenerateEndpoints(proxy, ctx, services)
 	if err != nil {

@@ -5,6 +5,7 @@ import (
 
 	"github.com/pkg/errors"
 
+	envoy_resource "github.com/envoyproxy/go-control-plane/pkg/resource/v3"
 	"github.com/kumahq/kuma/pkg/core/user"
 	core_xds "github.com/kumahq/kuma/pkg/core/xds"
 	xds_context "github.com/kumahq/kuma/pkg/xds/context"
@@ -56,6 +57,26 @@ func GenerateEndpoints(
 					Resource: loadAssignment,
 				})
 			}
+		}
+	}
+
+	return resources, nil
+}
+
+func CleanupEDS(
+	proxy *core_xds.Proxy,
+	services envoy_common.Services,
+	rs *core_xds.ResourceSet,
+) (*core_xds.ResourceSet, error) {
+	resources := core_xds.NewResourceSet()
+
+	for _, serviceName := range services.Sorted() {
+		// We are not allowed to add endpoints with DNS names through EDS.
+		service := services[serviceName]
+
+		endpoints, found := proxy.Routing.ExternalServiceOutboundTargets[serviceName]
+		if service.HasExternalService() && (!found || (found && len(endpoints) == 0)){
+			rs.Remove(envoy_resource.EndpointType, serviceName)
 		}
 	}
 

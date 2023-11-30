@@ -3,6 +3,7 @@ package v1alpha1
 import (
 	"github.com/pkg/errors"
 
+	"github.com/kumahq/kuma/pkg/core"
 	core_plugins "github.com/kumahq/kuma/pkg/core/plugins"
 	core_mesh "github.com/kumahq/kuma/pkg/core/resources/apis/mesh"
 	core_xds "github.com/kumahq/kuma/pkg/core/xds"
@@ -34,9 +35,6 @@ func (p plugin) Apply(
 	proxy *core_xds.Proxy,
 ) error {
 	tcpRules := proxy.Policies.Dynamic[api.MeshTCPRouteType].ToRules.Rules
-	if len(tcpRules) == 0 {
-		return nil
-	}
 
 	tlsReady := map[string]bool{}
 	for serviceName, info := range ctx.Mesh.ServicesInformation {
@@ -44,7 +42,7 @@ func (p plugin) Apply(
 	}
 
 	servicesAccumulator := envoy_common.NewServicesAccumulator(tlsReady)
-
+	core.Log.Info("TEST MESH TCP ROUTE", "proxy", proxy, "ExternalServicesEndpointMap", ctx.Mesh.ExternalServicesEndpointMap, "EndpointMap", ctx.Mesh.EndpointMap)
 	listeners, err := generateListeners(proxy, tcpRules, servicesAccumulator, ctx.Mesh.ServicesInformation)
 	if err != nil {
 		return errors.Wrap(err, "couldn't generate listener resources")
@@ -58,6 +56,8 @@ func (p plugin) Apply(
 		return errors.Wrap(err, "couldn't generate cluster resources")
 	}
 	rs.AddSet(clusters)
+
+	meshroute.CleanupEDS(proxy, services, rs)
 
 	endpoints, err := meshroute.GenerateEndpoints(proxy, ctx, services)
 	if err != nil {
