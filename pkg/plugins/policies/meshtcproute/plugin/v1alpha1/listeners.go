@@ -5,10 +5,12 @@ import (
 
 	common_api "github.com/kumahq/kuma/api/common/v1alpha1"
 	mesh_proto "github.com/kumahq/kuma/api/mesh/v1alpha1"
+	"github.com/kumahq/kuma/pkg/core"
 	core_xds "github.com/kumahq/kuma/pkg/core/xds"
 	"github.com/kumahq/kuma/pkg/plugins/policies/core/rules"
 	meshroute_xds "github.com/kumahq/kuma/pkg/plugins/policies/core/xds/meshroute"
 	meshhttproute_api "github.com/kumahq/kuma/pkg/plugins/policies/meshhttproute/api/v1alpha1"
+	"github.com/kumahq/kuma/pkg/util/pointer"
 	xds_context "github.com/kumahq/kuma/pkg/xds/context"
 	envoy_common "github.com/kumahq/kuma/pkg/xds/envoy"
 	envoy_listeners "github.com/kumahq/kuma/pkg/xds/envoy/listeners"
@@ -36,10 +38,16 @@ func generateListeners(
 		protocol := servicesInformation[serviceName]
 
 		backendRefs := getBackendRefs(toRulesTCP, toRulesHTTP, serviceName, protocol.Protocol)
-		if len(backendRefs) == 0 {
-			continue
+		core.Log.Info("backend ref", "backendRefs", backendRefs)
+		service := rules.MeshService(serviceName)
+		if !matchingHTTPRuleExist(toRulesHTTP, service, protocol.Protocol) && backendRefs == nil {
+			backendRefs = append(backendRefs, common_api.BackendRef{
+				TargetRef: common_api.TargetRef{
+					Kind: common_api.MeshService,
+					Name: serviceName,
+				},
+				Weight: pointer.To(uint(100))})
 		}
-
 		splits := meshroute_xds.MakeTCPSplit(proxy, clusterCache, servicesAccumulator, backendRefs, servicesInformation)
 		filterChain := buildFilterChain(proxy, serviceName, splits)
 
@@ -47,7 +55,6 @@ func generateListeners(
 		if err != nil {
 			return nil, errors.Wrap(err, "cannot build listener")
 		}
-
 		resources.Add(&core_xds.Resource{
 			Name:     listener.GetName(),
 			Origin:   generator.OriginOutbound,

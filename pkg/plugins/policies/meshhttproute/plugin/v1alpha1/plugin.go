@@ -4,7 +4,6 @@ import (
 	"github.com/pkg/errors"
 
 	common_api "github.com/kumahq/kuma/api/common/v1alpha1"
-	"github.com/kumahq/kuma/pkg/core"
 	core_plugins "github.com/kumahq/kuma/pkg/core/plugins"
 	core_mesh "github.com/kumahq/kuma/pkg/core/resources/apis/mesh"
 	core_model "github.com/kumahq/kuma/pkg/core/resources/model"
@@ -61,7 +60,6 @@ func (p plugin) Apply(rs *core_xds.ResourceSet, ctx xds_context.Context, proxy *
 		})
 	}
 
-	core.Log.Info("TEST MESH http ROUTE", "proxy", proxy, "ExternalServicesEndpointMap", ctx.Mesh.ExternalServicesEndpointMap, "EndpointMap", ctx.Mesh.EndpointMap)
 	if err := ApplyToOutbounds(proxy, rs, ctx, toRules); err != nil {
 		return err
 	}

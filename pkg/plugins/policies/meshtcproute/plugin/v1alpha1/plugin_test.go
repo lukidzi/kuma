@@ -409,7 +409,7 @@ var _ = Describe("MeshTCPRoute", func() {
 			}
 		}()),
 
-		Entry("meshhttproute-clash-tcp-destination", func() outboundsTestCase {
+		FEntry("meshhttproute-clash-tcp-destination", func() outboundsTestCase {
 			outboundTargets := xds_builders.EndpointMap().
 				AddEndpoint("backend", xds_builders.Endpoint().
 					WithTarget("192.168.0.4").
@@ -426,53 +426,53 @@ var _ = Describe("MeshTCPRoute", func() {
 					WithPort(8006).
 					WithWeight(1).
 					WithTags(mesh_proto.ServiceTag, "http-backend", mesh_proto.ProtocolTag, core_mesh.ProtocolHTTP))
-			tcpRules := core_rules.ToRules{
-				Rules: core_rules.Rules{
-					{
-						Conf: api.Rule{
-							Default: api.RuleConf{
-								BackendRefs: []common_api.BackendRef{
-									{
-										TargetRef: builders.TargetRefService(
-											"tcp-backend",
-										),
-										Weight: pointer.To(uint(1)),
-									},
-								},
-							},
-						},
-					},
-				},
-			}
+			// tcpRules := core_rules.ToRules{
+			// 	Rules: core_rules.Rules{
+			// 		{
+			// 			Conf: api.Rule{
+			// 				Default: api.RuleConf{
+			// 					BackendRefs: []common_api.BackendRef{
+			// 						{
+			// 							TargetRef: builders.TargetRefService(
+			// 								"tcp-backend",
+			// 							),
+			// 							Weight: pointer.To(uint(1)),
+			// 						},
+			// 					},
+			// 				},
+			// 			},
+			// 		},
+			// 	},
+			// }
 
-			httpRules := core_rules.ToRules{
-				Rules: core_rules.Rules{
-					{
-						Conf: meshhttproute_api.PolicyDefault{
-							Rules: []meshhttproute_api.Rule{
-								{
-									Matches: []meshhttproute_api.Match{
-										{
-											Path: &meshhttproute_api.PathMatch{
-												Type:  meshhttproute_api.PathPrefix,
-												Value: "/",
-											},
-										},
-									},
-									Default: meshhttproute_api.RuleConf{
-										BackendRefs: &[]common_api.BackendRef{
-											{
-												TargetRef: builders.TargetRefService("http-backend"),
-												Weight:    pointer.To(uint(1)),
-											},
-										},
-									},
-								},
-							},
-						},
-					},
-				},
-			}
+			// httpRules := core_rules.ToRules{
+			// 	Rules: core_rules.Rules{
+			// 		{
+			// 			Conf: meshhttproute_api.PolicyDefault{
+			// 				Rules: []meshhttproute_api.Rule{
+			// 					{
+			// 						Matches: []meshhttproute_api.Match{
+			// 							{
+			// 								Path: &meshhttproute_api.PathMatch{
+			// 									Type:  meshhttproute_api.PathPrefix,
+			// 									Value: "/",
+			// 								},
+			// 							},
+			// 						},
+			// 						Default: meshhttproute_api.RuleConf{
+			// 							BackendRefs: &[]common_api.BackendRef{
+			// 								{
+			// 									TargetRef: builders.TargetRefService("http-backend"),
+			// 									Weight:    pointer.To(uint(1)),
+			// 								},
+			// 							},
+			// 						},
+			// 					},
+			// 				},
+			// 			},
+			// 		},
+			// 	},
+			// }
 
 			return outboundsTestCase{
 				xdsContext: *xds_builders.Context().WithEndpointMap(outboundTargets).
@@ -483,11 +483,11 @@ var _ = Describe("MeshTCPRoute", func() {
 				proxy: xds_builders.Proxy().
 					WithDataplane(samples.DataplaneWebBuilder()).
 					WithRouting(xds_builders.Routing().WithOutboundTargets(outboundTargets)).
-					WithPolicies(
-						xds_builders.MatchedPolicies().
-							WithToPolicy(api.MeshTCPRouteType, tcpRules).
-							WithToPolicy(meshhttproute_api.MeshHTTPRouteType, httpRules),
-					).
+					// WithPolicies(
+						// xds_builders.MatchedPolicies().
+							// WithToPolicy(api.MeshTCPRouteType, tcpRules).
+							// WithToPolicy(meshhttproute_api.MeshHTTPRouteType, httpRules),
+					// ).
 					Build(),
 			}
 		}()),

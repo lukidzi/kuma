@@ -42,7 +42,6 @@ func (p plugin) Apply(
 	}
 
 	servicesAccumulator := envoy_common.NewServicesAccumulator(tlsReady)
-	core.Log.Info("TEST MESH TCP ROUTE", "proxy", proxy, "ExternalServicesEndpointMap", ctx.Mesh.ExternalServicesEndpointMap, "EndpointMap", ctx.Mesh.EndpointMap)
 	listeners, err := generateListeners(proxy, tcpRules, servicesAccumulator, ctx.Mesh.ServicesInformation)
 	if err != nil {
 		return errors.Wrap(err, "couldn't generate listener resources")
@@ -51,12 +50,17 @@ func (p plugin) Apply(
 
 	services := servicesAccumulator.Services()
 
+	core.Log.Info("TCP LOG TEST", "services", services)
 	clusters, err := meshroute.GenerateClusters(proxy, ctx.Mesh, services)
 	if err != nil {
 		return errors.Wrap(err, "couldn't generate cluster resources")
 	}
 	rs.AddSet(clusters)
-
+	// outbound_proxy_generator creates empty eds for ExternalService
+	// in case we create a cluster for an ExternalService in meshtcproute
+	// snapshot won't be consistant because ExternalService cluster
+	// has STRICT_DNS and we are not generating EDS, so we need to remove it
+	// to keep snapshot consistant
 	meshroute.CleanupEDS(proxy, services, rs)
 
 	endpoints, err := meshroute.GenerateEndpoints(proxy, ctx, services)
