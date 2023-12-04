@@ -46,7 +46,8 @@ func generateListeners(
 					Kind: common_api.MeshService,
 					Name: serviceName,
 				},
-				Weight: pointer.To(uint(100))})
+				Weight: pointer.To(uint(100)),
+			})
 		}
 		splits := meshroute_xds.MakeTCPSplit(proxy, clusterCache, servicesAccumulator, backendRefs, servicesInformation)
 		filterChain := buildFilterChain(proxy, serviceName, splits)

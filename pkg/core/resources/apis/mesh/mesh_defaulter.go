@@ -57,5 +57,10 @@ func (mesh *MeshResource) Default() error {
 			mesh.Spec.Metrics.Backends[idx].Conf = str
 		}
 	}
+
+	if mesh.Spec.GetPolicyEngine() == mesh_proto.Mesh_UNKNOWN {
+		mesh.Spec.PolicyEngine = mesh_proto.Mesh_TARGET_REF
+	}
+
 	return nil
 }

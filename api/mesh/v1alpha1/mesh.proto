@@ -83,6 +83,17 @@ message Mesh {
   // policies.
   repeated string skipCreatingInitialPolicies = 8;
 
+  enum PolicyEngine {
+    UNKNOWN = 0;
+    // A LEGACY mode creates old default policies.
+    LEGACY = 1;
+    // A TARGET_REF mode creates new default targetRef policies.
+    TARGET_REF = 2;
+  };
+
+  // policyEngine implies which policy engine should be used as a default 
+  PolicyEngine policyEngine = 9;
+
   message DataplaneProxyConstraints {
 
     // Rules defines a set of rules for data plane proxies to be member of the

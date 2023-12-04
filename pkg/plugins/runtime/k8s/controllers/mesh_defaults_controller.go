@@ -46,6 +46,7 @@ func (r *MeshDefaultsReconciler) Reconcile(ctx context.Context, req kube_ctrl.Re
 		mesh,
 		mesh.Spec.GetSkipCreatingInitialPolicies(),
 		r.Extensions,
+		mesh.Spec.GetPolicyEngine(),
 	); err != nil {
 		return kube_ctrl.Result{}, errors.Wrap(err, "could not create default mesh resources")
 	}

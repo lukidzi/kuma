@@ -3,9 +3,9 @@ package meshroute
 import (
 	"context"
 
+	envoy_resource "github.com/envoyproxy/go-control-plane/pkg/resource/v3"
 	"github.com/pkg/errors"
 
-	envoy_resource "github.com/envoyproxy/go-control-plane/pkg/resource/v3"
 	"github.com/kumahq/kuma/pkg/core/user"
 	core_xds "github.com/kumahq/kuma/pkg/core/xds"
 	xds_context "github.com/kumahq/kuma/pkg/xds/context"
@@ -75,7 +75,7 @@ func CleanupEDS(
 		service := services[serviceName]
 
 		endpoints, found := proxy.Routing.ExternalServiceOutboundTargets[serviceName]
-		if service.HasExternalService() && (!found || (found && len(endpoints) == 0)){
+		if service.HasExternalService() && (!found || (found && len(endpoints) == 0)) {
 			rs.Remove(envoy_resource.EndpointType, serviceName)
 		}
 	}

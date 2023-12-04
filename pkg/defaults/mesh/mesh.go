@@ -8,6 +8,7 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/exp/slices"
 
+	mesh_proto "github.com/kumahq/kuma/api/mesh/v1alpha1"
 	"github.com/kumahq/kuma/pkg/core"
 	"github.com/kumahq/kuma/pkg/core/resources/manager"
 	"github.com/kumahq/kuma/pkg/core/resources/model"
@@ -32,6 +33,7 @@ func EnsureDefaultMeshResources(
 	mesh model.Resource,
 	skippedPolicies []string,
 	extensions context.Context,
+	policyEngine mesh_proto.Mesh_PolicyEngine,
 ) error {
 	ensureMux.Lock()
 	defer ensureMux.Unlock()
@@ -54,6 +56,10 @@ func EnsureDefaultMeshResources(
 
 	if slices.Contains(skippedPolicies, "*") {
 		logger.Info("skipping all default policy creation")
+		return nil
+	}
+
+	if policyEngine == mesh_proto.Mesh_UNKNOWN || policyEngine == mesh_proto.Mesh_TARGET_REF {
 		return nil
 	}
 

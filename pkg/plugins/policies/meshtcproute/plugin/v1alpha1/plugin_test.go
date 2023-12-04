@@ -409,7 +409,7 @@ var _ = Describe("MeshTCPRoute", func() {
 			}
 		}()),
 
-		FEntry("meshhttproute-clash-tcp-destination", func() outboundsTestCase {
+		Entry("meshhttproute-clash-tcp-destination", func() outboundsTestCase {
 			outboundTargets := xds_builders.EndpointMap().
 				AddEndpoint("backend", xds_builders.Endpoint().
 					WithTarget("192.168.0.4").
@@ -484,9 +484,9 @@ var _ = Describe("MeshTCPRoute", func() {
 					WithDataplane(samples.DataplaneWebBuilder()).
 					WithRouting(xds_builders.Routing().WithOutboundTargets(outboundTargets)).
 					// WithPolicies(
-						// xds_builders.MatchedPolicies().
-							// WithToPolicy(api.MeshTCPRouteType, tcpRules).
-							// WithToPolicy(meshhttproute_api.MeshHTTPRouteType, httpRules),
+					// xds_builders.MatchedPolicies().
+					// WithToPolicy(api.MeshTCPRouteType, tcpRules).
+					// WithToPolicy(meshhttproute_api.MeshHTTPRouteType, httpRules),
 					// ).
 					Build(),
 			}
