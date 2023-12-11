@@ -36,11 +36,6 @@ func (p plugin) Apply(
 ) error {
 	tcpRules := proxy.Policies.Dynamic[api.MeshTCPRouteType].ToRules.Rules
 
-	tlsReady := map[string]bool{}
-	for serviceName, info := range ctx.Mesh.ServicesInformation {
-		tlsReady[serviceName] = info.TLSReadiness
-	}
-
 	tlsReady := ctx.Mesh.GetTLSReadiness()
 	servicesAccumulator := envoy_common.NewServicesAccumulator(tlsReady)
 
@@ -64,7 +59,6 @@ func (p plugin) Apply(
 	// has STRICT_DNS and we are not generating EDS, so we need to remove it
 	// to keep snapshot consistent
 	meshroute.CleanupEDS(proxy, services, rs)
-
 	endpoints, err := meshroute.GenerateEndpoints(proxy, ctx, services)
 	if err != nil {
 		return errors.Wrap(err, "couldn't generate endpoint resources")

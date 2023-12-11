@@ -629,82 +629,13 @@ Routes:
             key: Strict-Transport-Security
             value: max-age=31536000; includeSubDomains
         routes:
-        - match:
-            path: /echo
-          route:
-            clusterNotFoundResponseCode: INTERNAL_SERVER_ERROR
-            idleTimeout: 5s
-            retryPolicy:
-              numRetries: 5
-              perTryTimeout: 16s
-              retryBackOff:
-                baseInterval: 0.025s
-                maxInterval: 0.250s
-              retryOn: gateway-error,connect-failure,refused-stream
-            timeout: 15s
-            weightedClusters:
-              clusters:
-              - name: echo-service-bfae5b64a0fe8b74
-                requestHeadersToAdd:
-                - header:
-                    key: x-kuma-tags
-                    value: '&kuma.io/service=gateway-default&'
-                weight: 1
-        - match:
-            path: /ext
-          route:
-            clusterNotFoundResponseCode: INTERNAL_SERVER_ERROR
-            idleTimeout: 5s
-            retryPolicy:
-              numRetries: 5
-              perTryTimeout: 16s
-              retryBackOff:
-                baseInterval: 0.025s
-                maxInterval: 0.250s
-              retryOn: gateway-error,connect-failure,refused-stream
-            timeout: 15s
-            weightedClusters:
-              clusters:
-              - name: external-http2-httpbin-29c391043cf34cd7
-                weight: 1
-        - match:
-            prefix: /echo/
-          route:
-            clusterNotFoundResponseCode: INTERNAL_SERVER_ERROR
-            idleTimeout: 5s
-            retryPolicy:
-              numRetries: 5
-              perTryTimeout: 16s
-              retryBackOff:
-                baseInterval: 0.025s
-                maxInterval: 0.250s
-              retryOn: gateway-error,connect-failure,refused-stream
-            timeout: 15s
-            weightedClusters:
-              clusters:
-              - name: echo-service-bfae5b64a0fe8b74
-                requestHeadersToAdd:
-                - header:
-                    key: x-kuma-tags
-                    value: '&kuma.io/service=gateway-default&'
-                weight: 1
-        - match:
-            prefix: /ext/
-          route:
-            clusterNotFoundResponseCode: INTERNAL_SERVER_ERROR
-            idleTimeout: 5s
-            retryPolicy:
-              numRetries: 5
-              perTryTimeout: 16s
-              retryBackOff:
-                baseInterval: 0.025s
-                maxInterval: 0.250s
-              retryOn: gateway-error,connect-failure,refused-stream
-            timeout: 15s
-            weightedClusters:
-              clusters:
-              - name: external-http2-httpbin-29c391043cf34cd7
-                weight: 1
+        - directResponse:
+            body:
+              inlineString: |
+                This is a Kuma MeshGateway. No routes match this MeshGateway!
+            status: 404
+          match:
+            prefix: /
     edge-gateway:HTTP:8081:
       ignorePortInHostMatching: true
       name: edge-gateway:HTTP:8081
@@ -722,158 +653,13 @@ Routes:
             key: Strict-Transport-Security
             value: max-age=31536000; includeSubDomains
         routes:
-        - match:
-            path: /hostname-and-hostname-on-listener-match-echo
-          route:
-            clusterNotFoundResponseCode: INTERNAL_SERVER_ERROR
-            idleTimeout: 5s
-            retryPolicy:
-              numRetries: 5
-              perTryTimeout: 16s
-              retryBackOff:
-                baseInterval: 0.025s
-                maxInterval: 0.250s
-              retryOn: gateway-error,connect-failure,refused-stream
-            timeout: 15s
-            weightedClusters:
-              clusters:
-              - name: echo-service-0ec9724567ed6087
-                requestHeadersToAdd:
-                - header:
-                    key: x-kuma-tags
-                    value: '&kuma.io/service=gateway-default&'
-                weight: 1
-        - match:
-            path: /hostname-and-hostname-on-listener-match-ext
-          route:
-            clusterNotFoundResponseCode: INTERNAL_SERVER_ERROR
-            idleTimeout: 5s
-            retryPolicy:
-              numRetries: 5
-              perTryTimeout: 16s
-              retryBackOff:
-                baseInterval: 0.025s
-                maxInterval: 0.250s
-              retryOn: gateway-error,connect-failure,refused-stream
-            timeout: 15s
-            weightedClusters:
-              clusters:
-              - name: external-http2-httpbin-db75d53333554288
-                weight: 1
-        - match:
-            path: /echo
-          route:
-            clusterNotFoundResponseCode: INTERNAL_SERVER_ERROR
-            idleTimeout: 5s
-            retryPolicy:
-              numRetries: 5
-              perTryTimeout: 16s
-              retryBackOff:
-                baseInterval: 0.025s
-                maxInterval: 0.250s
-              retryOn: gateway-error,connect-failure,refused-stream
-            timeout: 15s
-            weightedClusters:
-              clusters:
-              - name: echo-service-0ec9724567ed6087
-                requestHeadersToAdd:
-                - header:
-                    key: x-kuma-tags
-                    value: '&kuma.io/service=gateway-default&'
-                weight: 1
-        - match:
-            path: /ext
-          route:
-            clusterNotFoundResponseCode: INTERNAL_SERVER_ERROR
-            idleTimeout: 5s
-            retryPolicy:
-              numRetries: 5
-              perTryTimeout: 16s
-              retryBackOff:
-                baseInterval: 0.025s
-                maxInterval: 0.250s
-              retryOn: gateway-error,connect-failure,refused-stream
-            timeout: 15s
-            weightedClusters:
-              clusters:
-              - name: external-http2-httpbin-db75d53333554288
-                weight: 1
-        - match:
-            prefix: /hostname-and-hostname-on-listener-match-echo/
-          route:
-            clusterNotFoundResponseCode: INTERNAL_SERVER_ERROR
-            idleTimeout: 5s
-            retryPolicy:
-              numRetries: 5
-              perTryTimeout: 16s
-              retryBackOff:
-                baseInterval: 0.025s
-                maxInterval: 0.250s
-              retryOn: gateway-error,connect-failure,refused-stream
-            timeout: 15s
-            weightedClusters:
-              clusters:
-              - name: echo-service-0ec9724567ed6087
-                requestHeadersToAdd:
-                - header:
-                    key: x-kuma-tags
-                    value: '&kuma.io/service=gateway-default&'
-                weight: 1
-        - match:
-            prefix: /hostname-and-hostname-on-listener-match-ext/
-          route:
-            clusterNotFoundResponseCode: INTERNAL_SERVER_ERROR
-            idleTimeout: 5s
-            retryPolicy:
-              numRetries: 5
-              perTryTimeout: 16s
-              retryBackOff:
-                baseInterval: 0.025s
-                maxInterval: 0.250s
-              retryOn: gateway-error,connect-failure,refused-stream
-            timeout: 15s
-            weightedClusters:
-              clusters:
-              - name: external-http2-httpbin-db75d53333554288
-                weight: 1
-        - match:
-            prefix: /echo/
-          route:
-            clusterNotFoundResponseCode: INTERNAL_SERVER_ERROR
-            idleTimeout: 5s
-            retryPolicy:
-              numRetries: 5
-              perTryTimeout: 16s
-              retryBackOff:
-                baseInterval: 0.025s
-                maxInterval: 0.250s
-              retryOn: gateway-error,connect-failure,refused-stream
-            timeout: 15s
-            weightedClusters:
-              clusters:
-              - name: echo-service-0ec9724567ed6087
-                requestHeadersToAdd:
-                - header:
-                    key: x-kuma-tags
-                    value: '&kuma.io/service=gateway-default&'
-                weight: 1
-        - match:
-            prefix: /ext/
-          route:
-            clusterNotFoundResponseCode: INTERNAL_SERVER_ERROR
-            idleTimeout: 5s
-            retryPolicy:
-              numRetries: 5
-              perTryTimeout: 16s
-              retryBackOff:
-                baseInterval: 0.025s
-                maxInterval: 0.250s
-              retryOn: gateway-error,connect-failure,refused-stream
-            timeout: 15s
-            weightedClusters:
-              clusters:
-              - name: external-http2-httpbin-db75d53333554288
-                weight: 1
+        - directResponse:
+            body:
+              inlineString: |
+                This is a Kuma MeshGateway. No routes match this MeshGateway!
+            status: 404
+          match:
+            prefix: /
     edge-gateway:HTTP:8082:
       ignorePortInHostMatching: true
       name: edge-gateway:HTTP:8082
@@ -891,82 +677,13 @@ Routes:
             key: Strict-Transport-Security
             value: max-age=31536000; includeSubDomains
         routes:
-        - match:
-            path: /hostname-echo
-          route:
-            clusterNotFoundResponseCode: INTERNAL_SERVER_ERROR
-            idleTimeout: 5s
-            retryPolicy:
-              numRetries: 5
-              perTryTimeout: 16s
-              retryBackOff:
-                baseInterval: 0.025s
-                maxInterval: 0.250s
-              retryOn: gateway-error,connect-failure,refused-stream
-            timeout: 15s
-            weightedClusters:
-              clusters:
-              - name: echo-service-8acee1c4ccf209c2
-                requestHeadersToAdd:
-                - header:
-                    key: x-kuma-tags
-                    value: '&kuma.io/service=gateway-default&'
-                weight: 1
-        - match:
-            path: /hostname-ext
-          route:
-            clusterNotFoundResponseCode: INTERNAL_SERVER_ERROR
-            idleTimeout: 5s
-            retryPolicy:
-              numRetries: 5
-              perTryTimeout: 16s
-              retryBackOff:
-                baseInterval: 0.025s
-                maxInterval: 0.250s
-              retryOn: gateway-error,connect-failure,refused-stream
-            timeout: 15s
-            weightedClusters:
-              clusters:
-              - name: external-http2-httpbin-9e3c7c6b9435d9a4
-                weight: 1
-        - match:
-            prefix: /hostname-echo/
-          route:
-            clusterNotFoundResponseCode: INTERNAL_SERVER_ERROR
-            idleTimeout: 5s
-            retryPolicy:
-              numRetries: 5
-              perTryTimeout: 16s
-              retryBackOff:
-                baseInterval: 0.025s
-                maxInterval: 0.250s
-              retryOn: gateway-error,connect-failure,refused-stream
-            timeout: 15s
-            weightedClusters:
-              clusters:
-              - name: echo-service-8acee1c4ccf209c2
-                requestHeadersToAdd:
-                - header:
-                    key: x-kuma-tags
-                    value: '&kuma.io/service=gateway-default&'
-                weight: 1
-        - match:
-            prefix: /hostname-ext/
-          route:
-            clusterNotFoundResponseCode: INTERNAL_SERVER_ERROR
-            idleTimeout: 5s
-            retryPolicy:
-              numRetries: 5
-              perTryTimeout: 16s
-              retryBackOff:
-                baseInterval: 0.025s
-                maxInterval: 0.250s
-              retryOn: gateway-error,connect-failure,refused-stream
-            timeout: 15s
-            weightedClusters:
-              clusters:
-              - name: external-http2-httpbin-9e3c7c6b9435d9a4
-                weight: 1
+        - directResponse:
+            body:
+              inlineString: |
+                This is a Kuma MeshGateway. No routes match this MeshGateway!
+            status: 404
+          match:
+            prefix: /
       - domains:
         - cross-mesh.mesh
         name: cross-mesh.mesh
@@ -977,82 +694,13 @@ Routes:
             key: Strict-Transport-Security
             value: max-age=31536000; includeSubDomains
         routes:
-        - match:
-            path: /hostname-echo
-          route:
-            clusterNotFoundResponseCode: INTERNAL_SERVER_ERROR
-            idleTimeout: 5s
-            retryPolicy:
-              numRetries: 5
-              perTryTimeout: 16s
-              retryBackOff:
-                baseInterval: 0.025s
-                maxInterval: 0.250s
-              retryOn: gateway-error,connect-failure,refused-stream
-            timeout: 15s
-            weightedClusters:
-              clusters:
-              - name: echo-service-8acee1c4ccf209c2
-                requestHeadersToAdd:
-                - header:
-                    key: x-kuma-tags
-                    value: '&kuma.io/service=gateway-default&'
-                weight: 1
-        - match:
-            path: /hostname-ext
-          route:
-            clusterNotFoundResponseCode: INTERNAL_SERVER_ERROR
-            idleTimeout: 5s
-            retryPolicy:
-              numRetries: 5
-              perTryTimeout: 16s
-              retryBackOff:
-                baseInterval: 0.025s
-                maxInterval: 0.250s
-              retryOn: gateway-error,connect-failure,refused-stream
-            timeout: 15s
-            weightedClusters:
-              clusters:
-              - name: external-http2-httpbin-9e3c7c6b9435d9a4
-                weight: 1
-        - match:
-            prefix: /hostname-echo/
-          route:
-            clusterNotFoundResponseCode: INTERNAL_SERVER_ERROR
-            idleTimeout: 5s
-            retryPolicy:
-              numRetries: 5
-              perTryTimeout: 16s
-              retryBackOff:
-                baseInterval: 0.025s
-                maxInterval: 0.250s
-              retryOn: gateway-error,connect-failure,refused-stream
-            timeout: 15s
-            weightedClusters:
-              clusters:
-              - name: echo-service-8acee1c4ccf209c2
-                requestHeadersToAdd:
-                - header:
-                    key: x-kuma-tags
-                    value: '&kuma.io/service=gateway-default&'
-                weight: 1
-        - match:
-            prefix: /hostname-ext/
-          route:
-            clusterNotFoundResponseCode: INTERNAL_SERVER_ERROR
-            idleTimeout: 5s
-            retryPolicy:
-              numRetries: 5
-              perTryTimeout: 16s
-              retryBackOff:
-                baseInterval: 0.025s
-                maxInterval: 0.250s
-              retryOn: gateway-error,connect-failure,refused-stream
-            timeout: 15s
-            weightedClusters:
-              clusters:
-              - name: external-http2-httpbin-9e3c7c6b9435d9a4
-                weight: 1
+        - directResponse:
+            body:
+              inlineString: |
+                This is a Kuma MeshGateway. No routes match this MeshGateway!
+            status: 404
+          match:
+            prefix: /
       - domains:
         - '*'
         name: '*'
@@ -1063,82 +711,13 @@ Routes:
             key: Strict-Transport-Security
             value: max-age=31536000; includeSubDomains
         routes:
-        - match:
-            path: /echo
-          route:
-            clusterNotFoundResponseCode: INTERNAL_SERVER_ERROR
-            idleTimeout: 5s
-            retryPolicy:
-              numRetries: 5
-              perTryTimeout: 16s
-              retryBackOff:
-                baseInterval: 0.025s
-                maxInterval: 0.250s
-              retryOn: gateway-error,connect-failure,refused-stream
-            timeout: 15s
-            weightedClusters:
-              clusters:
-              - name: echo-service-8acee1c4ccf209c2
-                requestHeadersToAdd:
-                - header:
-                    key: x-kuma-tags
-                    value: '&kuma.io/service=gateway-default&'
-                weight: 1
-        - match:
-            path: /ext
-          route:
-            clusterNotFoundResponseCode: INTERNAL_SERVER_ERROR
-            idleTimeout: 5s
-            retryPolicy:
-              numRetries: 5
-              perTryTimeout: 16s
-              retryBackOff:
-                baseInterval: 0.025s
-                maxInterval: 0.250s
-              retryOn: gateway-error,connect-failure,refused-stream
-            timeout: 15s
-            weightedClusters:
-              clusters:
-              - name: external-http2-httpbin-9e3c7c6b9435d9a4
-                weight: 1
-        - match:
-            prefix: /echo/
-          route:
-            clusterNotFoundResponseCode: INTERNAL_SERVER_ERROR
-            idleTimeout: 5s
-            retryPolicy:
-              numRetries: 5
-              perTryTimeout: 16s
-              retryBackOff:
-                baseInterval: 0.025s
-                maxInterval: 0.250s
-              retryOn: gateway-error,connect-failure,refused-stream
-            timeout: 15s
-            weightedClusters:
-              clusters:
-              - name: echo-service-8acee1c4ccf209c2
-                requestHeadersToAdd:
-                - header:
-                    key: x-kuma-tags
-                    value: '&kuma.io/service=gateway-default&'
-                weight: 1
-        - match:
-            prefix: /ext/
-          route:
-            clusterNotFoundResponseCode: INTERNAL_SERVER_ERROR
-            idleTimeout: 5s
-            retryPolicy:
-              numRetries: 5
-              perTryTimeout: 16s
-              retryBackOff:
-                baseInterval: 0.025s
-                maxInterval: 0.250s
-              retryOn: gateway-error,connect-failure,refused-stream
-            timeout: 15s
-            weightedClusters:
-              clusters:
-              - name: external-http2-httpbin-9e3c7c6b9435d9a4
-                weight: 1
+        - directResponse:
+            body:
+              inlineString: |
+                This is a Kuma MeshGateway. No routes match this MeshGateway!
+            status: 404
+          match:
+            prefix: /
 Runtimes:
   Resources:
     gateway.listeners:

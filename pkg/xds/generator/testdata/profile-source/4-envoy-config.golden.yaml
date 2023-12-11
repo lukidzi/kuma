@@ -516,3 +516,8 @@ resources:
     validationContext:
       trustedCa:
         inlineBytes: Q0E=
+- name: gateway.listeners
+  resource:
+    '@type': type.googleapis.com/envoy.service.runtime.v3.Runtime
+    layer: {}
+    name: gateway.listeners

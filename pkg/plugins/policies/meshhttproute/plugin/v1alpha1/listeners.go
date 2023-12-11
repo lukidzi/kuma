@@ -34,6 +34,10 @@ func generateListeners(
 	// If we have same split in many HTTP matches we can use the same cluster with different weight
 	clusterCache := map[common_api.TargetRefHash]string{}
 
+	if proxy.Dataplane == nil {
+		return resources, nil
+	}
+
 	for _, outbound := range proxy.Dataplane.Spec.GetNetworking().GetOutbound() {
 		serviceName := outbound.GetService()
 		oface := proxy.Dataplane.Spec.Networking.ToOutboundInterface(outbound)
@@ -52,7 +56,7 @@ func generateListeners(
 		protocol := meshCtx.GetServiceProtocol(serviceName)
 		var routes []xds.OutboundRoute
 		for _, route := range prepareRoutes(rules, serviceName, protocol) {
-			split := meshroute_xds.MakeHTTPSplit(proxy, clusterCache, servicesAcc, route.BackendRefs, meshCtx)
+			split := meshroute_xds.MakeHTTPSplit(clusterCache, servicesAcc, route.BackendRefs, meshCtx)
 			if split == nil {
 				continue
 			}
@@ -60,7 +64,7 @@ func generateListeners(
 				if filter.Type == api.RequestMirrorType {
 					// we need to create a split for the mirror backend
 					_ = meshroute_xds.MakeHTTPSplit(
-						proxy, clusterCache, servicesAcc,
+						clusterCache, servicesAcc,
 						[]common_api.BackendRef{{
 							TargetRef: filter.RequestMirror.BackendRef,
 							Weight:    pointer.To[uint](1), // any non-zero value

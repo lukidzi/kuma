@@ -58,9 +58,5 @@ func (mesh *MeshResource) Default() error {
 		}
 	}
 
-	if mesh.Spec.GetPolicyEngine() == mesh_proto.Mesh_UNKNOWN {
-		mesh.Spec.PolicyEngine = mesh_proto.Mesh_TARGET_REF
-	}
-
 	return nil
 }

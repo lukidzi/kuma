@@ -90,7 +90,6 @@ func (m *meshManager) Create(ctx context.Context, resource core_model.Resource, 
 		mesh,
 		mesh.Spec.GetSkipCreatingInitialPolicies(),
 		m.extensions,
-		mesh.Spec.GetPolicyEngine(),
 	); err != nil {
 		return err
 	}

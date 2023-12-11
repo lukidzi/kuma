@@ -45,23 +45,6 @@
                     },
                     "type": "array",
                     "description": "List of policies to skip creating by default when the mesh is created. e.g. TrafficPermission, MeshRetry, etc. An '*' can be used to skip all policies."
-                },
-                "policyEngine": {
-                    "enum": [
-                        "LEGACY",
-                        0,
-                        "TARGET_REF",
-                        1
-                    ],
-                    "oneOf": [
-                        {
-                            "type": "string"
-                        },
-                        {
-                            "type": "integer"
-                        }
-                    ],
-                    "title": "Policy Engine"
                 }
             },
             "additionalProperties": true,

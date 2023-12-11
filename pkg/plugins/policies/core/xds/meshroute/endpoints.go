@@ -67,9 +67,7 @@ func CleanupEDS(
 	proxy *core_xds.Proxy,
 	services envoy_common.Services,
 	rs *core_xds.ResourceSet,
-) (*core_xds.ResourceSet, error) {
-	resources := core_xds.NewResourceSet()
-
+) {
 	for _, serviceName := range services.Sorted() {
 		// We are not allowed to add endpoints with DNS names through EDS.
 		service := services[serviceName]
@@ -79,6 +77,4 @@ func CleanupEDS(
 			rs.Remove(envoy_resource.EndpointType, serviceName)
 		}
 	}
-
-	return resources, nil
 }

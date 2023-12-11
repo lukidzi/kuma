@@ -2,7 +2,6 @@ resources:
 - name: es-with-tls
   resource:
     '@type': type.googleapis.com/envoy.config.cluster.v3.Cluster
-    connectTimeout: 5s
     dnsLookupFamily: V4_ONLY
     loadAssignment:
       clusterName: es-with-tls
@@ -133,8 +132,6 @@ resources:
     typedExtensionProtocolOptions:
       envoy.extensions.upstreams.http.v3.HttpProtocolOptions:
         '@type': type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions
-        commonHttpProtocolOptions:
-          idleTimeout: 0s
         explicitHttpConfig:
           httpProtocolOptions: {}
 - name: inbound:passthrough:ipv4
@@ -452,12 +449,11 @@ resources:
       - name: envoy.filters.network.http_connection_manager
         typedConfig:
           '@type': type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
-          commonHttpProtocolOptions:
-            idleTimeout: 0s
           httpFilters:
           - name: envoy.filters.http.router
             typedConfig:
               '@type': type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
+          normalizePath: true
           routeConfig:
             name: outbound:es-with-tls
             requestHeadersToAdd:
@@ -472,12 +468,12 @@ resources:
               routes:
               - match:
                   prefix: /
+                name: 9Zuf5Tg79OuZcQITwBbQykxAk2u4fRKrwYn3//AL4Yo=
                 route:
                   autoHostRewrite: true
                   cluster: es-with-tls
                   timeout: 0s
           statPrefix: es-with-tls
-          streamIdleTimeout: 0s
     metadata:
       filterMetadata:
         io.kuma.tags:
@@ -517,3 +513,8 @@ resources:
     validationContext:
       trustedCa:
         inlineBytes: Q0E=
+- name: gateway.listeners
+  resource:
+    '@type': type.googleapis.com/envoy.service.runtime.v3.Runtime
+    layer: {}
+    name: gateway.listeners

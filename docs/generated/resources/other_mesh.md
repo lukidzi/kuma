@@ -216,14 +216,6 @@
     List of policies to skip creating by default when the mesh is created.
     e.g. TrafficPermission, MeshRetry, etc. An '*' can be used to skip all
     policies.
-
-- `policyEngine` (optional, enum)
-
-    policyEngine implies which policy engine should be used as a default
-
-    - `LEGACY`
-
-    - `TARGET_REF`
 ## CertificateAuthorityBackend
 
 - `name` (required)

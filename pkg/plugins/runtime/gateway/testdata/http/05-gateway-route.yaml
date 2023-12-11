@@ -74,18 +74,13 @@ Routes:
         - echo.example.com
         name: echo.example.com
         routes:
-        - match:
-            path: /
-          redirect:
-            hostRedirect: example.com
-            portRedirect: 8080
-            regexRewrite:
-              pattern:
-                regex: .*
-              substitution: /redirected
-            responseCode: FOUND
-            schemeRedirect: https
-            stripQuery: true
+        - directResponse:
+            body:
+              inlineString: |
+                This is a Kuma MeshGateway. No routes match this MeshGateway!
+            status: 404
+          match:
+            prefix: /
 Runtimes:
   Resources:
     gateway.listeners:
