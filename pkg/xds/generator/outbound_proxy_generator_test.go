@@ -193,7 +193,7 @@ var _ = Describe("OutboundProxyGenerator", func() {
 					},
 				},
 			},
-			ServicesInformation: map[string]xds_context.ServiceInformation{
+			ServicesInformation: map[string]*xds_context.ServiceInformation{
 				"api-http": {
 					Protocol: core_mesh.ProtocolHTTP,
 				},
@@ -561,10 +561,10 @@ var _ = Describe("OutboundProxyGenerator", func() {
 			}
 
 			// when
-			metrics, err := core_metrics.NewMetrics("Standalone")
+			metrics, err := core_metrics.NewMetrics("Zone")
 			Expect(err).ToNot(HaveOccurred())
 			given.ctx.Mesh.EndpointMap = outboundTargets
-			given.ctx.Mesh.ServicesInformation = map[string]xds_context.ServiceInformation{
+			given.ctx.Mesh.ServicesInformation = map[string]*xds_context.ServiceInformation{
 				"api-http": {
 					TLSReadiness: true,
 					Protocol:     core_mesh.ProtocolHTTP,
@@ -862,7 +862,7 @@ var _ = Describe("OutboundProxyGenerator", func() {
 
 		// when
 		plainCtx.ControlPlane.CLACache = &test_xds.DummyCLACache{OutboundTargets: outboundTargets}
-		plainCtx.Mesh.ServicesInformation = map[string]xds_context.ServiceInformation{
+		plainCtx.Mesh.ServicesInformation = map[string]*xds_context.ServiceInformation{
 			"backend.kuma-system": {
 				Protocol: core_mesh.ProtocolUnknown,
 			},

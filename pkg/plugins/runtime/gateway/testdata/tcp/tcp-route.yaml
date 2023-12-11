@@ -97,6 +97,7 @@ Clusters:
                 resourceApiVersion: V3
           sni: echo-service{mesh=default}
       type: EDS
+<<<<<<< HEAD
       typedExtensionProtocolOptions:
         envoy.extensions.upstreams.http.v3.HttpProtocolOptions:
           '@type': type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions
@@ -104,6 +105,8 @@ Clusters:
             idleTimeout: 10s
           explicitHttpConfig:
             httpProtocolOptions: {}
+=======
+>>>>>>> master
     external-no-protocol-httpbin-6a3325e78573377c:
       circuitBreakers:
         thresholds:
