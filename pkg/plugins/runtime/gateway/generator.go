@@ -10,7 +10,6 @@ import (
 	"github.com/pkg/errors"
 
 	mesh_proto "github.com/kumahq/kuma/api/mesh/v1alpha1"
-	"github.com/kumahq/kuma/pkg/core/permissions"
 	core_mesh "github.com/kumahq/kuma/pkg/core/resources/apis/mesh"
 	"github.com/kumahq/kuma/pkg/core/resources/model"
 	core_xds "github.com/kumahq/kuma/pkg/core/xds"
@@ -144,11 +143,6 @@ func gatewayListenerInfoFromProxy(
 	externalServices := meshCtx.Resources.ExternalServices()
 
 	var listenerInfos []GatewayListenerInfo
-
-	matchedExternalServices := permissions.MatchExternalServicesTrafficPermissions(
-		proxy.Dataplane, externalServices, meshCtx.Resources.TrafficPermissions(),
-	)
-
 	outboundEndpoints := core_xds.EndpointMap{}
 	for k, v := range meshCtx.EndpointMap {
 		outboundEndpoints[k] = v
@@ -157,7 +151,7 @@ func gatewayListenerInfoFromProxy(
 	esEndpoints := xds_topology.BuildExternalServicesEndpointMap(
 		ctx,
 		meshCtx.Resource,
-		matchedExternalServices,
+		externalServices.Items,
 		meshCtx.DataSourceLoader,
 		proxy.Zone,
 	)
