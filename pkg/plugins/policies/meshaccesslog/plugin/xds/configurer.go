@@ -17,8 +17,8 @@ import (
 	otlp "go.opentelemetry.io/proto/otlp/common/v1"
 	"google.golang.org/protobuf/types/known/structpb"
 
-	core_mesh "github.com/kumahq/kuma/pkg/core/resources/apis/mesh"
 	"github.com/kumahq/kuma/pkg/core/validators"
+	core_xds "github.com/kumahq/kuma/pkg/core/xds"
 	api "github.com/kumahq/kuma/pkg/plugins/policies/meshaccesslog/api/v1alpha1"
 	"github.com/kumahq/kuma/pkg/util/pointer"
 	util_proto "github.com/kumahq/kuma/pkg/util/proto"
@@ -37,7 +37,7 @@ type Configurer struct {
 	SourceService       string
 	DestinationService  string
 	Backend             api.Backend
-	Dataplane           *core_mesh.DataplaneResource
+	Proxy               *core_xds.Proxy
 	AccessLogSocketPath string
 }
 
@@ -63,7 +63,7 @@ func (acc *EndpointAccumulator) clusterForEndpoint(endpoint LoggingEndpoint) end
 }
 
 func (c *Configurer) interpolateKumaVariables(formatString string) string {
-	return listeners_v3.InterpolateKumaValues(formatString, c.SourceService, c.DestinationService, c.Mesh, c.TrafficDirection, c.Dataplane)
+	return listeners_v3.InterpolateKumaValues(formatString, c.SourceService, c.DestinationService, c.Mesh, c.TrafficDirection, c.Proxy)
 }
 
 const defaultOpenTelemetryGRPCPort uint32 = 4317

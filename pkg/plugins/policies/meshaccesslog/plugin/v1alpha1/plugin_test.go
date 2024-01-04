@@ -17,6 +17,7 @@ import (
 	"github.com/kumahq/kuma/pkg/core/xds"
 	core_xds "github.com/kumahq/kuma/pkg/core/xds"
 	core_rules "github.com/kumahq/kuma/pkg/plugins/policies/core/rules"
+	plugins_xds "github.com/kumahq/kuma/pkg/plugins/policies/core/xds"
 	policies_xds "github.com/kumahq/kuma/pkg/plugins/policies/core/xds"
 	api "github.com/kumahq/kuma/pkg/plugins/policies/meshaccesslog/api/v1alpha1"
 	plugin "github.com/kumahq/kuma/pkg/plugins/policies/meshaccesslog/plugin/v1alpha1"
@@ -33,6 +34,7 @@ import (
 	envoy_common "github.com/kumahq/kuma/pkg/xds/envoy"
 	. "github.com/kumahq/kuma/pkg/xds/envoy/listeners"
 	"github.com/kumahq/kuma/pkg/xds/generator"
+	"github.com/kumahq/kuma/pkg/xds/generator/egress"
 )
 
 var _ = Describe("MeshAccessLog", func() {
@@ -1015,6 +1017,163 @@ var _ = Describe("MeshAccessLog", func() {
 			},
 		}),
 	)
+	Context("for ZoneEgress", func() {
+		It("should add apply configuration Envoy configuration", func() {
+			// given
+			rs := core_xds.NewResourceSet()
+
+			// listener that matches
+			listener, err := NewInboundListenerBuilder(envoy_common.APIV3, "192.168.0.1", 10002, core_xds.SocketAddressProtocolTCP).
+				WithOverwriteName("test_listener").
+				Configure(
+					FilterChain(NewFilterChainBuilder(envoy_common.APIV3, "external-service-1_mesh-1").Configure(
+						MatchTransportProtocol("tls"),
+						MatchServerNames("external-service-1{mesh=mesh-1}"),
+						HttpConnectionManager("external-service-1", false),
+					)),
+					FilterChain(NewFilterChainBuilder(envoy_common.APIV3, "external-service-2_mesh-1").Configure(
+						MatchTransportProtocol("tls"),
+						MatchServerNames("external-service-2{mesh=mesh-1}"),
+						TCPProxy("external-service-2"),
+					)),
+					FilterChain(NewFilterChainBuilder(envoy_common.APIV3, "external-service-1_mesh-2").Configure(
+						MatchTransportProtocol("tls"),
+						MatchServerNames("external-service-1{mesh=mesh-2}"),
+						TCPProxy("external-service-1", []envoy_common.Split{
+							plugins_xds.NewSplitBuilder().WithClusterName("external-service-1").WithWeight(100).Build(),
+						}...),
+					)),
+					FilterChain(NewFilterChainBuilder(envoy_common.APIV3, "internal-service-1_mesh-1").Configure(
+						MatchTransportProtocol("tls"),
+						MatchServerNames("internal-service-1{mesh=mesh-1}"),
+						TCPProxy("internal-service-1"),
+					)),
+				).
+				Build()
+			Expect(err).ToNot(HaveOccurred())
+			rs.Add(&core_xds.Resource{
+				Name:     listener.GetName(),
+				Origin:   egress.OriginEgress,
+				Resource: listener,
+			})
+
+			// mesh with enabled mTLS and egress
+			ctx := xds_builders.Context().
+				WithMesh(builders.Mesh().
+					WithName("mesh-1").
+					WithBuiltinMTLSBackend("builtin-1").
+					WithEnabledMTLSBackend("builtin-1").
+					WithEgressRoutingEnabled()).
+				Build()
+
+			proxy := &core_xds.Proxy{
+				Metadata: &core_xds.DataplaneMetadata{
+					AccessLogSocketPath: "/tmp/foo",
+				},
+				APIVersion: envoy_common.APIV3,
+				ZoneEgressProxy: &core_xds.ZoneEgressProxy{
+					ZoneEgressResource: &core_mesh.ZoneEgressResource{
+						Meta: &test_model.ResourceMeta{Name: "dp1", Mesh: "mesh-1"},
+						Spec: &mesh_proto.ZoneEgress{
+							Networking: &mesh_proto.ZoneEgress_Networking{
+								Address: "192.168.0.1",
+								Port:    10002,
+							},
+						},
+					},
+					ZoneIngresses: []*core_mesh.ZoneIngressResource{},
+					MeshResourcesList: []*core_xds.MeshResources{
+						{
+							Mesh: builders.Mesh().WithName("mesh-1").WithEnabledMTLSBackend("ca-1").WithBuiltinMTLSBackend("ca-1").Build(),
+							ExternalServices: []*core_mesh.ExternalServiceResource{
+								{
+									Meta: &test_model.ResourceMeta{
+										Mesh: "mesh-1",
+										Name: "es-1",
+									},
+									Spec: &mesh_proto.ExternalService{
+										Tags: map[string]string{
+											"kuma.io/service": "external-service-1",
+										},
+										Networking: &mesh_proto.ExternalService_Networking{
+											Address: "externalservice-1.org",
+										},
+									},
+								},
+							},
+							Dynamic: core_xds.ExternalServiceDynamicPolicies{
+								"external-service-1": {
+									api.MeshAccessLogType: core_xds.TypedMatchingPolicies{
+										FromRules: core_rules.FromRules{
+											Rules: map[core_rules.InboundListener]core_rules.Rules{
+												{Address: "192.168.0.1", Port: 10002}: {{
+													Subset: core_rules.Subset{},
+													Conf: api.Conf{
+														Backends: &[]api.Backend{{
+															Tcp: &api.TCPBackend{
+																Address: "127.0.0.1:5555",
+															},
+														}},
+													},
+												}},
+											},
+										},
+									},
+								},
+							},
+						},
+						{
+							Mesh: builders.Mesh().WithName("mesh-2").WithEnabledMTLSBackend("ca-2").WithBuiltinMTLSBackend("ca-2").Build(),
+							ExternalServices: []*core_mesh.ExternalServiceResource{
+								{
+									Meta: &test_model.ResourceMeta{
+										Mesh: "mesh-2",
+										Name: "es-1",
+									},
+									Spec: &mesh_proto.ExternalService{
+										Tags: map[string]string{
+											"kuma.io/service": "external-service-1",
+										},
+										Networking: &mesh_proto.ExternalService_Networking{
+											Address: "externalservice-1.org",
+										},
+									},
+								},
+							},
+							Dynamic: core_xds.ExternalServiceDynamicPolicies{
+								"external-service-1": {
+									api.MeshAccessLogType: core_xds.TypedMatchingPolicies{
+										FromRules: core_rules.FromRules{
+											Rules: map[core_rules.InboundListener]core_rules.Rules{
+												{Address: "192.168.0.1", Port: 10002}: {{
+													Subset: core_rules.Subset{},
+													Conf: api.Conf{
+														Backends: &[]api.Backend{{
+															File: &api.FileBackend{
+																Path: "/tmp/log",
+															},
+														}},
+													},
+												}},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			}
+
+			// when
+			p := plugin.NewPlugin().(core_plugins.PolicyPlugin)
+			err = p.Apply(rs, *ctx, proxy)
+			Expect(err).ToNot(HaveOccurred())
+
+			// then
+			Expect(getResourceYaml(rs.ListOf(envoy_resource.ListenerType))).To(matchers.MatchGoldenYAML(filepath.Join("testdata", "basic-egress.listener.golden.yaml")))
+		})
+	})
 })
 
 func getResourceYaml(list core_xds.ResourceList) []byte {

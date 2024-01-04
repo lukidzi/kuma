@@ -20,6 +20,13 @@ func (r *ZoneEgressResource) UsesInboundInterface(address net.IP, port uint32) b
 	return false
 }
 
+func (r *ZoneEgressResource) GetIP() string {
+	if r == nil {
+		return ""
+	}
+	return r.Spec.GetNetworking().GetAddress()
+}
+
 func (r *ZoneEgressResource) IsIPv6() bool {
 	if r == nil {
 		return false

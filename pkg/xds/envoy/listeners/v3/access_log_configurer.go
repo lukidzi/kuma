@@ -11,7 +11,6 @@ import (
 	"github.com/pkg/errors"
 
 	mesh_proto "github.com/kumahq/kuma/api/mesh/v1alpha1"
-	"github.com/kumahq/kuma/pkg/core/resources/apis/mesh"
 	core_xds "github.com/kumahq/kuma/pkg/core/xds"
 	"github.com/kumahq/kuma/pkg/util/proto"
 	"github.com/kumahq/kuma/pkg/xds/envoy"
@@ -41,10 +40,17 @@ func InterpolateKumaValues(
 	destinationService string,
 	mesh string,
 	trafficDirection envoy.TrafficDirection,
-	dpp *mesh.DataplaneResource,
+	proxy *core_xds.Proxy,
 ) string {
-	format = strings.ReplaceAll(format, CMD_KUMA_SOURCE_ADDRESS, net.JoinHostPort(dpp.GetIP(), "0"))
-	format = strings.ReplaceAll(format, CMD_KUMA_SOURCE_ADDRESS_WITHOUT_PORT, dpp.GetIP())
+	var ip string
+	switch {
+	case proxy.Dataplane != nil:
+		ip = proxy.Dataplane.GetIP()
+	case proxy.ZoneEgressProxy != nil:
+		ip = proxy.ZoneEgressProxy.ZoneEgressResource.GetIP()
+	}
+	format = strings.ReplaceAll(format, CMD_KUMA_SOURCE_ADDRESS, net.JoinHostPort(ip, "0"))
+	format = strings.ReplaceAll(format, CMD_KUMA_SOURCE_ADDRESS_WITHOUT_PORT, ip)
 	format = strings.ReplaceAll(format, CMD_KUMA_SOURCE_SERVICE, sourceService)
 	format = strings.ReplaceAll(format, CMD_KUMA_DESTINATION_SERVICE, destinationService)
 	format = strings.ReplaceAll(format, CMD_KUMA_MESH, mesh)
@@ -60,7 +66,7 @@ func convertLoggingBackend(mesh string, trafficDirection envoy.TrafficDirection,
 	if backend.Format != "" {
 		format = backend.Format
 	}
-	format = InterpolateKumaValues(format, sourceService, destinationService, mesh, trafficDirection, proxy.Dataplane)
+	format = InterpolateKumaValues(format, sourceService, destinationService, mesh, trafficDirection, proxy)
 	format += "\n"
 
 	switch backend.GetType() {
