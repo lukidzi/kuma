@@ -6,6 +6,7 @@ metadata:
     app: example
     version: "0.1"
 spec:
+  nodeName: sample-node
   containers:
     - name: container-1
       ports:

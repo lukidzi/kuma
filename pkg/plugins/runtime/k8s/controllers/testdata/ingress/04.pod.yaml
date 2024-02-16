@@ -6,6 +6,7 @@ metadata:
   annotations:
     kuma.io/ingress: enabled
 spec:
+  nodeName: sample-node
   containers:
     - ports:
         - containerPort: 10001

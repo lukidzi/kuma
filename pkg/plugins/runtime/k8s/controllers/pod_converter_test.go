@@ -113,6 +113,14 @@ var _ = Describe("PodToDataplane(..)", func() {
 				serviceGetter = reader
 			}
 
+			// node
+			var nodeGetter kube_client.Reader
+			if given.node != "" {
+				bytes, err = os.ReadFile(filepath.Join("testdata", given.node))
+				Expect(err).ToNot(HaveOccurred())
+				nodeGetter = fakeNodeReader(bytes)
+			}
+
 			// other ReplicaSets
 			var replicaSetGetter kube_client.Reader
 			if given.otherReplicaSets != "" {
@@ -141,6 +149,7 @@ var _ = Describe("PodToDataplane(..)", func() {
 						ReplicaSetGetter: replicaSetGetter,
 						JobGetter:        jobGetter,
 					},
+					NodeGetter: nodeGetter,
 				},
 				Zone:              "zone-1",
 				ResourceConverter: k8s.NewSimpleConverter(),
@@ -161,6 +170,7 @@ var _ = Describe("PodToDataplane(..)", func() {
 			pod:            "01.pod.yaml",
 			servicesForPod: "01.services-for-pod.yaml",
 			dataplane:      "01.dataplane.yaml",
+			node:           "node.yaml",
 		}),
 		Entry("02. Pod with 1 Service and 1 other Dataplane", testCase{
 			pod:             "02.pod.yaml",
@@ -168,11 +178,13 @@ var _ = Describe("PodToDataplane(..)", func() {
 			otherDataplanes: "02.other-dataplanes.yaml",
 			otherServices:   "02.other-services.yaml",
 			dataplane:       "02.dataplane.yaml",
+			node:           "node.yaml",
 		}),
 		Entry("03. Pod with gateway annotation and 1 service - legacy", testCase{
 			pod:            "03.pod.yaml",
 			servicesForPod: "03.services-for-pod.yaml",
 			dataplane:      "03.dataplane.yaml",
+			node:           "node.yaml",
 		}),
 		Entry("04. Pod with direct access to all services", testCase{
 			pod:             "04.pod.yaml",
@@ -180,6 +192,7 @@ var _ = Describe("PodToDataplane(..)", func() {
 			otherDataplanes: "04.other-dataplanes.yaml",
 			otherServices:   "04.other-services.yaml",
 			dataplane:       "04.dataplane.yaml",
+			node:           "node.yaml",
 		}),
 		Entry("05. Pod with direct access to chosen services", testCase{
 			pod:             "05.pod.yaml",
@@ -187,6 +200,7 @@ var _ = Describe("PodToDataplane(..)", func() {
 			otherDataplanes: "05.other-dataplanes.yaml",
 			otherServices:   "05.other-services.yaml",
 			dataplane:       "05.dataplane.yaml",
+			node:           "node.yaml",
 		}),
 		Entry("06. Pod with headless service and communication to headless services", testCase{
 			pod:             "06.pod.yaml",
@@ -194,54 +208,65 @@ var _ = Describe("PodToDataplane(..)", func() {
 			otherDataplanes: "06.other-dataplanes.yaml",
 			otherServices:   "06.other-services.yaml",
 			dataplane:       "06.dataplane.yaml",
+			node:           "node.yaml",
 		}),
 		Entry("07. Pod with metrics override", testCase{
 			pod:            "07.pod.yaml",
 			servicesForPod: "07.services-for-pod.yaml",
 			dataplane:      "07.dataplane.yaml",
+			node:           "node.yaml",
 		}),
 		Entry("08. Pod with transparent proxy enabled, without direct access servies", testCase{
 			pod:            "08.pod.yaml",
 			servicesForPod: "08.services-for-pod.yaml",
 			dataplane:      "08.dataplane.yaml",
+			node:           "node.yaml",
 		}),
 		Entry("09. Pod with Kuma Ingress", testCase{
 			pod:            "09.pod.yaml",
 			servicesForPod: "09.services-for-pod.yaml",
 			dataplane:      "09.dataplane.yaml",
+			node:           "node.yaml",
 		}),
 		Entry("10. Pod probes", testCase{
 			pod:            "10.pod.yaml",
 			servicesForPod: "10.services-for-pod.yaml",
 			dataplane:      "10.dataplane.yaml",
+			node:           "node.yaml",
 		}),
 		Entry("11. Pod with several containers", testCase{
 			pod:            "11.pod.yaml",
 			servicesForPod: "11.services-for-pod.yaml",
 			dataplane:      "11.dataplane.yaml",
+			node:           "node.yaml",
 		}),
 		Entry("12. Pod with kuma-sidecar is not ready", testCase{
 			pod:            "12.pod.yaml",
 			servicesForPod: "12.services-for-pod.yaml",
 			dataplane:      "12.dataplane.yaml",
+			node:           "node.yaml",
 		}),
 		Entry("13. Pod without a service", testCase{
 			pod:       "13.pod.yaml",
 			dataplane: "13.dataplane.yaml",
+			node:           "node.yaml",
 		}),
 		Entry("14. Gateway pod without a service", testCase{
 			pod:       "14.pod.yaml",
 			dataplane: "14.dataplane.yaml",
+			node:      "node.yaml",
 		}),
 		Entry("15. Pod with transparent proxy enabled, IPv6 and without direct access servies", testCase{
 			pod:            "15.pod.yaml",
 			servicesForPod: "15.services-for-pod.yaml",
 			dataplane:      "15.dataplane.yaml",
+			node:           "node.yaml",
 		}),
 		Entry("16. Pod with Kuma Egress", testCase{
 			pod:            "16.pod.yaml",
 			servicesForPod: "16.services-for-pod.yaml",
 			dataplane:      "16.dataplane.yaml",
+			node:           "node.yaml",
 		}),
 		Entry("17. Pod with reachable services", testCase{
 			pod:             "17.pod.yaml",
@@ -249,38 +274,45 @@ var _ = Describe("PodToDataplane(..)", func() {
 			otherDataplanes: "17.other-dataplanes.yaml",
 			otherServices:   "17.other-services.yaml",
 			dataplane:       "17.dataplane.yaml",
+			node:            "node.yaml",
 		}),
 		Entry("18. Gateway with non tcp appProtocol", testCase{
 			pod:            "18.pod.yaml",
 			servicesForPod: "18.services-for-pod.yaml",
 			dataplane:      "18.dataplane.yaml",
+			node:           "node.yaml",
 		}),
 		Entry("19. Terminating pod is unhealthy", testCase{
 			pod:            "19.pod.yaml",
 			servicesForPod: "19.services-for-pod.yaml",
 			dataplane:      "19.dataplane.yaml",
+			node:           "node.yaml",
 		}),
 		Entry("20. Pod with gateway annotation and 1 service identified by deployment", testCase{
 			pod:              "20.pod.yaml",
 			servicesForPod:   "20.services-for-pod.yaml",
 			otherReplicaSets: "20.replicasets-for-pod.yaml",
 			dataplane:        "20.dataplane.yaml",
+			node:           "node.yaml",
 		}),
 		Entry("21. Pod with gateway annotation and 1 service with no replicaset", testCase{
 			pod:            "21.pod.yaml",
 			servicesForPod: "21.services-for-pod.yaml",
 			dataplane:      "21.dataplane.yaml",
+			node:           "node.yaml",
 		}),
 		Entry("22. Pod with gateway annotation and 1 service with replicaset but no deployment", testCase{
 			pod:              "22.pod.yaml",
 			servicesForPod:   "22.services-for-pod.yaml",
 			otherReplicaSets: "22.replicasets-for-pod.yaml",
 			dataplane:        "22.dataplane.yaml",
+			node:           "node.yaml",
 		}),
 		Entry("23. Pod with ignored listener", testCase{
 			pod:            "23.pod.yaml",
 			servicesForPod: "23.services-for-pod.yaml",
 			dataplane:      "23.dataplane.yaml",
+			node:           "node.yaml",
 		}),
 	)
 
@@ -314,6 +346,9 @@ var _ = Describe("PodToDataplane(..)", func() {
 				NodeGetter:        nodeGetter,
 				ResourceConverter: k8s.NewSimpleConverter(),
 				Zone:              "zone-1",
+				InboundConverter:  InboundConverter{
+					NodeGetter: nodeGetter,
+				},
 			}
 
 			// when
@@ -337,16 +372,19 @@ var _ = Describe("PodToDataplane(..)", func() {
 			pod:            "01.pod.yaml",
 			servicesForPod: "01.services-for-pod.yaml",
 			dataplane:      "01.dataplane.yaml",
+			node:           "node.yaml",
 		}),
 		Entry("02. Ingress with load balancer and ip", testCase{ // GCP use case
 			pod:            "02.pod.yaml",
 			servicesForPod: "02.services-for-pod.yaml",
 			dataplane:      "02.dataplane.yaml",
+			node:           "node.yaml",
 		}),
 		Entry("03. Ingress with load balancer without public ip", testCase{
 			pod:            "03.pod.yaml",
 			servicesForPod: "03.services-for-pod.yaml",
 			dataplane:      "03.dataplane.yaml",
+			node:           "node.yaml",
 		}),
 		Entry("04. Ingress with node port external IP", testCase{ // Real deployment use case
 			pod:            "04.pod.yaml",
@@ -364,12 +402,14 @@ var _ = Describe("PodToDataplane(..)", func() {
 			pod:            "06.pod.yaml",
 			servicesForPod: "06.services-for-pod.yaml",
 			dataplane:      "06.dataplane.yaml",
+			node:           "node.yaml",
 		}),
 		Entry("Existing ZoneIngress with load balancer and ip", testCase{
 			pod:               "ingress-exists.pod.yaml",
 			servicesForPod:    "ingress-exists.services-for-pod.yaml",
 			existingDataplane: "ingress-exists.existing-dataplane.yaml",
 			dataplane:         "ingress-exists.golden.yaml",
+			node:              "node.yaml",
 		}),
 	)
 
@@ -404,6 +444,9 @@ var _ = Describe("PodToDataplane(..)", func() {
 				NodeGetter:        nodeGetter,
 				ResourceConverter: k8s.NewSimpleConverter(),
 				Zone:              "zone-1",
+				InboundConverter:  InboundConverter{
+					NodeGetter: nodeGetter,
+				},
 			}
 
 			// when
@@ -421,16 +464,19 @@ var _ = Describe("PodToDataplane(..)", func() {
 			pod:            "01.pod.yaml",
 			servicesForPod: "01.services-for-pod.yaml",
 			dataplane:      "01.dataplane.yaml",
+			node:           "node.yaml",
 		}),
 		Entry("02. Egress with load balancer and ip", testCase{ // GCP use case
 			pod:            "02.pod.yaml",
 			servicesForPod: "02.services-for-pod.yaml",
 			dataplane:      "02.dataplane.yaml",
+			node:           "node.yaml",
 		}),
 		Entry("03. Egress with load balancer without public ip", testCase{
 			pod:            "03.pod.yaml",
 			servicesForPod: "03.services-for-pod.yaml",
 			dataplane:      "03.dataplane.yaml",
+			node:           "node.yaml",
 		}),
 		Entry("04. Egress with node port external IP", testCase{ // Real deployment use case
 			pod:            "04.pod.yaml",
@@ -516,6 +562,7 @@ var _ = Describe("InboundTagsForService(..)", func() {
 		podLabels      map[string]string
 		svcAnnotations map[string]string
 		appProtocol    *string
+		nodeLabels     map[string]string
 		expected       map[string]string
 	}
 
@@ -526,6 +573,9 @@ var _ = Describe("InboundTagsForService(..)", func() {
 				ObjectMeta: kube_meta.ObjectMeta{
 					Namespace: "demo",
 					Labels:    given.podLabels,
+				},
+				Spec: kube_core.PodSpec{
+					NodeName: "test-node",
 				},
 			}
 			// and
@@ -552,9 +602,15 @@ var _ = Describe("InboundTagsForService(..)", func() {
 					},
 				},
 			}
+			node := &kube_core.Node{
+				ObjectMeta: kube_meta.ObjectMeta{
+					Name:      "test-node",
+					Labels:    given.nodeLabels,
+				},
+			}
 
 			// expect
-			Expect(InboundTagsForService(given.zone, pod, svc, &svc.Spec.Ports[0])).To(Equal(given.expected))
+			Expect(InboundTagsForService(given.zone, pod, svc, &svc.Spec.Ports[0], node)).To(Equal(given.expected))
 		},
 		Entry("Pod without labels", testCase{
 			isGateway: false,
@@ -581,6 +637,28 @@ var _ = Describe("InboundTagsForService(..)", func() {
 				"k8s.kuma.io/service-name": "example",
 				"k8s.kuma.io/service-port": "80",
 				"k8s.kuma.io/namespace":    "demo",
+			},
+		}),
+		Entry("Pod with node's topology labels", testCase{
+			isGateway: false,
+			podLabels: map[string]string{
+				"app":     "example",
+				"version": "0.1",
+			},
+			nodeLabels: map[string]string{
+				kube_core.LabelTopologyRegion: "east",
+				kube_core.LabelTopologyZone: "east-2a",
+			},
+			expected: map[string]string{
+				"app":                      "example",
+				"version":                  "0.1",
+				"kuma.io/service":          "example_demo_svc_80",
+				"kuma.io/protocol":         "tcp", // we want Kuma's default behavior to be explicit to a user
+				"k8s.kuma.io/service-name": "example",
+				"k8s.kuma.io/service-port": "80",
+				"k8s.kuma.io/namespace":    "demo",
+				kube_core.LabelTopologyRegion: "east",
+				kube_core.LabelTopologyZone: "east-2a",
 			},
 		}),
 		Entry("Pod with `service` label", testCase{
@@ -998,8 +1076,12 @@ func (f fakeServiceReader) List(ctx context.Context, list kube_client.ObjectList
 
 type fakeNodeReader string
 
-func (r fakeNodeReader) Get(ctx context.Context, key kube_client.ObjectKey, obj kube_client.Object, _ ...kube_client.GetOption) error {
-	return errors.New("not implemented")
+func (f fakeNodeReader) Get(ctx context.Context, key kube_client.ObjectKey, obj kube_client.Object, _ ...kube_client.GetOption) error {
+	err := yaml.Unmarshal([]byte(f), &obj)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func (f fakeNodeReader) List(ctx context.Context, list kube_client.ObjectList, opts ...kube_client.ListOption) error {

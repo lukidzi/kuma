@@ -8,6 +8,7 @@ metadata:
     kuma.io/ingress: enabled
     kuma.io/mesh: default
 spec:
+  nodeName: sample-node
   containers:
     - ports:
         - containerPort: 10001

@@ -8,6 +8,7 @@ metadata:
     kuma.io/ingress-public-address: custom-address.com
     kuma.io/ingress-public-port: 1234
 spec:
+  nodeName: sample-node
   containers:
     - ports:
         - containerPort: 10001

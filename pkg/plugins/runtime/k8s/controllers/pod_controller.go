@@ -12,10 +12,13 @@ import (
 	kube_types "k8s.io/apimachinery/pkg/types"
 	kube_record "k8s.io/client-go/tools/record"
 	kube_ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	kube_client "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	kube_controllerutil "sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	kube_handler "sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	kube_reconcile "sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	core_mesh "github.com/kumahq/kuma/pkg/core/resources/apis/mesh"
@@ -379,11 +382,19 @@ func (r *PodReconciler) createOrUpdateEgress(ctx context.Context, pod *kube_core
 }
 
 func (r *PodReconciler) SetupWithManager(mgr kube_ctrl.Manager, maxConcurrentReconciles int) error {
+	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &kube_core.Pod{}, nodeIndexField, func(obj kube_client.Object) []string {
+		pod := obj.(*kube_core.Pod)
+		return []string{pod.Spec.NodeName}
+	}); err != nil {
+		return err
+	}
+
 	return kube_ctrl.NewControllerManagedBy(mgr).
 		WithOptions(controller.Options{MaxConcurrentReconciles: maxConcurrentReconciles}).
 		For(&kube_core.Pod{}).
 		// on Service update reconcile affected Pods (all Pods selected by this service)
 		Watches(&kube_core.Service{}, kube_handler.EnqueueRequestsFromMapFunc(ServiceToPodsMapper(r.Log, mgr.GetClient()))).
+		Watches(&kube_core.Node{}, kube_handler.EnqueueRequestsFromMapFunc(NodeToPodsMapper(r.Log, mgr.GetClient())), builder.WithPredicates(nodeUpdateEvents)).
 		Complete(r)
 }
 
@@ -404,4 +415,38 @@ func ServiceToPodsMapper(l logr.Logger, client kube_client.Client) kube_handler.
 		}
 		return req
 	}
+}
+
+func NodeToPodsMapper(l logr.Logger, client kube_client.Client) kube_handler.MapFunc {
+	l = l.WithName("node-to-pods-mapper")
+	return func(ctx context.Context, obj kube_client.Object) []kube_reconcile.Request {
+		// List Pods in the same namespace as a Service
+		pods := &kube_core.PodList{}
+		if err := client.List(ctx, pods, kube_client.MatchingFields{nodeIndexField: obj.(*kube_core.Node).Name}); err != nil {
+			l.WithValues("node", obj.GetName()).Error(err, "failed to fetch Pods")
+			return nil
+		}
+		var req []kube_reconcile.Request
+		for _, pod := range pods.Items {
+			req = append(req, kube_reconcile.Request{
+				NamespacedName: kube_types.NamespacedName{Namespace: pod.Namespace, Name: pod.Name},
+			})
+		}
+		return req
+	}
+}
+
+var nodeUpdateEvents = predicate.Funcs{
+	CreateFunc: func(event event.CreateEvent) bool {
+		return false
+	},
+	DeleteFunc: func(deleteEvent event.DeleteEvent) bool {
+		return false
+	},
+	UpdateFunc: func(updateEvent event.UpdateEvent) bool {
+		return true
+	},
+	GenericFunc: func(genericEvent event.GenericEvent) bool {
+		return false
+	},
 }

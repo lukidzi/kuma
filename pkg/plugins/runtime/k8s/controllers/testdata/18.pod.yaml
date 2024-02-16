@@ -7,6 +7,7 @@ metadata:
   annotations:
     kuma.io/gateway: enabled
 spec:
+  nodeName: sample-node
   containers:
     - ports:
         - containerPort: 7070

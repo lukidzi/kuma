@@ -8,6 +8,7 @@ metadata:
     kuma.io/virtual-probes: enabled
     kuma.io/virtual-probes-port: 19000
 spec:
+  nodeName: sample-node
   containers:
     - readinessProbe:
         httpGet:
