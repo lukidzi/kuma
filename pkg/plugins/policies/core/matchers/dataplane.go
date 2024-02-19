@@ -71,7 +71,7 @@ func MatchedPolicies(rType core_model.ResourceType, dpp *core_mesh.DataplaneReso
 		sort.Sort(ByTargetRef(ps))
 	}
 
-	fr, err := core_rules.BuildFromRules(matchedPoliciesByInbound)
+	fr, err := core_rules.BuildFromRules(matchedPoliciesByInbound, resources.Gateways().Items)
 	if err != nil {
 		warnings = append(warnings, fmt.Sprintf("couldn't create From rules: %s", err.Error()))
 	}
@@ -90,7 +90,7 @@ func MatchedPolicies(rType core_model.ResourceType, dpp *core_mesh.DataplaneReso
 		warnings = append(warnings, fmt.Sprintf("couldn't create Gateway rules: %s", err.Error()))
 	}
 
-	sr, err := core_rules.BuildSingleItemRules(dpPolicies)
+	sr, err := core_rules.BuildSingleItemRules(dpPolicies, resources.Gateways().Items)
 	if err != nil {
 		warnings = append(warnings, fmt.Sprintf("couldn't create top level rules: %s", err.Error()))
 	}

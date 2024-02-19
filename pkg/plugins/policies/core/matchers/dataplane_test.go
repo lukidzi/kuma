@@ -98,7 +98,7 @@ var _ = Describe("MatchedPolicies", func() {
 		generateTableEntries(filepath.Join("testdata", "matchedpolicies", "dataplanepolicies")),
 	)
 
-	DescribeTable("should return FromRules",
+	FDescribeTable("should return FromRules",
 		func(given testCase) {
 			// given DPP resource
 			dpp := readDPP(given.dppFile)

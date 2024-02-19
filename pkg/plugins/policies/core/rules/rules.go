@@ -14,6 +14,7 @@ import (
 
 	common_api "github.com/kumahq/kuma/api/common/v1alpha1"
 	mesh_proto "github.com/kumahq/kuma/api/mesh/v1alpha1"
+	core_mesh "github.com/kumahq/kuma/pkg/core/resources/apis/mesh"
 	core_model "github.com/kumahq/kuma/pkg/core/resources/model"
 	"github.com/kumahq/kuma/pkg/plugins/policies/meshhttproute/api/v1alpha1"
 	"github.com/kumahq/kuma/pkg/util/pointer"
@@ -262,6 +263,7 @@ func ComputeConf[T any](rs Rules, sub Subset) *T {
 
 func BuildFromRules(
 	matchedPoliciesByInbound map[InboundListener][]core_model.Resource,
+	gateways []*core_mesh.MeshGatewayResource,
 ) (FromRules, error) {
 	rulesByInbound := map[InboundListener]Rules{}
 	for inbound, policies := range matchedPoliciesByInbound {
@@ -273,7 +275,7 @@ func BuildFromRules(
 			}
 			fromList = append(fromList, BuildPolicyItemsWithMeta(policyWithFrom.GetFromList(), p.GetMeta())...)
 		}
-		rules, err := BuildRules(fromList)
+		rules, err := BuildRules(fromList, gateways)
 		if err != nil {
 			return FromRules{}, err
 		}
@@ -294,7 +296,7 @@ func BuildToRules(matchedPolicies []core_model.Resource, httpRoutes []core_model
 		toList = append(toList, BuildPolicyItemsWithMeta(tl, mp.GetMeta())...)
 	}
 
-	rules, err := BuildRules(toList)
+	rules, err := BuildRules(toList, []*core_mesh.MeshGatewayResource{})
 	if err != nil {
 		return ToRules{}, err
 	}
@@ -324,7 +326,7 @@ func BuildGatewayRules(
 		toRulesByInbound[inbound] = toRules.Rules
 	}
 
-	fromRules, err := BuildFromRules(matchedPoliciesByInbound)
+	fromRules, err := BuildFromRules(matchedPoliciesByInbound, []*core_mesh.MeshGatewayResource{})
 	if err != nil {
 		return GatewayRules{}, err
 	}
@@ -407,7 +409,7 @@ func BuildPolicyItemsWithMeta(items []core_model.PolicyItem, meta core_model.Res
 	return result
 }
 
-func BuildSingleItemRules(matchedPolicies []core_model.Resource) (SingleItemRules, error) {
+func BuildSingleItemRules(matchedPolicies []core_model.Resource, gateways []*core_mesh.MeshGatewayResource) (SingleItemRules, error) {
 	items := []PolicyItemWithMeta{}
 	for _, mp := range matchedPolicies {
 		policyWithSingleItem, ok := mp.GetSpec().(core_model.PolicyWithSingleItem)
@@ -422,7 +424,7 @@ func BuildSingleItemRules(matchedPolicies []core_model.Resource) (SingleItemRule
 		items = append(items, item)
 	}
 
-	rules, err := BuildRules(items)
+	rules, err := BuildRules(items, gateways)
 	if err != nil {
 		return SingleItemRules{}, err
 	}
@@ -435,17 +437,38 @@ func BuildSingleItemRules(matchedPolicies []core_model.Resource) (SingleItemRule
 // Filtering out of negative rules could be useful for XDS generators that don't have a way to configure negations.
 //
 // See the detailed algorithm description in docs/madr/decisions/007-mesh-traffic-permission.md
-func BuildRules(list []PolicyItemWithMeta) (Rules, error) {
+func BuildRules(list []PolicyItemWithMeta, gateways []*core_mesh.MeshGatewayResource) (Rules, error) {
 	rules := Rules{}
 
 	// 1. Convert list of rules into the list of subsets
 	var subsets []Subset
 	for _, item := range list {
-		ss, err := asSubset(item.GetTargetRef())
-		if err != nil {
-			return nil, err
+		if item.GetTargetRef().Kind == common_api.MeshGateway {
+			for _, gw := range gateways {
+				if gw.GetMeta().GetName() == item.GetTargetRef().Name {
+					sel := gw.Spec.GetSelectors()
+					for _, sel := range sel {
+						test := common_api.TargetRef{
+							Kind: common_api.MeshGateway,
+							Tags: sel.GetMatch(),
+						}
+						ss, err := asSubset(test)
+						if err != nil {
+							return nil, err
+						}
+						subsets = append(subsets, ss)
+
+					}
+					
+				}
+			}
+		} else {
+			ss, err := asSubset(item.GetTargetRef())
+			if err != nil {
+				return nil, err
+			}
+			subsets = append(subsets, ss)
 		}
-		subsets = append(subsets, ss)
 	}
 
 	// 2. Create a graph where nodes are subsets and edge exists between 2 subsets only if there is an intersection
@@ -503,13 +526,36 @@ func BuildRules(list []PolicyItemWithMeta) (Rules, error) {
 			distinctOrigins := map[core_model.ResourceKey]core_model.ResourceMeta{}
 			for i := 0; i < len(list); i++ {
 				item := list[i]
-				itemSubset, err := asSubset(item.GetTargetRef())
-				if err != nil {
-					return nil, err
-				}
-				if itemSubset.IsSubset(ss) {
-					confs = append(confs, item.GetDefault())
-					distinctOrigins[core_model.MetaToResourceKey(item.ResourceMeta)] = item.ResourceMeta
+				if item.GetTargetRef().Kind == common_api.MeshGateway {
+					for _, gw := range gateways {
+						if gw.GetMeta().GetName() == item.GetTargetRef().Name {
+							sel := gw.Spec.GetSelectors()
+							for _, sel := range sel {
+								test := common_api.TargetRef{
+									Kind: common_api.MeshGateway,
+									Tags: sel.GetMatch(),
+								}
+								itemSubset, err := asSubset(test)
+								if err != nil {
+									return nil, err
+								}
+								if itemSubset.IsSubset(ss) {
+									confs = append(confs, item.GetDefault())
+									distinctOrigins[core_model.MetaToResourceKey(item.ResourceMeta)] = item.ResourceMeta
+								}
+							}
+							
+						}
+					}
+				} else {
+					itemSubset, err := asSubset(item.GetTargetRef())
+					if err != nil {
+						return nil, err
+					}
+					if itemSubset.IsSubset(ss) {
+						confs = append(confs, item.GetDefault())
+						distinctOrigins[core_model.MetaToResourceKey(item.ResourceMeta)] = item.ResourceMeta
+					}
 				}
 			}
 			merged, err := MergeConfs(confs)
@@ -568,6 +614,13 @@ func asSubset(tr common_api.TargetRef) (Subset, error) {
 			ss = append(ss, Tag{Key: k, Value: v})
 		}
 		return ss, nil
+	case common_api.MeshGateway:
+		ss := Subset{}
+		for k, v := range tr.Tags {
+			ss = append(ss, Tag{Key: k, Value: v})
+		}
+		return ss, nil
+		// return Subset{{Key: mesh_proto.ServiceTag, Value: tr.Name}}, nil
 	case common_api.MeshService:
 		return Subset{{Key: mesh_proto.ServiceTag, Value: tr.Name}}, nil
 	case common_api.MeshServiceSubset:
