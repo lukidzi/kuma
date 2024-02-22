@@ -1,0 +1,41 @@
+type: MeshTrace
+mesh: mesh-1
+name: mt-1
+spec:
+  targetRef:
+    kind: Mesh
+  default:
+    backends:
+      - type: Zipkin
+        zipkin:
+          url: http://jaeger-collector.mesh-observability:9411/api/v2/spans'
+---
+type: MeshTrace
+mesh: mesh-1
+name: mt-2
+spec:
+  targetRef:
+    kind: MeshServiceSubset
+    name: external-database
+    tags:
+      version: v1
+  default:
+    backends:
+      - type: Datadog
+        datadog:
+          url: http://test.datadog:8126
+          splitService: true
+    tags:
+      - name: team
+        literal: core
+      - name: env
+        header:
+          name: x-env
+          default: prod
+      - name: version
+        header:
+          name: x-version
+    sampling:
+      overall: 80
+      random: 60
+      client: 40

@@ -12,6 +12,7 @@ import (
 	"github.com/kumahq/kuma/pkg/plugins/policies/core/matchers"
 	"github.com/kumahq/kuma/pkg/plugins/policies/meshloadbalancingstrategy/api/v1alpha1"
 	mt_api "github.com/kumahq/kuma/pkg/plugins/policies/meshtimeout/api/v1alpha1"
+	mtrace_api "github.com/kumahq/kuma/pkg/plugins/policies/meshtrace/api/v1alpha1"
 	mtp_api "github.com/kumahq/kuma/pkg/plugins/policies/meshtrafficpermission/api/v1alpha1"
 	test_matchers "github.com/kumahq/kuma/pkg/test/matchers"
 )
@@ -102,4 +103,21 @@ var _ = Describe("EgressMatchedPolicies", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(bytes).To(test_matchers.MatchGoldenYAML(given.goldenFile))
 		}, generateTableEntries(filepath.Join("testdata", "egressmatchedpolicies", "torules")))
+
+	DescribeTable("should return egress fromRules for the given external service when policy is SingleRules",
+		func(given testCase) {
+			// given external service resource
+			es := readES(given.esFile)
+			// given policies
+			resources, _ := readPolicies(given.policiesFile)
+
+			// when
+			policies, err := matchers.EgressMatchedPolicies(mtrace_api.MeshTraceType, es.Spec.Tags, resources)
+			Expect(err).ToNot(HaveOccurred())
+
+			// then
+			bytes, err := yaml.Marshal(policies.FromRules)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(bytes).To(test_matchers.MatchGoldenYAML(given.goldenFile))
+		}, generateTableEntries(filepath.Join("testdata", "egressmatchedpolicies", "singlerules")))
 })

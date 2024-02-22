@@ -1,0 +1,34 @@
+Rules:
+  :0:
+  - Conf:
+      backends:
+      - datadog:
+          splitService: true
+          url: http://test.datadog:8126
+        type: Datadog
+      sampling:
+        client: 40
+        overall: 80
+        random: 60
+      tags:
+      - literal: core
+        name: team
+      - header:
+          default: prod
+          name: x-env
+        name: env
+      - header:
+          name: x-version
+        name: version
+    Origin:
+    - creationTime: "0001-01-01T00:00:00Z"
+      mesh: mesh-1
+      modificationTime: "0001-01-01T00:00:00Z"
+      name: mt-1
+      type: MeshTrace
+    - creationTime: "0001-01-01T00:00:00Z"
+      mesh: mesh-1
+      modificationTime: "0001-01-01T00:00:00Z"
+      name: mt-2
+      type: MeshTrace
+    Subset: []

@@ -29,8 +29,9 @@ func EgressMatchedPolicies(rType core_model.ResourceType, tags map[string]string
 
 	_, isFrom := p.GetSpec().(core_model.PolicyWithFromList)
 	_, isTo := p.GetSpec().(core_model.PolicyWithToList)
+	_, isSingleItem := p.GetSpec().(core_model.PolicyWithSingleItem)
 
-	if !isFrom && !isTo {
+	if !isFrom && !isTo && !isSingleItem {
 		return core_xds.TypedMatchingPolicies{}, nil
 	}
 
@@ -39,6 +40,8 @@ func EgressMatchedPolicies(rType core_model.ResourceType, tags map[string]string
 	gateways := resources.Gateways().Items
 	// in case the policy support
 	switch {
+	case isSingleItem:
+		fr, err = processSingleRules(tags, policies)
 	case isFrom && isTo:
 		// we needed a strategy to choose what rules to apply on zone egress when a policy supports both "to" and "from".
 		// Picking "from" rules works for us today, because there is only MeshFaultInjection policy that has both "to"
@@ -80,6 +83,82 @@ func processFromRules(
 	return core_rules.BuildFromRules(map[core_rules.InboundListener][]core_model.Resource{
 		{}: matchedPolicies, // egress always has only 1 listener, so we can use empty key
 	}, gateways)
+}
+
+// It's not possible to directly target egress. But there are situations when we're
+// targeting external service in the top target ref, and we need to make adjustments on the Egress, i.e:
+//
+// type: MeshTrace
+// spec:
+//
+//		targetRef:
+//		  kind: MeshService
+//	   name: external-service-1
+//		default:
+//	   backends:
+//	     - type: Datadog
+//	       datadog:
+//	         url: http://trace-svc.default.svc.cluster.local:8126
+//	         splitService: true
+//
+// In this case we need to apply the policy to the Egress. The problem is that Egress is
+// a single point for multiple clients. This means we have to specify different configurations
+// for different clients. In order to easily get a list of rules for policy on Egress
+// we have to convert it to 'from' policy, i.e. the policy above will be converted to artificially
+// created policy:
+//
+// spec:
+//
+//		targetRef:
+//		  kind: MeshService
+//		  name: external-service-1
+//		from:
+//		  - targetRef:
+//		      kind: Mesh
+//		  default:
+//	     backends:
+//	       - type: Datadog
+//	         datadog:
+//	           url: http://trace-svc.default.svc.cluster.local:8126
+//	           splitService: true
+//
+// that's why processSingleRules() method produces FromRules for the Egress.
+func processSingleRules(
+	tags map[string]string,
+	rl core_model.ResourceList,
+) (core_rules.FromRules, error) {
+	matchedPolicies := []core_model.Resource{}
+
+	for _, policy := range rl.GetItems() {
+		spec := policy.GetSpec().(core_model.Policy)
+		if !serviceSelectedByTargetRef(spec.GetTargetRef(), tags) {
+			continue
+		}
+		matchedPolicies = append(matchedPolicies, policy)
+	}
+	sort.Sort(ByTargetRef(matchedPolicies))
+
+	items := []core_rules.PolicyItemWithMeta{}
+	for _, mp := range matchedPolicies {
+		policyWithSingleItem, ok := mp.GetSpec().(core_model.PolicyWithSingleItem)
+		if !ok {
+			continue
+		}
+		item := core_rules.PolicyItemWithMeta{
+			PolicyItem:   policyWithSingleItem.GetPolicyItem(),
+			ResourceMeta: mp.GetMeta(),
+		}
+		items = append(items, item)
+	}
+
+	// MeshGateway cannot be target for SingleItemRules
+	rules, err := core_rules.BuildRules(items, []*core_mesh.MeshGatewayResource{})
+	if err != nil {
+		return core_rules.FromRules{}, err
+	}
+	return core_rules.FromRules{Rules: map[core_rules.InboundListener]core_rules.Rules{
+		{}: rules,
+	}}, nil
 }
 
 // It's not natural for zone egress to have 'to' policies. It doesn't make sense to target
