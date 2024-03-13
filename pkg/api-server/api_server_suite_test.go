@@ -154,11 +154,12 @@ func putSampleResourceIntoStore(resourceStore store.ResourceStore, name string, 
 }
 
 type testApiServerConfigurer struct {
-	store   store.ResourceStore
-	config  *config_api_server.ApiServerConfig
-	metrics func() core_metrics.Metrics
-	zone    string
-	global  bool
+	store                        store.ResourceStore
+	config                       *config_api_server.ApiServerConfig
+	metrics                      func() core_metrics.Metrics
+	zone                         string
+	global                       bool
+	disableOriginLabelValidation bool
 }
 
 func NewTestApiServerConfigurer() *testApiServerConfigurer {
@@ -188,6 +189,11 @@ func (t *testApiServerConfigurer) WithGlobal() *testApiServerConfigurer {
 
 func (t *testApiServerConfigurer) WithStore(resourceStore store.ResourceStore) *testApiServerConfigurer {
 	t.store = resourceStore
+	return t
+}
+
+func (t *testApiServerConfigurer) WithDisableOriginLabelValidation(disable bool) *testApiServerConfigurer {
+	t.disableOriginLabelValidation = disable
 	return t
 }
 
@@ -251,6 +257,8 @@ func tryStartApiServer(t *testApiServerConfigurer) (*api_server.ApiServer, kuma_
 		cfg.Mode = config_core.Global
 	}
 
+	cfg.Multizone.Zone.DisableOriginLabelValidation = t.disableOriginLabelValidation
+
 	resManager := manager.NewResourceManager(t.store)
 	apiServer, err := api_server.NewApiServer(
 		resManager,
@@ -282,9 +290,8 @@ func tryStartApiServer(t *testApiServerConfigurer) (*api_server.ApiServer, kuma_
 		},
 		&test_runtime.DummyEnvoyAdminClient{},
 		builtin.TokenIssuers{
-			DataplaneToken:   builtin.NewDataplaneTokenIssuer(resManager),
-			ZoneIngressToken: builtin.NewZoneIngressTokenIssuer(resManager),
-			ZoneToken:        builtin.NewZoneTokenIssuer(resManager),
+			DataplaneToken: builtin.NewDataplaneTokenIssuer(resManager),
+			ZoneToken:      builtin.NewZoneTokenIssuer(resManager),
 		},
 		func(*restful.WebService) error { return nil },
 		globalinsight.NewDefaultGlobalInsightService(t.store),

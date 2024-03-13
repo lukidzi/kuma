@@ -10,6 +10,7 @@ import (
 	"github.com/kumahq/kuma/pkg/config/access"
 	api_server "github.com/kumahq/kuma/pkg/config/api-server"
 	"github.com/kumahq/kuma/pkg/config/core"
+	"github.com/kumahq/kuma/pkg/config/core/resources/apis"
 	"github.com/kumahq/kuma/pkg/config/core/resources/store"
 	"github.com/kumahq/kuma/pkg/config/diagnostics"
 	dns_server "github.com/kumahq/kuma/pkg/config/dns-server"
@@ -173,6 +174,8 @@ type Config struct {
 	EventBus eventbus.Config `json:"eventBus"`
 	// Policies is a configuration of plugin policies like MeshAccessLog, MeshTrace etc.
 	Policies *policies.Config `json:"policies"`
+	// CoreResources holds configuration for generated core resources like MeshService
+	CoreResources *apis.Config `json:"coreResources"`
 }
 
 func (c Config) IsFederatedZoneCP() bool {
@@ -268,11 +271,13 @@ var DefaultConfig = func() Config {
 				FullResyncInterval: config_types.Duration{Duration: 1 * time.Minute},
 				DelayFullResync:    false,
 			},
+			SidecarContainers: false,
 		},
-		Proxy:    xds.DefaultProxyConfig(),
-		InterCp:  intercp.DefaultInterCpConfig(),
-		EventBus: eventbus.Default(),
-		Policies: policies.DefaultPoliciesConfig(),
+		Proxy:         xds.DefaultProxyConfig(),
+		InterCp:       intercp.DefaultInterCpConfig(),
+		EventBus:      eventbus.Default(),
+		Policies:      policies.Default(),
+		CoreResources: apis.Default(),
 	}
 }
 
@@ -424,6 +429,9 @@ type ExperimentalConfig struct {
 	// If true then control plane computes reachable services automatically based on MeshTrafficPermission.
 	// Lack of MeshTrafficPermission is treated as Deny the traffic.
 	AutoReachableServices bool `json:"autoReachableServices" envconfig:"KUMA_EXPERIMENTAL_AUTO_REACHABLE_SERVICES"`
+	// Enables sidecar containers in Kubernetes if supported by the Kubernetes
+	// environment.
+	SidecarContainers bool `json:"sidecarContainers" envconfig:"KUMA_EXPERIMENTAL_SIDECAR_CONTAINERS"`
 }
 
 type ExperimentalKDSEventBasedWatchdog struct {

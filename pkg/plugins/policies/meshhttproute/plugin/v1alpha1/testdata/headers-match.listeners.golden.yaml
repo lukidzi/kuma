@@ -38,7 +38,6 @@ resources:
                   - name: foo-regex
                     stringMatch:
                       safeRegex:
-                        googleRe2: {}
                         regex: x.*y
                   - name: foo-absent
                     presentMatch: false
@@ -46,7 +45,7 @@ resources:
                     stringMatch:
                       prefix: x
                   prefix: /
-                name: ByaD2Uw4GYJmgy4Wz8DKxiX+o4mTWBa6knbtzueamSw=
+                name: 1w+PTeOLWcIWtOrX+9cRSY9ErAU0fSgNKRXQu/iSDNA=
                 route:
                   cluster: backend
                   timeout: 0s

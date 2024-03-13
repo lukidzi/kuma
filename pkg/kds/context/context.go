@@ -8,6 +8,7 @@ import (
 
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/types/known/wrapperspb"
@@ -18,6 +19,7 @@ import (
 	config_core "github.com/kumahq/kuma/pkg/config/core"
 	"github.com/kumahq/kuma/pkg/core"
 	config_manager "github.com/kumahq/kuma/pkg/core/config/manager"
+	core_mesh "github.com/kumahq/kuma/pkg/core/resources/apis/mesh"
 	"github.com/kumahq/kuma/pkg/core/resources/apis/system"
 	"github.com/kumahq/kuma/pkg/core/resources/manager"
 	core_model "github.com/kumahq/kuma/pkg/core/resources/model"
@@ -29,9 +31,11 @@ import (
 	"github.com/kumahq/kuma/pkg/kds/service"
 	"github.com/kumahq/kuma/pkg/kds/util"
 	zone_tokens "github.com/kumahq/kuma/pkg/tokens/builtin/zone"
-	"github.com/kumahq/kuma/pkg/tokens/builtin/zoneingress"
 	"github.com/kumahq/kuma/pkg/util/rsa"
+	"github.com/kumahq/kuma/pkg/version"
 )
+
+const VersionHeader = "version"
 
 var log = core.Log.WithName("kds")
 
@@ -93,6 +97,7 @@ func DefaultContext(
 			RemoveK8sSystemNamespaceSuffixMapper(cfg.Store.Kubernetes.SystemNamespace)),
 		HashSuffixMapper(false, mesh_proto.ZoneTag, mesh_proto.KubeNamespaceTag),
 	}
+	ctx = metadata.AppendToOutgoingContext(ctx, VersionHeader, version.Build.Version)
 
 	return &Context{
 		ZoneClientCtx:        ctx,
@@ -231,7 +236,6 @@ func GlobalProvidedFilter(rm manager.ResourceManager, configs map[string]bool) r
 			return configs[resName]
 		case r.Descriptor().Name == system.GlobalSecretType:
 			return util.ResourceNameHasAtLeastOneOfPrefixes(resName, []string{
-				zoneingress.ZoneIngressSigningKeyPrefix,
 				zone_tokens.SigningKeyPrefix,
 			}...)
 		case r.Descriptor().KDSFlags.Has(core_model.GlobalToAllButOriginalZoneFlag):
@@ -257,6 +261,14 @@ func GlobalProvidedFilter(rm manager.ResourceManager, configs map[string]bool) r
 	}
 }
 
-func ZoneProvidedFilter(_ context.Context, _ string, _ kds.Features, r core_model.Resource) bool {
-	return core_model.IsLocallyOriginated(config_core.Zone, r)
+func ZoneProvidedFilter(_ context.Context, localZone string, _ kds.Features, r core_model.Resource) bool {
+	if zi, ok := r.(*core_mesh.ZoneIngressResource); ok {
+		// Old zones don't have a 'kuma.io/zone' label on ZoneIngress, when upgrading to the new 2.6 version
+		// we don't want Zone CP to sync ZoneIngresses without 'kuma.io/zone' label to Global pretending
+		// they're originating here. That's why upgrade from 2.5 to 2.6 (and 2.7) requires casting resource
+		// to *core_mesh.ZoneIngressResource and checking its 'spec.zone' field.
+		// todo: remove in 2 releases after 2.6.x
+		return !zi.IsRemoteIngress(localZone)
+	}
+	return core_model.IsLocallyOriginated(config_core.Zone, r) || r.Descriptor().KDSFlags == core_model.ZoneToGlobalFlag
 }
