@@ -9,7 +9,6 @@ metadata:
     app: example
     version: "0.1"
 spec:
-  nodeName: sample-node
   containers:
     - ports:
         - containerPort: 7070

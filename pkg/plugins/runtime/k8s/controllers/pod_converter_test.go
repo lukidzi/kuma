@@ -178,7 +178,7 @@ var _ = Describe("PodToDataplane(..)", func() {
 			otherDataplanes: "02.other-dataplanes.yaml",
 			otherServices:   "02.other-services.yaml",
 			dataplane:       "02.dataplane.yaml",
-			node:           "node.yaml",
+			node:            "node.yaml",
 		}),
 		Entry("03. Pod with gateway annotation and 1 service - legacy", testCase{
 			pod:            "03.pod.yaml",
@@ -192,7 +192,7 @@ var _ = Describe("PodToDataplane(..)", func() {
 			otherDataplanes: "04.other-dataplanes.yaml",
 			otherServices:   "04.other-services.yaml",
 			dataplane:       "04.dataplane.yaml",
-			node:           "node.yaml",
+			node:            "node.yaml",
 		}),
 		Entry("05. Pod with direct access to chosen services", testCase{
 			pod:             "05.pod.yaml",
@@ -200,7 +200,7 @@ var _ = Describe("PodToDataplane(..)", func() {
 			otherDataplanes: "05.other-dataplanes.yaml",
 			otherServices:   "05.other-services.yaml",
 			dataplane:       "05.dataplane.yaml",
-			node:           "node.yaml",
+			node:            "node.yaml",
 		}),
 		Entry("06. Pod with headless service and communication to headless services", testCase{
 			pod:             "06.pod.yaml",
@@ -208,7 +208,7 @@ var _ = Describe("PodToDataplane(..)", func() {
 			otherDataplanes: "06.other-dataplanes.yaml",
 			otherServices:   "06.other-services.yaml",
 			dataplane:       "06.dataplane.yaml",
-			node:           "node.yaml",
+			node:            "node.yaml",
 		}),
 		Entry("07. Pod with metrics override", testCase{
 			pod:            "07.pod.yaml",
@@ -249,7 +249,7 @@ var _ = Describe("PodToDataplane(..)", func() {
 		Entry("13. Pod without a service", testCase{
 			pod:       "13.pod.yaml",
 			dataplane: "13.dataplane.yaml",
-			node:           "node.yaml",
+			node:      "node.yaml",
 		}),
 		Entry("14. Gateway pod without a service", testCase{
 			pod:       "14.pod.yaml",
@@ -293,7 +293,7 @@ var _ = Describe("PodToDataplane(..)", func() {
 			servicesForPod:   "20.services-for-pod.yaml",
 			otherReplicaSets: "20.replicasets-for-pod.yaml",
 			dataplane:        "20.dataplane.yaml",
-			node:           "node.yaml",
+			node:             "node.yaml",
 		}),
 		Entry("21. Pod with gateway annotation and 1 service with no replicaset", testCase{
 			pod:            "21.pod.yaml",
@@ -306,7 +306,7 @@ var _ = Describe("PodToDataplane(..)", func() {
 			servicesForPod:   "22.services-for-pod.yaml",
 			otherReplicaSets: "22.replicasets-for-pod.yaml",
 			dataplane:        "22.dataplane.yaml",
-			node:           "node.yaml",
+			node:             "node.yaml",
 		}),
 		Entry("23. Pod with ignored listener", testCase{
 			pod:            "23.pod.yaml",
@@ -356,7 +356,7 @@ var _ = Describe("PodToDataplane(..)", func() {
 				NodeGetter:        nodeGetter,
 				ResourceConverter: k8s.NewSimpleConverter(),
 				Zone:              "zone-1",
-				InboundConverter:  InboundConverter{
+				InboundConverter: InboundConverter{
 					NodeGetter: nodeGetter,
 				},
 			}
@@ -454,7 +454,7 @@ var _ = Describe("PodToDataplane(..)", func() {
 				NodeGetter:        nodeGetter,
 				ResourceConverter: k8s.NewSimpleConverter(),
 				Zone:              "zone-1",
-				InboundConverter:  InboundConverter{
+				InboundConverter: InboundConverter{
 					NodeGetter: nodeGetter,
 				},
 			}
@@ -612,15 +612,10 @@ var _ = Describe("InboundTagsForService(..)", func() {
 					},
 				},
 			}
-			node := &kube_core.Node{
-				ObjectMeta: kube_meta.ObjectMeta{
-					Name:      "test-node",
-					Labels:    given.nodeLabels,
-				},
-			}
+			nodeLabels := map[string]string{}
 
 			// expect
-			Expect(InboundTagsForService(given.zone, pod, svc, &svc.Spec.Ports[0], node)).To(Equal(given.expected))
+			Expect(InboundTagsForService(given.zone, pod, svc, &svc.Spec.Ports[0], nodeLabels)).To(Equal(given.expected))
 		},
 		Entry("Pod without labels", testCase{
 			isGateway: false,
@@ -657,18 +652,18 @@ var _ = Describe("InboundTagsForService(..)", func() {
 			},
 			nodeLabels: map[string]string{
 				kube_core.LabelTopologyRegion: "east",
-				kube_core.LabelTopologyZone: "east-2a",
+				kube_core.LabelTopologyZone:   "east-2a",
 			},
 			expected: map[string]string{
-				"app":                      "example",
-				"version":                  "0.1",
-				"kuma.io/service":          "example_demo_svc_80",
-				"kuma.io/protocol":         "tcp", // we want Kuma's default behavior to be explicit to a user
-				"k8s.kuma.io/service-name": "example",
-				"k8s.kuma.io/service-port": "80",
-				"k8s.kuma.io/namespace":    "demo",
+				"app":                         "example",
+				"version":                     "0.1",
+				"kuma.io/service":             "example_demo_svc_80",
+				"kuma.io/protocol":            "tcp", // we want Kuma's default behavior to be explicit to a user
+				"k8s.kuma.io/service-name":    "example",
+				"k8s.kuma.io/service-port":    "80",
+				"k8s.kuma.io/namespace":       "demo",
 				kube_core.LabelTopologyRegion: "east",
-				kube_core.LabelTopologyZone: "east-2a",
+				kube_core.LabelTopologyZone:   "east-2a",
 			},
 		}),
 		Entry("Pod with `service` label", testCase{

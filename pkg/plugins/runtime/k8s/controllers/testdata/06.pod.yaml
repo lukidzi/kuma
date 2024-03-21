@@ -5,7 +5,6 @@ metadata:
     app: example
     version: "0.1"
 spec:
-  nodeName: sample-node
   containers:
     - ports: []
       # when a 'targetPort' in a ServicePort is a number,

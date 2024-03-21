@@ -6,7 +6,6 @@ metadata:
     version: "0.1"
     kuma.io/sidecar-injection: enabled
 spec:
-  nodeName: sample-node
   containers:
     - ports:
         - containerPort: 7070

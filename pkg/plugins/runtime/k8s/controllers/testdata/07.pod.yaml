@@ -8,7 +8,6 @@ metadata:
     prometheus.metrics.kuma.io/port: "1234"
     prometheus.metrics.kuma.io/path: "/non-standard-path"
 spec:
-  nodeName: sample-node
   containers:
     - ports:
         - containerPort: 7070

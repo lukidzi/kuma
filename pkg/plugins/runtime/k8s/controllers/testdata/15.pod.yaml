@@ -11,7 +11,6 @@ metadata:
     kuma.io/transparent-proxying-inbound-v6-port: 15099
     kuma.io/transparent-proxying-outbound-port: 15001
 spec:
-  nodeName: sample-node
   containers:
     - ports:
         - containerPort: 7070
