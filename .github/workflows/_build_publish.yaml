@@ -39,7 +39,7 @@ jobs:
     outputs:
       BINARY_ARTIFACT_DIGEST_BASE64: ${{ steps.inspect-binary-output.outputs.binary_artifact_digest_base64 }}
     steps:
-      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+      - uses: actions/checkout@9bb56186c3b09b4f86b1c65136769dd318469633 # v4.1.2
         with:
           fetch-depth: 0
       - name: "Add matrix to .build/info to cache"
@@ -93,7 +93,7 @@ jobs:
       matrix:
         image: ${{ fromJSON(inputs.images) }}
     steps:
-      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+      - uses: actions/checkout@9bb56186c3b09b4f86b1c65136769dd318469633 # v4.1.2
         with:
           fetch-depth: 0
       - name: Install dependencies for cross builds
@@ -141,14 +141,14 @@ jobs:
             ./build/docker/*.tar
       - name: scan amd64 image
         id: scan_image-amd64
-        uses: Kong/public-shared-actions/security-actions/scan-docker-image@60c9b136104671b7091b2306c599d80fec34ae3f # v2.0.3
+        uses: Kong/public-shared-actions/security-actions/scan-docker-image@590c699fe824010d7d563a33cc60500d847d3f9e # v2.1.0
         with:
           asset_prefix: image_${{ matrix.image }}-amd64
           image: ./build/docker/${{ matrix.image }}-amd64.tar
       - name: scan arm64 image
         id: scan_image-arm64
         if: ${{ fromJSON(inputs.FULL_MATRIX) }}
-        uses: Kong/public-shared-actions/security-actions/scan-docker-image@60c9b136104671b7091b2306c599d80fec34ae3f # v2.0.3
+        uses: Kong/public-shared-actions/security-actions/scan-docker-image@590c699fe824010d7d563a33cc60500d847d3f9e # v2.1.0
         with:
           asset_prefix: image_${{ matrix.image }}-arm64
           image: ./build/docker/${{ matrix.image }}-arm64.tar
@@ -180,7 +180,7 @@ jobs:
       - name: sign image
         if: ${{ fromJSON(inputs.ALLOW_PUSH) }}
         id: sign
-        uses: Kong/public-shared-actions/security-actions/sign-docker-image@60c9b136104671b7091b2306c599d80fec34ae3f # v2.0.3
+        uses: Kong/public-shared-actions/security-actions/sign-docker-image@590c699fe824010d7d563a33cc60500d847d3f9e # v2.1.0
         with:
           image_digest: ${{ steps.image_digest.outputs.digest }}
           tags: ${{ steps.image_meta.outputs.image }}
@@ -192,7 +192,7 @@ jobs:
     timeout-minutes: 10
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+      - uses: actions/checkout@9bb56186c3b09b4f86b1c65136769dd318469633 # v4.1.2
         with:
           fetch-depth: 0
       - name: Install dependencies for cross builds
