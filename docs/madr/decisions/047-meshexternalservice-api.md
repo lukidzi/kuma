@@ -55,8 +55,7 @@ spec:
   - cidr: 10.1.1.0/24
   - ip: 192.168.0.1
   ports:
-  - name: tcp-port
-    port: 443
+  - port: 443
     targetPort: 8443
     protocol: tcp # http, tcp, tls, grpc, http2
   destinations: # you can mix ip/domain/socket
@@ -95,13 +94,23 @@ status: # managed by CP. Not shared cross zone, but synced to global
     type: Kubernetes # | Kuma
 ```
 
-Ports in Service can be named, so we can also name ports in MeshService. 
-Target port can reference port in container by name. To avoid trying to resolve this port to a real port, we also support `targetPort#name`.
-To support this, we'll also enhance our Dataplane model, so it's possible to name the inbound. 
+* **match**: defines a list of domains/cidr/ips that should be routed through the sidecar
+  * **domain**: domain to match
+  * **cidr**: ranges of ips
+  * **ip**: specific ip
+* **accessPoint**: defines whether requests to the external service should be routed through the sidecar to the outside or through egress. The MeshOperator can override this behavior and enforce routing requests through egress. Possible values include: Egress, Sidecar.
+* **ports**: defines a list of ports and protocols
+  * **port**: defines a port to which a user does requests
+  * **protocol**: defines a protocol of the communication. Possible values:
+    * tls: should be used when TLS traffic is originated by the client application
+    * tcp: WARNING: shouldn't be used when match has only domains. On the TCP level we are not able to disinguish domain, in this case it is going to hijack whole traffic on this port.
+    * grpc
+    * http
+    * http2
+  * **targetPort**: defines a target port to which traffic should be sent. 
+* **destinations**: defines a list of destinations to which a user want to send requests for the matches.
+  * **address**: defines an address to which a user want to send a request. Is possible to provide domains, ips and unix sockets
+  * **port**: defines a port of a destination.
+* 
 
-To try to keep this MADR reasonable when it comes to length, next MADRs will cover
-* Multizone strategy.
-* Autogenerate MeshService on Kubernetes based on Service and on Universal based on Dataplane objects
-* VIP and hostname management
-* Policy matching
-* Referencing MeshService in `Dataplane#outbound` and Reachable Services
+#### Protocol
