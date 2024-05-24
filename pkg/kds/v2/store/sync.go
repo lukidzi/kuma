@@ -77,6 +77,7 @@ type syncResourceStore struct {
 	transactions  store.Transactions
 	metric        prometheus.Histogram
 	extensions    context.Context
+	isZone bool
 }
 
 func NewResourceSyncer(
@@ -85,6 +86,7 @@ func NewResourceSyncer(
 	transactions store.Transactions,
 	metrics core_metrics.Metrics,
 	extensions context.Context,
+	isZone bool,
 ) (ResourceSyncer, error) {
 	metric := prometheus.NewHistogram(prometheus.HistogramOpts{
 		Name: "kds_resources_sync",
@@ -99,6 +101,7 @@ func NewResourceSyncer(
 		transactions:  transactions,
 		metric:        metric,
 		extensions:    extensions,
+		isZone: isZone,
 	}, nil
 }
 
@@ -107,6 +110,7 @@ type OnUpdate struct {
 	opts []store.UpdateOptionsFunc
 }
 
+var counter int = 0
 func (s *syncResourceStore) Sync(syncCtx context.Context, upstreamResponse client_v2.UpstreamResponse, fs ...SyncOptionFunc) error {
 	now := core.Now()
 	defer func() {
@@ -225,6 +229,11 @@ func (s *syncResourceStore) Sync(syncCtx context.Context, upstreamResponse clien
 
 			// some Stores try to cast ResourceMeta to own Store type that's why we have to set meta to nil
 			r.SetMeta(nil)
+
+			if s.isZone && (upstreamResponse.Type == "MeshTimeout" || upstreamResponse.Type == "MeshRetry" || upstreamResponse.Type == "MeshCircuitBreaker") && counter < 3 {
+				counter ++
+				return errors.New("FAILS")
+			}
 
 			if err := s.resourceStore.Create(ctx, r, createOpts...); err != nil {
 				return err

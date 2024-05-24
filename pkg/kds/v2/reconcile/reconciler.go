@@ -11,6 +11,7 @@ import (
 	"golang.org/x/exp/maps"
 
 	config_core "github.com/kumahq/kuma/pkg/config/core"
+	"github.com/kumahq/kuma/pkg/core"
 	core_model "github.com/kumahq/kuma/pkg/core/resources/model"
 	cache_v2 "github.com/kumahq/kuma/pkg/kds/v2/cache"
 	util_kds_v2 "github.com/kumahq/kuma/pkg/kds/v2/util"
@@ -124,6 +125,8 @@ func (r *reconciler) changedTypes(old, new envoy_cache.ResourceSnapshot) []core_
 			changed = append(changed, core_model.ResourceType(typ))
 		}
 	}
+
+	core.Log.Info("changedTypes", "changed", changed)
 	return changed
 }
 
@@ -140,6 +143,7 @@ func (r *reconciler) forceNewVersion(snapshot envoy_cache.ResourceSnapshot, id s
 		}
 		for resourceName := range cacheSnapshot.VersionMap[typ] {
 			cacheSnapshot.VersionMap[typ][resourceName] = ""
+			core.Log.Info("forceNewVersion", "typ", typ, "forceNewVersion", resourceName)
 		}
 	}
 }

@@ -51,13 +51,13 @@ func (cb LoggingCallbacks) OnDeltaStreamClosed(streamID int64) {
 // OnStreamDeltaRequest is called once a request is received on a stream.
 // Returning an error will end processing and close the stream. OnStreamDeltaRequest will still be called.
 func (cb LoggingCallbacks) OnStreamDeltaRequest(streamID int64, req DeltaDiscoveryRequest) error {
-	cb.Log.V(1).Info("OnStreamDeltaRequest", "streamid", streamID, "req", req)
+	cb.Log.Info("OnStreamDeltaRequest", "streamid", streamID, "req", req)
 	return nil
 }
 
 // OnStreamDeltaResponse is called immediately prior to sending a response on a stream.
 func (cb LoggingCallbacks) OnStreamDeltaResponse(streamID int64, req DeltaDiscoveryRequest, resp DeltaDiscoveryResponse) {
-	cb.Log.V(1).Info("OnStreamDeltaResponse", "streamid", streamID, "req", req, "resp", resp)
+	cb.Log.Info("OnStreamDeltaResponse", "streamid", streamID, "req", req, "resp", resp)
 }
 
 // OnFetchRequest is called for each Fetch request. Returning an error will end processing of the
