@@ -74,7 +74,7 @@ func genConfig(parameters configParameters, proxyConfig xds.Proxy, enableReloada
 				Name: "gateway",
 				LayerSpecifier: &envoy_bootstrap_v3.RuntimeLayer_StaticLayer{
 					StaticLayer: util_proto.MustStruct(map[string]interface{}{
-						"overload.global_downstream_max_connections": connections,
+						"envoy.resource_monitors.downstream_connections": connections,
 					}),
 				},
 			},

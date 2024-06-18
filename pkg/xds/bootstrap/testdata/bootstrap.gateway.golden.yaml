@@ -37,7 +37,7 @@ layeredRuntime:
       re2.max_program_size.warn_level: 1000
   - name: gateway
     staticLayer:
-      overload.global_downstream_max_connections: 50000
+      envoy.resource_monitors.downstream_connections: 50000
   - name: gateway.listeners
     rtdsLayer:
       name: gateway.listeners
