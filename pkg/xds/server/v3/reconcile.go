@@ -126,10 +126,12 @@ func autoVersion(old *envoy_cache.Snapshot, new *envoy_cache.Snapshot) (*envoy_c
 
 	var changed []string
 	for resourceType, resource := range new.Resources {
+		core.Log.Info("resources", "resourceType", resourceType, "resource", resource, "old", old.Resources[resourceType])
 		if old.Resources[resourceType].Version != resource.Version {
 			changed = append(changed, resource.Version)
 		}
 	}
+	
 
 	return new, changed
 }
