@@ -21,6 +21,10 @@ properties:
         properties:
           meshExternalService:
             properties:
+              existLabels:
+                additionalProperties:
+                  type: boolean
+                type: object
               matchLabels:
                 additionalProperties:
                   type: string
@@ -28,6 +32,10 @@ properties:
             type: object
           meshMultiZoneService:
             properties:
+              existLabels:
+                additionalProperties:
+                  type: boolean
+                type: object
               matchLabels:
                 additionalProperties:
                   type: string
@@ -35,6 +43,10 @@ properties:
             type: object
           meshService:
             properties:
+              existLabels:
+                additionalProperties:
+                  type: boolean
+                type: object
               matchLabels:
                 additionalProperties:
                   type: string

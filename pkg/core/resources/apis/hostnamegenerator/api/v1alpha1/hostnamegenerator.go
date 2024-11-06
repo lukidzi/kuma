@@ -7,6 +7,7 @@ import (
 
 type LabelSelector struct {
 	MatchLabels map[string]string `json:"matchLabels,omitempty"`
+	ExistLabels map[string]bool   `json:"existLabels,omitempty"`
 }
 
 type Selector struct {
@@ -16,6 +17,12 @@ type Selector struct {
 }
 
 func (s LabelSelector) Matches(labels map[string]string) bool {
+	for tag, expect := range s.ExistLabels {
+		_, exist := labels[tag]
+		if exist != expect {
+			return false
+		}
+	}
 	for tag, matchValue := range s.MatchLabels {
 		labelValue, exist := labels[tag]
 		if !exist {

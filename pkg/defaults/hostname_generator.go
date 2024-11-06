@@ -94,11 +94,31 @@ func EnsureHostnameGeneratorExists(ctx context.Context, resManager core_manager.
 					MatchLabels: map[string]string{
 						mesh_proto.ResourceOriginLabel: string(mesh_proto.GlobalResourceOrigin),
 					},
+					ExistLabels: map[string]bool{
+						mesh_proto.ZoneTag: false,
+					},
 				},
 			},
 			Template: `{{ .DisplayName }}.extsvc.mesh.local`,
 		}
-		if err := ensureHostnameGeneratorExists(ctx, resManager, log, "synced-mesh-external-service", namespace, nil, spec); err != nil {
+		if err := ensureHostnameGeneratorExists(ctx, resManager, log, "synced-global-mesh-external-service", namespace, nil, spec); err != nil {
+			return err
+		}
+
+		spec = hostnamegenerator_api.HostnameGenerator{
+			Selector: hostnamegenerator_api.Selector{
+				MeshExternalService: &hostnamegenerator_api.LabelSelector{
+					MatchLabels: map[string]string{
+						mesh_proto.ResourceOriginLabel: string(mesh_proto.GlobalResourceOrigin),
+					},
+					ExistLabels: map[string]bool{
+						mesh_proto.ZoneTag: true,
+					},
+				},
+			},
+			Template: `{{ .DisplayName }}.extsvc.{{ .Zone }}.mesh.local`,
+		}
+		if err := ensureHostnameGeneratorExists(ctx, resManager, log, "synced-zone-mesh-external-service", namespace, nil, spec); err != nil {
 			return err
 		}
 	}

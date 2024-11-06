@@ -44,6 +44,10 @@ spec:
                 properties:
                   meshExternalService:
                     properties:
+                      existLabels:
+                        additionalProperties:
+                          type: boolean
+                        type: object
                       matchLabels:
                         additionalProperties:
                           type: string
@@ -51,6 +55,10 @@ spec:
                     type: object
                   meshMultiZoneService:
                     properties:
+                      existLabels:
+                        additionalProperties:
+                          type: boolean
+                        type: object
                       matchLabels:
                         additionalProperties:
                           type: string
@@ -58,6 +66,10 @@ spec:
                     type: object
                   meshService:
                     properties:
+                      existLabels:
+                        additionalProperties:
+                          type: boolean
+                        type: object
                       matchLabels:
                         additionalProperties:
                           type: string

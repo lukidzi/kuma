@@ -35,18 +35,18 @@ func (g *InternalServicesGenerator) Generate(
 
 	availableServices := g.distinctAvailableServices(proxy.ZoneEgressProxy.ZoneIngresses, meshName, servicesMap)
 
-	testMeses := []*meshexternalservice_api.MeshExternalServiceResource{}
-	mess := meshResources.Resources[meshexternalservice_api.MeshExternalServiceType]
-	for _, mes := range mess.(*meshexternalservice_api.MeshExternalServiceResourceList).GetItems() {
+	otherZonesMes := []*meshexternalservice_api.MeshExternalServiceResource{}
+	mesResources := meshResources.Resources[meshexternalservice_api.MeshExternalServiceType]
+	for _, mes := range mesResources.(*meshexternalservice_api.MeshExternalServiceResourceList).GetItems() {
 		if zone, found := mes.GetMeta().GetLabels()[mesh_proto.ZoneTag]; found && zone != proxy.Zone {
-			testMeses = append(testMeses, mes.(*meshexternalservice_api.MeshExternalServiceResource))
+			otherZonesMes = append(otherZonesMes, mes.(*meshexternalservice_api.MeshExternalServiceResource))
 		}
 	}
 	destinations := zoneproxy.BuildMeshDestinations(
 		availableServices,
 		xds_context.Resources{MeshLocalResources: meshResources.Resources},
 		nil, // todo(jakubdyszkiewicz) add support for MeshService + egress
-		testMeses,
+		otherZonesMes,
 		nil,
 		"",
 		xdsCtx.Mesh.ResolveResourceIdentifier,
