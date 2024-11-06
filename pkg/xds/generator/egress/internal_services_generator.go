@@ -38,7 +38,7 @@ func (g *InternalServicesGenerator) Generate(
 	testMeses := []*meshexternalservice_api.MeshExternalServiceResource{}
 	mess := meshResources.Resources[meshexternalservice_api.MeshExternalServiceType]
 	for _, mes := range mess.(*meshexternalservice_api.MeshExternalServiceResourceList).GetItems() {
-		if mes.GetMeta().GetLabels()[mesh_proto.ZoneTag] != proxy.Zone {
+		if zone, found := mes.GetMeta().GetLabels()[mesh_proto.ZoneTag]; found && zone != proxy.Zone {
 			testMeses = append(testMeses, mes.(*meshexternalservice_api.MeshExternalServiceResource))
 		}
 	}
