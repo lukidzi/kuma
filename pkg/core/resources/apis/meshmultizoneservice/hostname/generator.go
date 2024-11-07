@@ -5,6 +5,8 @@ import (
 	"reflect"
 
 	"github.com/pkg/errors"
+	kube_meta "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 
 	hostnamegenerator_api "github.com/kumahq/kuma/pkg/core/resources/apis/hostnamegenerator/api/v1alpha1"
 	"github.com/kumahq/kuma/pkg/core/resources/apis/hostnamegenerator/hostname"
@@ -65,7 +67,11 @@ func (g *MeshMultiZoneServiceHostnameGenerator) GenerateHostname(localZone strin
 	if generator.Spec.Selector.MeshMultiZoneService == nil {
 		return "", nil
 	}
-	if !generator.Spec.Selector.MeshMultiZoneService.Matches(service.Meta.GetLabels()) {
+	selector, err := kube_meta.LabelSelectorAsSelector(generator.Spec.Selector.MeshMultiZoneService)
+	if err != nil {
+		return "", err
+	}
+	if !selector.Matches(labels.Set(service.Meta.GetLabels())) {
 		return "", nil
 	}
 	return hostname.EvaluateTemplate(localZone, generator.Spec.Template, service.GetMeta())

@@ -5,35 +5,33 @@ import (
 	kube_meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-type LabelSelector struct {
-	MatchLabels map[string]string `json:"matchLabels,omitempty"`
-	ExistLabels map[string]bool   `json:"existLabels,omitempty"`
-}
+// type LabelSelector struct {
+// 	MatchLabels      map[string]string                    `json:"matchLabels,omitempty"`
+// 	MatchExpressions []kube_meta.LabelSelectorRequirement `json:"matchExpressions,omitempty"`
+// }
 
 type Selector struct {
-	MeshService          *LabelSelector `json:"meshService,omitempty"`
-	MeshExternalService  *LabelSelector `json:"meshExternalService,omitempty"`
-	MeshMultiZoneService *LabelSelector `json:"meshMultiZoneService,omitempty"`
+	MeshService          *kube_meta.LabelSelector `json:"meshService,omitempty"`
+	MeshExternalService  *kube_meta.LabelSelector `json:"meshExternalService,omitempty"`
+	MeshMultiZoneService *kube_meta.LabelSelector `json:"meshMultiZoneService,omitempty"`
 }
 
-func (s LabelSelector) Matches(labels map[string]string) bool {
-	for tag, expect := range s.ExistLabels {
-		_, exist := labels[tag]
-		if exist != expect {
-			return false
-		}
-	}
-	for tag, matchValue := range s.MatchLabels {
-		labelValue, exist := labels[tag]
-		if !exist {
-			return false
-		}
-		if matchValue != labelValue {
-			return false
-		}
-	}
-	return true
-}
+// func Matches(labels map[string]string) bool {
+// 	t, err := kube_meta.LabelSelectorAsSelector(s)
+// 	// for _, exp := range s.MatchExpressions {
+// 	// 	exp.
+// 	// }
+// 	for tag, matchValue := range s.MatchLabels {
+// 		labelValue, exist := labels[tag]
+// 		if !exist {
+// 			return false
+// 		}
+// 		if matchValue != labelValue {
+// 			return false
+// 		}
+// 	}
+// 	return true
+// }
 
 // HostnameGenerator
 // +kuma:policy:is_policy=false

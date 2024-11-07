@@ -5,6 +5,7 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
+	kube_meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	mesh_proto "github.com/kumahq/kuma/api/mesh/v1alpha1"
 	kuma_cp "github.com/kumahq/kuma/pkg/config/app/kuma-cp"
@@ -29,7 +30,7 @@ func EnsureHostnameGeneratorExists(ctx context.Context, resManager core_manager.
 	if cfg.Mode == core.Global {
 		spec := hostnamegenerator_api.HostnameGenerator{
 			Selector: hostnamegenerator_api.Selector{
-				MeshMultiZoneService: &hostnamegenerator_api.LabelSelector{
+				MeshMultiZoneService: &kube_meta.LabelSelector{
 					MatchLabels: map[string]string{
 						mesh_proto.ResourceOriginLabel: string(mesh_proto.GlobalResourceOrigin),
 					},
@@ -43,7 +44,7 @@ func EnsureHostnameGeneratorExists(ctx context.Context, resManager core_manager.
 
 		spec = hostnamegenerator_api.HostnameGenerator{
 			Selector: hostnamegenerator_api.Selector{
-				MeshService: &hostnamegenerator_api.LabelSelector{
+				MeshService: &kube_meta.LabelSelector{
 					MatchLabels: map[string]string{
 						mesh_proto.ResourceOriginLabel: string(mesh_proto.GlobalResourceOrigin),
 						metadata.HeadlessService:       "false",
@@ -59,7 +60,7 @@ func EnsureHostnameGeneratorExists(ctx context.Context, resManager core_manager.
 
 		spec = hostnamegenerator_api.HostnameGenerator{
 			Selector: hostnamegenerator_api.Selector{
-				MeshService: &hostnamegenerator_api.LabelSelector{
+				MeshService: &kube_meta.LabelSelector{
 					MatchLabels: map[string]string{
 						mesh_proto.ResourceOriginLabel: string(mesh_proto.GlobalResourceOrigin),
 						metadata.HeadlessService:       "true",
@@ -75,7 +76,7 @@ func EnsureHostnameGeneratorExists(ctx context.Context, resManager core_manager.
 
 		spec = hostnamegenerator_api.HostnameGenerator{
 			Selector: hostnamegenerator_api.Selector{
-				MeshService: &hostnamegenerator_api.LabelSelector{
+				MeshService: &kube_meta.LabelSelector{
 					MatchLabels: map[string]string{
 						mesh_proto.ResourceOriginLabel: string(mesh_proto.GlobalResourceOrigin),
 						mesh_proto.EnvTag:              mesh_proto.UniversalEnvironment,
@@ -90,12 +91,15 @@ func EnsureHostnameGeneratorExists(ctx context.Context, resManager core_manager.
 
 		spec = hostnamegenerator_api.HostnameGenerator{
 			Selector: hostnamegenerator_api.Selector{
-				MeshExternalService: &hostnamegenerator_api.LabelSelector{
+				MeshExternalService: &kube_meta.LabelSelector{
 					MatchLabels: map[string]string{
 						mesh_proto.ResourceOriginLabel: string(mesh_proto.GlobalResourceOrigin),
 					},
-					ExistLabels: map[string]bool{
-						mesh_proto.ZoneTag: false,
+					MatchExpressions: []kube_meta.LabelSelectorRequirement{
+						{
+							Key:      "kuma.io/zone",
+							Operator: kube_meta.LabelSelectorOpDoesNotExist,
+						},
 					},
 				},
 			},
@@ -107,12 +111,15 @@ func EnsureHostnameGeneratorExists(ctx context.Context, resManager core_manager.
 
 		spec = hostnamegenerator_api.HostnameGenerator{
 			Selector: hostnamegenerator_api.Selector{
-				MeshExternalService: &hostnamegenerator_api.LabelSelector{
+				MeshExternalService: &kube_meta.LabelSelector{
 					MatchLabels: map[string]string{
 						mesh_proto.ResourceOriginLabel: string(mesh_proto.GlobalResourceOrigin),
 					},
-					ExistLabels: map[string]bool{
-						mesh_proto.ZoneTag: true,
+					MatchExpressions: []kube_meta.LabelSelectorRequirement{
+						{
+							Key:      "kuma.io/zone",
+							Operator: kube_meta.LabelSelectorOpExists,
+						},
 					},
 				},
 			},
@@ -129,7 +136,7 @@ func EnsureHostnameGeneratorExists(ctx context.Context, resManager core_manager.
 		}
 		spec := hostnamegenerator_api.HostnameGenerator{
 			Selector: hostnamegenerator_api.Selector{
-				MeshExternalService: &hostnamegenerator_api.LabelSelector{
+				MeshExternalService: &kube_meta.LabelSelector{
 					MatchLabels: map[string]string{
 						mesh_proto.ResourceOriginLabel: string(mesh_proto.ZoneResourceOrigin),
 					},
@@ -144,7 +151,7 @@ func EnsureHostnameGeneratorExists(ctx context.Context, resManager core_manager.
 		if cfg.Environment == core.UniversalEnvironment {
 			spec = hostnamegenerator_api.HostnameGenerator{
 				Selector: hostnamegenerator_api.Selector{
-					MeshService: &hostnamegenerator_api.LabelSelector{
+					MeshService: &kube_meta.LabelSelector{
 						MatchLabels: map[string]string{
 							mesh_proto.ResourceOriginLabel: string(mesh_proto.ZoneResourceOrigin),
 						},
