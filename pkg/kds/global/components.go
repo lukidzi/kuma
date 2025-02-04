@@ -22,12 +22,12 @@ import (
 	"github.com/kumahq/kuma/pkg/core/runtime"
 	"github.com/kumahq/kuma/pkg/core/runtime/component"
 	"github.com/kumahq/kuma/pkg/core/user"
+	kds_client "github.com/kumahq/kuma/pkg/kds/client"
 	"github.com/kumahq/kuma/pkg/kds/mux"
+	kds_server "github.com/kumahq/kuma/pkg/kds/server"
 	"github.com/kumahq/kuma/pkg/kds/service"
+	kds_sync_store "github.com/kumahq/kuma/pkg/kds/store"
 	"github.com/kumahq/kuma/pkg/kds/util"
-	kds_client_v2 "github.com/kumahq/kuma/pkg/kds/v2/client"
-	kds_server_v2 "github.com/kumahq/kuma/pkg/kds/v2/server"
-	kds_sync_store_v2 "github.com/kumahq/kuma/pkg/kds/v2/store"
 	kuma_log "github.com/kumahq/kuma/pkg/log"
 	resources_k8s "github.com/kumahq/kuma/pkg/plugins/resources/k8s"
 	util_proto "github.com/kumahq/kuma/pkg/util/proto"
@@ -45,7 +45,7 @@ func Setup(rt runtime.Runtime) error {
 	}
 	reg := registry.Global()
 
-	kdsServerV2, err := kds_server_v2.New(
+	kdsServerV2, err := kds_server.New(
 		kdsDeltaGlobalLog,
 		rt,
 		reg.ObjectTypes(model.HasKDSFlag(model.GlobalToZoneSelector)),
@@ -59,7 +59,7 @@ func Setup(rt runtime.Runtime) error {
 		return err
 	}
 
-	resourceSyncerV2, err := kds_sync_store_v2.NewResourceSyncer(kdsDeltaGlobalLog, rt.ResourceStore(), rt.Transactions(), rt.Metrics(), rt.Extensions())
+	resourceSyncerV2, err := kds_sync_store.NewResourceSyncer(kdsDeltaGlobalLog, rt.ResourceStore(), rt.Transactions(), rt.Metrics(), rt.Extensions())
 	if err != nil {
 		return err
 	}
@@ -95,12 +95,12 @@ func Setup(rt runtime.Runtime) error {
 		}
 		log := kdsDeltaGlobalLog.WithValues("peer-id", zoneID)
 		log = kuma_log.AddFieldsFromCtx(log, stream.Context(), rt.Extensions())
-		kdsStream := kds_client_v2.NewDeltaKDSStream(stream, zoneID, rt, "")
-		sink := kds_client_v2.NewKDSSyncClient(
+		kdsStream := kds_client.NewDeltaKDSStream(stream, zoneID, rt, "")
+		sink := kds_client.NewKDSSyncClient(
 			log,
 			reg.ObjectTypes(model.HasKDSFlag(model.ZoneToGlobalFlag)),
 			kdsStream,
-			kds_sync_store_v2.GlobalSyncCallback(stream.Context(), resourceSyncerV2, rt.Config().Store.Type == store_config.KubernetesStore, kubeFactory, rt.Config().Store.Kubernetes.SystemNamespace),
+			kds_sync_store.GlobalSyncCallback(stream.Context(), resourceSyncerV2, rt.Config().Store.Type == store_config.KubernetesStore, kubeFactory, rt.Config().Store.Kubernetes.SystemNamespace),
 			rt.Config().Multizone.Global.KDS.ResponseBackoff.Duration,
 		)
 		if err := sink.Receive(); err != nil && (status.Code(err) != codes.Canceled && !errors.Is(err, context.Canceled)) {

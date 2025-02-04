@@ -13,11 +13,11 @@ import (
 	"github.com/kumahq/kuma/pkg/core/resources/registry"
 	core_runtime "github.com/kumahq/kuma/pkg/core/runtime"
 	"github.com/kumahq/kuma/pkg/core/runtime/component"
+	kds_client "github.com/kumahq/kuma/pkg/kds/client"
 	"github.com/kumahq/kuma/pkg/kds/mux"
+	kds_server "github.com/kumahq/kuma/pkg/kds/server"
 	"github.com/kumahq/kuma/pkg/kds/service"
-	kds_client_v2 "github.com/kumahq/kuma/pkg/kds/v2/client"
-	kds_server_v2 "github.com/kumahq/kuma/pkg/kds/v2/server"
-	kds_sync_store_v2 "github.com/kumahq/kuma/pkg/kds/v2/store"
+	kds_sync_store "github.com/kumahq/kuma/pkg/kds/store"
 	resources_k8s "github.com/kumahq/kuma/pkg/plugins/resources/k8s"
 )
 
@@ -35,7 +35,7 @@ func Setup(rt core_runtime.Runtime) error {
 	reg := registry.Global()
 	kdsCtx := rt.KDSContext()
 
-	kdsServerV2, err := kds_server_v2.New(
+	kdsServerV2, err := kds_server.New(
 		kdsZoneLog,
 		rt,
 		reg.ObjectTypes(model.HasKDSFlag(model.ZoneToGlobalFlag)),
@@ -48,7 +48,7 @@ func Setup(rt core_runtime.Runtime) error {
 	if err != nil {
 		return err
 	}
-	resourceSyncerV2, err := kds_sync_store_v2.NewResourceSyncer(kdsDeltaZoneLog, rt.ResourceStore(), rt.Transactions(), rt.Metrics(), rt.Extensions())
+	resourceSyncerV2, err := kds_sync_store.NewResourceSyncer(kdsDeltaZoneLog, rt.ResourceStore(), rt.Transactions(), rt.Metrics(), rt.Extensions())
 	if err != nil {
 		return err
 	}
@@ -61,11 +61,11 @@ func Setup(rt core_runtime.Runtime) error {
 
 	onGlobalToZoneSyncStarted := mux.OnGlobalToZoneSyncStartedFunc(func(stream mesh_proto.KDSSyncService_GlobalToZoneSyncClient, errChan chan error) {
 		log := kdsDeltaZoneLog.WithValues("kds-version", "v2")
-		syncClient := kds_client_v2.NewKDSSyncClient(
+		syncClient := kds_client.NewKDSSyncClient(
 			log,
 			reg.ObjectTypes(model.HasKDSFlag(model.GlobalToZoneSelector)),
-			kds_client_v2.NewDeltaKDSStream(stream, zone, rt, cfgJson),
-			kds_sync_store_v2.ZoneSyncCallback(
+			kds_client.NewDeltaKDSStream(stream, zone, rt, cfgJson),
+			kds_sync_store.ZoneSyncCallback(
 				stream.Context(),
 				rt.KDSContext().Configs,
 				resourceSyncerV2,
@@ -94,7 +94,7 @@ func Setup(rt core_runtime.Runtime) error {
 	onZoneToGlobalSyncStarted := mux.OnZoneToGlobalSyncStartedFunc(func(stream mesh_proto.KDSSyncService_ZoneToGlobalSyncClient, errChan chan error) {
 		log := kdsDeltaZoneLog.WithValues("kds-version", "v2", "peer-id", "global")
 		log.Info("ZoneToGlobalSync new session created")
-		session := kds_server_v2.NewServerStream(stream)
+		session := kds_server.NewServerStream(stream)
 		go func() {
 			err := kdsServerV2.ZoneToGlobal(session)
 			if err != nil && !errors.Is(err, context.Canceled) {

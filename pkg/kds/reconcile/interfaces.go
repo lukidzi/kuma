@@ -8,7 +8,7 @@ import (
 	"github.com/go-logr/logr"
 
 	"github.com/kumahq/kuma/pkg/core/resources/model"
-	cache_kds_v2 "github.com/kumahq/kuma/pkg/kds/v2/cache"
+	cache_kds "github.com/kumahq/kuma/pkg/kds/cache"
 )
 
 // Reconciler re-computes configuration for a given node.
@@ -22,5 +22,5 @@ type Reconciler interface {
 
 // Generates a snapshot of xDS resources for a given node.
 type SnapshotGenerator interface {
-	GenerateSnapshot(context.Context, *envoy_core.Node, cache_kds_v2.SnapshotBuilder, map[model.ResourceType]struct{}) (envoy_cache.ResourceSnapshot, error)
+	GenerateSnapshot(context.Context, *envoy_core.Node, cache_kds.SnapshotBuilder, map[model.ResourceType]struct{}) (envoy_cache.ResourceSnapshot, error)
 }

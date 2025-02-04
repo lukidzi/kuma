@@ -22,9 +22,9 @@ import (
 	"github.com/kumahq/kuma/pkg/core/resources/registry"
 	"github.com/kumahq/kuma/pkg/core/resources/store"
 	core_runtime "github.com/kumahq/kuma/pkg/core/runtime"
+	client "github.com/kumahq/kuma/pkg/kds/client"
 	kds_context "github.com/kumahq/kuma/pkg/kds/context"
-	client_v2 "github.com/kumahq/kuma/pkg/kds/v2/client"
-	sync_store_v2 "github.com/kumahq/kuma/pkg/kds/v2/store"
+	sync_store "github.com/kumahq/kuma/pkg/kds/store"
 	core_metrics "github.com/kumahq/kuma/pkg/metrics"
 	"github.com/kumahq/kuma/pkg/plugins/resources/memory"
 	"github.com/kumahq/kuma/pkg/test/grpc"
@@ -36,12 +36,12 @@ var _ = Describe("Zone Delta Sync", func() {
 	zoneName := "zone-1"
 
 	runtimeInfo := core_runtime.NewRuntimeInfo("zone-inst", config_core.Zone)
-	newPolicySink := func(zoneName string, resourceSyncer sync_store_v2.ResourceSyncer, cs *grpc.MockDeltaClientStream, configs map[string]bool) client_v2.KDSSyncClient {
-		return client_v2.NewKDSSyncClient(
+	newPolicySink := func(zoneName string, resourceSyncer sync_store.ResourceSyncer, cs *grpc.MockDeltaClientStream, configs map[string]bool) client.KDSSyncClient {
+		return client.NewKDSSyncClient(
 			core.Log.WithName("kds-sink"),
 			registry.Global().ObjectTypes(model.HasKDSFlag(model.GlobalToZoneSelector)),
-			client_v2.NewDeltaKDSStream(cs, zoneName, runtimeInfo, ""),
-			sync_store_v2.ZoneSyncCallback(context.Background(), configs, resourceSyncer, false, zoneName, nil, "kuma-system"), 0,
+			client.NewDeltaKDSStream(cs, zoneName, runtimeInfo, ""),
+			sync_store.ZoneSyncCallback(context.Background(), configs, resourceSyncer, false, zoneName, nil, "kuma-system"), 0,
 		)
 	}
 	ingressFunc := func(zone string) *mesh_proto.ZoneIngress {
@@ -63,7 +63,7 @@ var _ = Describe("Zone Delta Sync", func() {
 	}
 
 	var zoneStore store.ResourceStore
-	var zoneSyncer sync_store_v2.ResourceSyncer
+	var zoneSyncer sync_store.ResourceSyncer
 	var globalStore store.ResourceStore
 	var closeFunc func()
 
@@ -96,7 +96,7 @@ var _ = Describe("Zone Delta Sync", func() {
 		zoneStore = memory.NewStore()
 		metrics, err := core_metrics.NewMetrics("")
 		Expect(err).ToNot(HaveOccurred())
-		zoneSyncer, err = sync_store_v2.NewResourceSyncer(core.Log.WithName("kds-syncer"), zoneStore, store.NoTransactions{}, metrics, context.Background())
+		zoneSyncer, err = sync_store.NewResourceSyncer(core.Log.WithName("kds-syncer"), zoneStore, store.NoTransactions{}, metrics, context.Background())
 		Expect(err).ToNot(HaveOccurred())
 
 		wg.Add(1)

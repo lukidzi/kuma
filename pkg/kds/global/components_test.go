@@ -17,7 +17,7 @@ import (
 	"github.com/kumahq/kuma/pkg/core/resources/model"
 	"github.com/kumahq/kuma/pkg/core/resources/registry"
 	"github.com/kumahq/kuma/pkg/core/resources/store"
-	sync_store_v2 "github.com/kumahq/kuma/pkg/kds/v2/store"
+	sync_store "github.com/kumahq/kuma/pkg/kds/store"
 	core_metrics "github.com/kumahq/kuma/pkg/metrics"
 	"github.com/kumahq/kuma/pkg/plugins/resources/memory"
 	"github.com/kumahq/kuma/pkg/test/grpc"
@@ -149,7 +149,7 @@ var _ = Describe("Global Sync", func() {
 	}
 
 	Context("Delta KDS", func() {
-		var globalSyncer sync_store_v2.ResourceSyncer
+		var globalSyncer sync_store.ResourceSyncer
 
 		BeforeEach(func() {
 			const numOfZones = 2
@@ -181,14 +181,14 @@ var _ = Describe("Global Sync", func() {
 			globalStore = memory.NewStore()
 			metrics, err := core_metrics.NewMetrics("")
 			Expect(err).ToNot(HaveOccurred())
-			globalSyncer, err = sync_store_v2.NewResourceSyncer(core.Log, globalStore, store.NoTransactions{}, metrics, context.Background())
+			globalSyncer, err = sync_store.NewResourceSyncer(core.Log, globalStore, store.NoTransactions{}, metrics, context.Background())
 			Expect(err).ToNot(HaveOccurred())
 			stopCh := make(chan struct{})
 			clientStreams := []*grpc.MockDeltaClientStream{}
 			for _, ss := range serverStreams {
 				clientStreams = append(clientStreams, ss.ClientStream(stopCh))
 			}
-			kds_setup.StartDeltaClient(clientStreams, []model.ResourceType{mesh.DataplaneType}, stopCh, sync_store_v2.GlobalSyncCallback(context.Background(), globalSyncer, false, nil, "kuma-system"))
+			kds_setup.StartDeltaClient(clientStreams, []model.ResourceType{mesh.DataplaneType}, stopCh, sync_store.GlobalSyncCallback(context.Background(), globalSyncer, false, nil, "kuma-system"))
 
 			// Create Zone resources for each Kuma CP Zone
 			for i := 0; i < numOfZones; i++ {

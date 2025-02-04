@@ -15,7 +15,7 @@ import (
 	core_model "github.com/kumahq/kuma/pkg/core/resources/model"
 	"github.com/kumahq/kuma/pkg/kds"
 	"github.com/kumahq/kuma/pkg/kds/context"
-	reconcile_v2 "github.com/kumahq/kuma/pkg/kds/v2/reconcile"
+	"github.com/kumahq/kuma/pkg/kds/reconcile"
 	policies_api "github.com/kumahq/kuma/pkg/plugins/policies/meshaccesslog/api/v1alpha1"
 	meshtimeout_api "github.com/kumahq/kuma/pkg/plugins/policies/meshtimeout/api/v1alpha1"
 	"github.com/kumahq/kuma/pkg/test/kds/samples"
@@ -91,7 +91,7 @@ var _ = Describe("IsReferenced", func() {
 		return func(mesh, name string) core_model.ResourceMeta {
 			gm := meta(mesh, name)
 
-			var mapper reconcile_v2.ResourceMapper
+			var mapper reconcile.ResourceMapper
 			switch dst {
 			case "global":
 				mapper = context.HashSuffixMapper(false, mesh_proto.ZoneTag, mesh_proto.KubeNamespaceTag)

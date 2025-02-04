@@ -14,7 +14,7 @@ import (
 	"github.com/kumahq/kuma/pkg/core/resources/model"
 	core_model "github.com/kumahq/kuma/pkg/core/resources/model"
 	"github.com/kumahq/kuma/pkg/core/resources/registry"
-	cache_v2 "github.com/kumahq/kuma/pkg/kds/v2/cache"
+	"github.com/kumahq/kuma/pkg/kds/cache"
 	util_proto "github.com/kumahq/kuma/pkg/util/proto"
 )
 
@@ -30,9 +30,9 @@ func ToCoreResourceList(response *envoy_sd.DiscoveryResponse) (model.ResourceLis
 	return toResources(model.ResourceType(response.TypeUrl), krs)
 }
 
-func ToDeltaCoreResourceList(response *envoy_sd.DeltaDiscoveryResponse) (model.ResourceList, cache_v2.NameToVersion, error) {
+func ToDeltaCoreResourceList(response *envoy_sd.DeltaDiscoveryResponse) (model.ResourceList, cache.NameToVersion, error) {
 	krs := []*mesh_proto.KumaResource{}
-	resourceVersions := cache_v2.NameToVersion{}
+	resourceVersions := cache.NameToVersion{}
 	for _, r := range response.Resources {
 		kr := &mesh_proto.KumaResource{}
 		if err := util_proto.UnmarshalAnyTo(r.GetResource(), kr); err != nil {

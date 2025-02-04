@@ -22,8 +22,8 @@ import (
 	"github.com/kumahq/kuma/pkg/core/resources/store"
 	"github.com/kumahq/kuma/pkg/core/user"
 	"github.com/kumahq/kuma/pkg/kds"
+	"github.com/kumahq/kuma/pkg/kds/client"
 	"github.com/kumahq/kuma/pkg/kds/util"
-	client_v2 "github.com/kumahq/kuma/pkg/kds/v2/client"
 	kuma_log "github.com/kumahq/kuma/pkg/log"
 	core_metrics "github.com/kumahq/kuma/pkg/metrics"
 	resources_k8s "github.com/kumahq/kuma/pkg/plugins/resources/k8s"
@@ -41,7 +41,7 @@ type ResourceSyncer interface {
 	//
 	// Sync takes into account only 'Name' and 'Mesh' when it comes to upstream's Meta.
 	// 'Version', 'CreationTime' and 'ModificationTime' are managed by downstream store.
-	Sync(ctx context.Context, upstream client_v2.UpstreamResponse, fs ...SyncOptionFunc) error
+	Sync(ctx context.Context, upstream client.UpstreamResponse, fs ...SyncOptionFunc) error
 }
 
 type SyncOption struct {
@@ -107,7 +107,7 @@ type OnUpdate struct {
 	opts []store.UpdateOptionsFunc
 }
 
-func (s *syncResourceStore) Sync(syncCtx context.Context, upstreamResponse client_v2.UpstreamResponse, fs ...SyncOptionFunc) error {
+func (s *syncResourceStore) Sync(syncCtx context.Context, upstreamResponse client.UpstreamResponse, fs ...SyncOptionFunc) error {
 	now := core.Now()
 	defer func() {
 		s.metric.Observe(float64(time.Since(now).Milliseconds()) / 1000)
@@ -278,9 +278,9 @@ func newIndexed(rs core_model.ResourceList) *indexed {
 	return &indexed{indexByResourceKey: idxByRk}
 }
 
-func ZoneSyncCallback(ctx context.Context, configToSync map[string]bool, syncer ResourceSyncer, k8sStore bool, localZone string, kubeFactory resources_k8s.KubeFactory, systemNamespace string) *client_v2.Callbacks {
-	return &client_v2.Callbacks{
-		OnResourcesReceived: func(upstream client_v2.UpstreamResponse) error {
+func ZoneSyncCallback(ctx context.Context, configToSync map[string]bool, syncer ResourceSyncer, k8sStore bool, localZone string, kubeFactory resources_k8s.KubeFactory, systemNamespace string) *client.Callbacks {
+	return &client.Callbacks{
+		OnResourcesReceived: func(upstream client.UpstreamResponse) error {
 			if k8sStore && upstream.Type != system.ConfigType && upstream.Type != system.SecretType && upstream.Type != system.GlobalSecretType {
 				if err := addNamespaceSuffix(kubeFactory, upstream, systemNamespace); err != nil {
 					return err
@@ -330,11 +330,11 @@ func GlobalSyncCallback(
 	k8sStore bool,
 	kubeFactory resources_k8s.KubeFactory,
 	systemNamespace string,
-) *client_v2.Callbacks {
+) *client.Callbacks {
 	supportsHashSuffixes := kds.ContextHasFeature(ctx, kds.FeatureHashSuffix)
 
-	return &client_v2.Callbacks{
-		OnResourcesReceived: func(upstream client_v2.UpstreamResponse) error {
+	return &client.Callbacks{
+		OnResourcesReceived: func(upstream client.UpstreamResponse) error {
 			if !supportsHashSuffixes {
 				// todo: remove in 2 releases after 2.6.x
 				upstream.RemovedResourcesKey = util.AddPrefixToResourceKeyNames(upstream.RemovedResourcesKey, upstream.ControlPlaneId)
@@ -380,7 +380,7 @@ func GlobalSyncCallback(
 	}
 }
 
-func addNamespaceSuffix(kubeFactory resources_k8s.KubeFactory, upstream client_v2.UpstreamResponse, ns string) error {
+func addNamespaceSuffix(kubeFactory resources_k8s.KubeFactory, upstream client.UpstreamResponse, ns string) error {
 	// if type of Store is Kubernetes then we want to store upstream resources in dedicated Namespace.
 	// KubernetesStore parses Name and considers substring after the last dot as a Namespace's Name.
 	kubeObject, err := kubeFactory.NewObject(upstream.AddedResources.NewItem())

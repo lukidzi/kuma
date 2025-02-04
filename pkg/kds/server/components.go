@@ -18,9 +18,9 @@ import (
 	"github.com/kumahq/kuma/pkg/core/resources/model"
 	core_runtime "github.com/kumahq/kuma/pkg/core/runtime"
 	"github.com/kumahq/kuma/pkg/events"
+	"github.com/kumahq/kuma/pkg/kds/reconcile"
 	"github.com/kumahq/kuma/pkg/kds/status"
-	reconcile_v2 "github.com/kumahq/kuma/pkg/kds/v2/reconcile"
-	"github.com/kumahq/kuma/pkg/kds/v2/util"
+	"github.com/kumahq/kuma/pkg/kds/util"
 	kuma_log "github.com/kumahq/kuma/pkg/log"
 	core_metrics "github.com/kumahq/kuma/pkg/metrics"
 	util_watchdog "github.com/kumahq/kuma/pkg/util/watchdog"
@@ -34,17 +34,17 @@ func New(
 	providedTypes []model.ResourceType,
 	serverID string,
 	refresh time.Duration,
-	filter reconcile_v2.ResourceFilter,
-	mapper reconcile_v2.ResourceMapper,
+	filter reconcile.ResourceFilter,
+	mapper reconcile.ResourceMapper,
 	nackBackoff time.Duration,
 ) (Server, error) {
 	hasher, cache := newKDSContext(log)
-	generator := reconcile_v2.NewSnapshotGenerator(rt.ReadOnlyResourceManager(), filter, mapper)
+	generator := reconcile.NewSnapshotGenerator(rt.ReadOnlyResourceManager(), filter, mapper)
 	statsCallbacks, err := util_xds.NewStatsCallbacks(rt.Metrics(), "kds_delta", kdsVersionExtractor)
 	if err != nil {
 		return nil, err
 	}
-	reconciler := reconcile_v2.NewReconciler(hasher, cache, generator, rt.GetMode(), statsCallbacks, rt.Tenants())
+	reconciler := reconcile.NewReconciler(hasher, cache, generator, rt.GetMode(), statsCallbacks, rt.Tenants())
 	syncTracker, err := newSyncTracker(
 		log,
 		reconciler,
@@ -73,7 +73,7 @@ func New(
 
 func newSyncTracker(
 	log logr.Logger,
-	reconciler reconcile_v2.Reconciler,
+	reconciler reconcile.Reconciler,
 	refresh time.Duration,
 	metrics core_metrics.Metrics,
 	providedTypes []model.ResourceType,

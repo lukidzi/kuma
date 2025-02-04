@@ -28,8 +28,8 @@ import (
 	"github.com/kumahq/kuma/pkg/insights/globalinsight"
 	"github.com/kumahq/kuma/pkg/intercp/client"
 	kds_context "github.com/kumahq/kuma/pkg/kds/context"
-	reconcile_v2 "github.com/kumahq/kuma/pkg/kds/v2/reconcile"
-	kds_server_v2 "github.com/kumahq/kuma/pkg/kds/v2/server"
+	"github.com/kumahq/kuma/pkg/kds/reconcile"
+	kds_server "github.com/kumahq/kuma/pkg/kds/server"
 	core_metrics "github.com/kumahq/kuma/pkg/metrics"
 	"github.com/kumahq/kuma/pkg/multitenant"
 	"github.com/kumahq/kuma/pkg/plugins/resources/postgres/config"
@@ -203,8 +203,8 @@ func (t *testRuntimeContext) Add(c ...component.Component) error {
 
 type KdsServerBuilder struct {
 	rt             *testRuntimeContext
-	providedMapper reconcile_v2.ResourceMapper
-	providedFilter reconcile_v2.ResourceFilter
+	providedMapper reconcile.ResourceMapper
+	providedFilter reconcile.ResourceFilter
 	providedTypes  []model.ResourceType
 }
 
@@ -234,9 +234,9 @@ func NewKdsServerBuilder(store store.ResourceStore) *KdsServerBuilder {
 	}
 	return &KdsServerBuilder{
 		rt:             rt,
-		providedMapper: reconcile_v2.NoopResourceMapper,
+		providedMapper: reconcile.NoopResourceMapper,
 		providedTypes:  registry.Global().ObjectTypes(model.HasKdsEnabled()),
-		providedFilter: reconcile_v2.Any,
+		providedFilter: reconcile.Any,
 	}
 }
 
@@ -258,6 +258,6 @@ func (b *KdsServerBuilder) WithTypes(types []model.ResourceType) *KdsServerBuild
 	return b
 }
 
-func (b *KdsServerBuilder) Delta() (kds_server_v2.Server, error) {
-	return kds_server_v2.New(core.Log.WithName("kds-delta").WithName(b.rt.GetMode()), b.rt, b.providedTypes, b.rt.Config().Multizone.Zone.Name, 100*time.Millisecond, b.providedFilter, b.providedMapper, 1*time.Second)
+func (b *KdsServerBuilder) Delta() (kds_server.Server, error) {
+	return kds_server.New(core.Log.WithName("kds-delta").WithName(b.rt.GetMode()), b.rt, b.providedTypes, b.rt.Config().Multizone.Zone.Name, 100*time.Millisecond, b.providedFilter, b.providedMapper, 1*time.Second)
 }

@@ -5,7 +5,6 @@ import (
 	envoy_cache "github.com/envoyproxy/go-control-plane/pkg/cache/v3"
 
 	core_model "github.com/kumahq/kuma/pkg/core/resources/model"
-	util_kds_v2 "github.com/kumahq/kuma/pkg/kds/v2/util"
 )
 
 type ResourceBuilder interface{}
@@ -33,7 +32,7 @@ func (b *builder) With(typ core_model.ResourceType, resources []envoy_types.Reso
 
 func (b *builder) Build(version string) envoy_cache.ResourceSnapshot {
 	snapshot := &Snapshot{Resources: map[core_model.ResourceType]envoy_cache.Resources{}}
-	for _, typ := range util_kds_v2.GetSupportedTypes() {
+	for _, typ := range GetSupportedTypes() {
 		snapshot.Resources[core_model.ResourceType(typ)] = envoy_cache.NewResources(version, nil)
 	}
 	for typ, items := range b.resources {
