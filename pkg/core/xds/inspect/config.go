@@ -29,14 +29,16 @@ type ProxyConfig map[string]interface{}
 
 type ProxyConfigInspector struct {
 	zone              string
+	internalCIDRs     []string
 	meshContext       xds_context.MeshContext
 	snapshotGenerator *v3.TemplateSnapshotGenerator
 }
 
-func NewProxyConfigInspector(meshContext xds_context.MeshContext, zone string, hooks ...xds_hooks.ResourceSetHook) (*ProxyConfigInspector, error) {
+func NewProxyConfigInspector(meshContext xds_context.MeshContext, zone string, internalCIDRs []string, hooks ...xds_hooks.ResourceSetHook) (*ProxyConfigInspector, error) {
 	return &ProxyConfigInspector{
 		zone:        zone,
 		meshContext: meshContext,
+		internalCIDRs: internalCIDRs,
 		snapshotGenerator: &v3.TemplateSnapshotGenerator{
 			ResourceSetHooks:      hooks,
 			ProxyTemplateResolver: generator.DefaultTemplateResolver,
@@ -62,6 +64,7 @@ func (p *ProxyConfigInspector) Get(ctx context.Context, name string, shadow bool
 			CLACache: &cla.Retriever{},
 			Secrets:  &dummySecrets{},
 			Zone:     p.zone,
+			InternalCIDRs: p.internalCIDRs,
 		},
 	}
 

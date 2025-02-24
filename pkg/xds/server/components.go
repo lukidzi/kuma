@@ -79,6 +79,7 @@ func RegisterXDS(rt core_runtime.Runtime) error {
 		Secrets:         secrets,
 		Zone:            rt.Config().Multizone.Zone.Name,
 		SystemNamespace: systemNamespace,
+		InternalCIDRs:   rt.Config().Proxy.InternalAddresses.CIDRs,
 	}
 
 	if err := v3.RegisterXDS(statsCallbacks, rt.XDS().Metrics, envoyCpCtx, rt); err != nil {

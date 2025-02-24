@@ -73,6 +73,7 @@ type resourceEndpoints struct {
 	isK8s              bool
 
 	disableOriginLabelValidation bool
+	internalCIDRs []string
 }
 
 func typeToLegacyOverviewPath(resourceType model.ResourceType) string {
@@ -776,7 +777,7 @@ func (r *resourceEndpoints) configForProxy() restful.RouteFunction {
 			return
 		}
 
-		inspector, err := inspect.NewProxyConfigInspector(mc, r.zoneName, r.xdsHooks...)
+		inspector, err := inspect.NewProxyConfigInspector(mc, r.zoneName, r.internalCIDRs, r.xdsHooks...)
 		if err != nil {
 			rest_errors.HandleError(ctx, response, err, "Failed to create proxy config inspector")
 			return

@@ -93,6 +93,13 @@ func HttpConnectionManager(statsName string, forwardClientCertDetails bool) Filt
 	})
 }
 
+func InternalAddresses(cidrs []string, unixSocketInternal bool) FilterChainBuilderOpt {
+return AddFilterChainConfigurer(&v3.InternalAddressesConfigurer{
+		Cidrs: cidrs,
+		UnixSocketInternal: unixSocketInternal,
+	})
+}
+
 func NetworkRBAC(statsName string, rbacEnabled bool, permission *core_mesh.TrafficPermissionResource) FilterChainBuilderOpt {
 	if !rbacEnabled {
 		return FilterChainBuilderOptFunc(nil)

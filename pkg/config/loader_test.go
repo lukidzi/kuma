@@ -375,6 +375,8 @@ var _ = Describe("Config loader", func() {
 			Expect(cfg.Experimental.SidecarContainers).To(BeTrue())
 
 			Expect(cfg.Proxy.Gateway.GlobalDownstreamMaxConnections).To(BeNumerically("==", 1))
+			Expect(cfg.Proxy.InternalAddresses.Disabled).To(BeTrue())
+			Expect(cfg.Proxy.InternalAddresses.CIDRs).To(ContainElements("127.1.1.1/13", "172.16.1.23/27"))
 			Expect(cfg.EventBus.BufferSize).To(Equal(uint(30)))
 
 			Expect(cfg.IPAM.MeshService.CIDR).To(Equal("251.0.0.0/8"))
@@ -768,6 +770,9 @@ experimental:
 proxy:
   gateway:
     globalDownstreamMaxConnections: 1
+  internalAddresses:
+    disabled: true
+    cidrs: ["127.1.1.1/13", "172.16.1.23/27"]
 eventBus:
   bufferSize: 30
 coreResources:
@@ -1073,6 +1078,8 @@ meshService:
 				"KUMA_EXPERIMENTAL_AUTO_REACHABLE_SERVICES":                                                "true",
 				"KUMA_EXPERIMENTAL_SIDECAR_CONTAINERS":                                                     "true",
 				"KUMA_PROXY_GATEWAY_GLOBAL_DOWNSTREAM_MAX_CONNECTIONS":                                     "1",
+				"KUMA_PROXY_INTERNAL_ADDRESSES_DISABLED":                                                   "true",
+				"KUMA_PROXY_INTERNAL_ADDRESSES_CIDRS":                                                      "127.1.1.1/13,172.16.1.23/27",
 				"KUMA_TRACING_OPENTELEMETRY_ENDPOINT":                                                      "otel-collector:4317",
 				"KUMA_TRACING_OPENTELEMETRY_ENABLED":                                                       "true",
 				"KUMA_EVENT_BUS_BUFFER_SIZE":                                                               "30",

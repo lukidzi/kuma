@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	"k8s.io/utils/net"
 
 	"github.com/kumahq/kuma/pkg/config"
 	config_types "github.com/kumahq/kuma/pkg/config/types"
@@ -51,16 +52,49 @@ func DefaultXdsServerConfig() *XdsServerConfig {
 type Proxy struct {
 	// Gateway holds data plane wide configuration for MeshGateway proxies
 	Gateway Gateway `json:"gateway"`
+	// InternalAddresses
+	InternalAddresses InternalAddresses `json:"internalAddresses"`
+}
+
+type InternalAddresses struct {
+	config.BaseConfig
+	Disabled bool `json:"disabled" envconfig:"kuma_proxy_internal_addresses_disabled"`
+	CIDRs []string `json:"cidrs" envconfig:"kuma_proxy_internal_addresses_cidrs"`
 }
 
 type Gateway struct {
 	GlobalDownstreamMaxConnections uint64 `json:"globalDownstreamMaxConnections" envconfig:"kuma_proxy_gateway_global_downstream_max_connections"`
 }
 
+var _ config.Config = &InternalAddresses{}
+
+func (x *InternalAddresses) Validate() error {
+	if len(x.CIDRs) == 0 {
+		return nil
+	}
+	_, err := net.ParseCIDRs(x.CIDRs)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+
 func DefaultProxyConfig() Proxy {
 	return Proxy{
 		Gateway: Gateway{
 			GlobalDownstreamMaxConnections: 50000,
+		},
+		InternalAddresses: InternalAddresses{
+			Disabled: false,
+			// https://datatracker.ietf.org/doc/html/rfc1918#section-3
+			CIDRs: []string{
+				"10.0.0.0/8",
+				"172.16.0.0/12",
+				"192.168.0.0/16",
+				"127.0.0.1/32",
+				"::1/128",
+			},
 		},
 	}
 }

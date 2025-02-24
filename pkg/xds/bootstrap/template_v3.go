@@ -64,6 +64,18 @@ func genConfig(parameters configParameters, proxyConfig xds.Proxy, enableReloada
 		},
 	}}
 
+	if proxyConfig.InternalAddresses.Disabled == true {
+		runtimeLayers = append(runtimeLayers,
+			&envoy_bootstrap_v3.RuntimeLayer{
+				Name: "internal_addresses",
+				LayerSpecifier: &envoy_bootstrap_v3.RuntimeLayer_StaticLayer{
+					StaticLayer: util_proto.MustStruct(map[string]interface{}{
+						"envoy.reloadable_features.explicit_internal_address_config": false,
+					}),
+				},
+			})
+	}
+
 	if parameters.IsGatewayDataplane {
 		connections := proxyConfig.Gateway.GlobalDownstreamMaxConnections
 		if connections == 0 {
