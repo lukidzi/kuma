@@ -124,7 +124,8 @@ func (OutboundProxyGenerator) generateLDS(ctx xds_context.Context, proxy *model.
 				// backwards compatibility to support RateLimit for ExternalServices without ZoneEgress
 				ConfigureIf(!ctx.Mesh.Resource.ZoneEgressEnabled(), envoy_listeners.RateLimit(rateLimits)).
 				Configure(envoy_listeners.Retry(retryPolicy, protocol)).
-				Configure(envoy_listeners.GrpcStats())
+				Configure(envoy_listeners.GrpcStats()).
+				Configure(envoy_listeners.InternalAddresses(ctx.InternalCIDRs(), true))
 		case core_mesh.ProtocolHTTP, core_mesh.ProtocolHTTP2:
 			filterChainBuilder.
 				Configure(envoy_listeners.HttpConnectionManager(serviceName, false)).
@@ -146,7 +147,8 @@ func (OutboundProxyGenerator) generateLDS(ctx xds_context.Context, proxy *model.
 					proxy,
 				)).
 				Configure(envoy_listeners.HttpOutboundRoute(serviceName, routes, proxy.Dataplane.Spec.TagSet())).
-				Configure(envoy_listeners.Retry(retryPolicy, protocol))
+				Configure(envoy_listeners.Retry(retryPolicy, protocol)).
+				Configure(envoy_listeners.InternalAddresses(ctx.InternalCIDRs(), true))
 		case core_mesh.ProtocolKafka:
 			filterChainBuilder.
 				Configure(envoy_listeners.Kafka(serviceName)).

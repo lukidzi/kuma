@@ -24,7 +24,7 @@ import (
 )
 
 func generateFromService(
-	meshCtx xds_context.MeshContext,
+	xdsCtx xds_context.Context,
 	proxy *core_xds.Proxy,
 	clusterCache map[common_api.BackendRefHash]string,
 	servicesAcc envoy_common.ServicesAccumulator,
@@ -45,8 +45,8 @@ func generateFromService(
 		}))
 
 	var routes []xds.OutboundRoute
-	for _, route := range prepareRoutes(rules, svc, meshCtx) {
-		split := meshroute_xds.MakeHTTPSplit(clusterCache, servicesAcc, route.BackendRefs, meshCtx)
+	for _, route := range prepareRoutes(rules, svc, xdsCtx.Mesh) {
+		split := meshroute_xds.MakeHTTPSplit(clusterCache, servicesAcc, route.BackendRefs, xdsCtx.Mesh)
 		if split == nil {
 			continue
 		}
@@ -56,7 +56,7 @@ func generateFromService(
 				_ = meshroute_xds.MakeHTTPSplit(
 					clusterCache, servicesAcc,
 					[]core_model.ResolvedBackendRef{*core_model.NewResolvedBackendRef(pointer.To(core_model.LegacyBackendRef(filter.RequestMirror.BackendRef)))},
-					meshCtx,
+					xdsCtx.Mesh,
 				)
 			}
 		}
@@ -78,7 +78,7 @@ func generateFromService(
 		outboundRouteName = resourceName
 	}
 	var dpTags mesh_proto.MultiValueTagSet
-	if meshCtx.IsXKumaTagsUsed() {
+	if xdsCtx.Mesh.IsXKumaTagsUsed() {
 		dpTags = proxy.Dataplane.Spec.TagSet()
 	}
 	outboundRouteConfigurer := &xds.HttpOutboundRouteConfigurer{
@@ -90,6 +90,11 @@ func generateFromService(
 
 	filterChainBuilder.
 		Configure(envoy_listeners.AddFilterChainConfigurer(outboundRouteConfigurer))
+
+	switch svc.Protocol {
+	case core_mesh.ProtocolHTTP2, core_mesh.ProtocolHTTP, core_mesh.ProtocolGRPC:
+		filterChainBuilder.Configure(envoy_listeners.InternalAddresses(xdsCtx.InternalCIDRs(), true))
+	}
 
 	// TODO: https://github.com/kumahq/kuma/issues/3325
 	switch svc.Protocol {
@@ -118,7 +123,7 @@ func generateListeners(
 	proxy *core_xds.Proxy,
 	rules rules.ToRules,
 	servicesAcc envoy_common.ServicesAccumulator,
-	meshCtx xds_context.MeshContext,
+	xdsCtx xds_context.Context,
 ) (*core_xds.ResourceSet, error) {
 	resources := core_xds.NewResourceSet()
 	// ClusterCache (cluster hash -> cluster name) protects us from creating excessive amount of clusters.
@@ -126,9 +131,9 @@ func generateListeners(
 	// If we have same split in many HTTP matches we can use the same cluster with different weight
 	clusterCache := map[common_api.BackendRefHash]string{}
 
-	for _, svc := range meshroute_xds.CollectServices(proxy, meshCtx) {
+	for _, svc := range meshroute_xds.CollectServices(proxy, xdsCtx.Mesh) {
 		rs, err := generateFromService(
-			meshCtx,
+			xdsCtx,
 			proxy,
 			clusterCache,
 			servicesAcc,

@@ -51,6 +51,7 @@ func (g *ExternalServicesGenerator) Generate(
 		listenerBuilder,
 		services,
 		proxy.SecretsTracker,
+		xdsCtx,
 	)
 
 	cds, err := g.generateCDS(
@@ -162,6 +163,7 @@ func (g *ExternalServicesGenerator) addFilterChains(
 	listenerBuilder *envoy_listeners.ListenerBuilder,
 	services map[string]bool,
 	secretsTracker core_xds.SecretsTracker,
+	xdsCtx xds_context.Context,
 ) {
 	meshName := meshResources.Mesh.GetMeta().GetName()
 	sniUsed := map[string]bool{}
@@ -198,6 +200,7 @@ func (g *ExternalServicesGenerator) addFilterChains(
 				meshResources,
 				secretsTracker,
 				listenerBuilder,
+				xdsCtx,
 			)
 		}
 	}
@@ -222,6 +225,7 @@ func (g *ExternalServicesGenerator) addFilterChains(
 			meshResources,
 			secretsTracker,
 			listenerBuilder,
+			xdsCtx,
 		)
 	}
 }
@@ -236,6 +240,7 @@ func (*ExternalServicesGenerator) configureFilterChain(
 	meshResources *core_xds.MeshResources,
 	secretsTracker core_xds.SecretsTracker,
 	listenerBuilder *envoy_listeners.ListenerBuilder,
+	xdsCtx xds_context.Context,
 ) {
 	// There is a case where multiple meshes contain services with
 	// the same names, so we cannot use just "serviceName" as a cluster
@@ -304,7 +309,8 @@ func (*ExternalServicesGenerator) configureFilterChain(
 				Service: esName,
 				Routes:  routes,
 				DpTags:  nil,
-			}))
+			})).
+			Configure(envoy_listeners.InternalAddresses(xdsCtx.InternalCIDRs(), true))
 	default:
 		filterChainBuilder.Configure(
 			envoy_listeners.TcpProxyDeprecatedWithMetadata(esName, cluster),

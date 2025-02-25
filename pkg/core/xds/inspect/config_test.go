@@ -82,7 +82,7 @@ var _ = Describe("ProxyConfigInspector", func() {
 
 		meshContext, err := meshContextBuilder.Build(context.Background(), mesh)
 		Expect(err).ToNot(HaveOccurred())
-		inspector, err := inspect.NewProxyConfigInspector(meshContext, zone)
+		inspector, err := inspect.NewProxyConfigInspector(meshContext, zone, []string{})
 		Expect(err).ToNot(HaveOccurred())
 
 		// when
@@ -101,7 +101,7 @@ var _ = Describe("ProxyConfigInspector", func() {
 
 		meshContext, err := meshContextBuilder.Build(context.Background(), mesh)
 		Expect(err).ToNot(HaveOccurred())
-		inspector, err := inspect.NewProxyConfigInspector(meshContext, zone)
+		inspector, err := inspect.NewProxyConfigInspector(meshContext, zone, []string{})
 		Expect(err).ToNot(HaveOccurred())
 
 		// when
@@ -128,7 +128,7 @@ var _ = Describe("ProxyConfigInspector", func() {
 
 		meshContext, err := meshContextBuilder.Build(context.Background(), mesh)
 		Expect(err).ToNot(HaveOccurred())
-		inspector, err := inspect.NewProxyConfigInspector(meshContext, zone)
+		inspector, err := inspect.NewProxyConfigInspector(meshContext, zone, []string{"127.0.0.1/32"})
 		Expect(err).ToNot(HaveOccurred())
 
 		noShadow, err := inspector.Get(context.Background(), "test-dpp", false)

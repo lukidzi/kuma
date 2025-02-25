@@ -199,6 +199,8 @@ resources:
           - name: envoy.filters.http.router
             typedConfig:
               '@type': type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
+          internalAddressConfig:
+            unixSockets: true
           routeConfig:
             name: outbound:externalservice-1
             validateClusters: false
@@ -260,6 +262,8 @@ resources:
           - name: envoy.filters.http.router
             typedConfig:
               '@type': type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
+          internalAddressConfig:
+            unixSockets: true
           routeConfig:
             name: outbound:externalservice-2
             validateClusters: false

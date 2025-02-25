@@ -349,3 +349,12 @@ func (m AggregatedMeshContexts) AllMeshGateways() []*core_mesh.MeshGatewayResour
 	}
 	return resources
 }
+
+func (c *Context) InternalCIDRs()[]string{
+	if c.ControlPlane == nil {
+		// when empty envoy uses confgure EFC1918
+		// https://datatracker.ietf.org/doc/html/rfc1918#section-3
+		return []string{}
+	}
+	return c.ControlPlane.InternalCIDRs
+}

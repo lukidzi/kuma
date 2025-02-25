@@ -125,11 +125,6 @@ func (g InboundProxyGenerator) Generate(ctx context.Context, _ *core_xds.Resourc
 
 func FilterChainBuilder(serverSideMTLS bool, protocol core_mesh.Protocol, proxy *core_xds.Proxy, localClusterName string, xdsCtx xds_context.Context, endpoint mesh_proto.InboundInterface, service string, routes *envoy_common.Routes, tlsVersion *tls.Version, ciphers []tls.TlsCipher) *envoy_listeners.FilterChainBuilder {
 	filterChainBuilder := envoy_listeners.NewFilterChainBuilder(proxy.APIVersion, envoy_common.AnonymousResource)
-	internalAddresses := func(filterChainBuilder *envoy_listeners.FilterChainBuilder) {
-		if xdsCtx.ControlPlane != nil {
-			filterChainBuilder.Configure(envoy_listeners.InternalAddresses(xdsCtx.ControlPlane.InternalCIDRs, true))
-		}
-	}
 	switch protocol {
 	// configuration for HTTP case
 	case core_mesh.ProtocolHTTP, core_mesh.ProtocolHTTP2:
@@ -138,8 +133,8 @@ func FilterChainBuilder(serverSideMTLS bool, protocol core_mesh.Protocol, proxy 
 			Configure(envoy_listeners.FaultInjection(proxy.Policies.FaultInjections[endpoint]...)).
 			Configure(envoy_listeners.RateLimit(proxy.Policies.RateLimitsInbound[endpoint])).
 			Configure(envoy_listeners.Tracing(xdsCtx.Mesh.GetTracingBackend(proxy.Policies.TrafficTrace), service, envoy_common.TrafficDirectionInbound, "", false)).
-			Configure(envoy_listeners.HttpInboundRoutes(service, *routes))
-		internalAddresses(filterChainBuilder)	
+			Configure(envoy_listeners.HttpInboundRoutes(service, *routes)).
+			Configure(envoy_listeners.InternalAddresses(xdsCtx.InternalCIDRs(), true))
 	case core_mesh.ProtocolGRPC:
 		filterChainBuilder.
 			Configure(envoy_listeners.HttpConnectionManager(localClusterName, true)).
@@ -147,8 +142,8 @@ func FilterChainBuilder(serverSideMTLS bool, protocol core_mesh.Protocol, proxy 
 			Configure(envoy_listeners.FaultInjection(proxy.Policies.FaultInjections[endpoint]...)).
 			Configure(envoy_listeners.RateLimit(proxy.Policies.RateLimitsInbound[endpoint])).
 			Configure(envoy_listeners.Tracing(xdsCtx.Mesh.GetTracingBackend(proxy.Policies.TrafficTrace), service, envoy_common.TrafficDirectionInbound, "", false)).
-			Configure(envoy_listeners.HttpInboundRoutes(service, *routes))
-		internalAddresses(filterChainBuilder)
+			Configure(envoy_listeners.HttpInboundRoutes(service, *routes)).
+			Configure(envoy_listeners.InternalAddresses(xdsCtx.InternalCIDRs(), true))
 	case core_mesh.ProtocolKafka:
 		filterChainBuilder.
 			Configure(envoy_listeners.Kafka(localClusterName)).

@@ -75,7 +75,7 @@ func ApplyToOutbounds(proxy *core_xds.Proxy, rs *core_xds.ResourceSet, xdsCtx xd
 	tlsReady := xdsCtx.Mesh.GetTLSReadiness()
 	servicesAcc := envoy_common.NewServicesAccumulator(tlsReady)
 
-	listeners, err := generateListeners(proxy, rules, servicesAcc, xdsCtx.Mesh)
+	listeners, err := generateListeners(proxy, rules, servicesAcc, xdsCtx)
 	if err != nil {
 		return errors.Wrap(err, "couldn't generate listener resources")
 	}

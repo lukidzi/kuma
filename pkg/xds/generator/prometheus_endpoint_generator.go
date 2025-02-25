@@ -122,6 +122,7 @@ func (g PrometheusEndpointGenerator) Generate(ctx context.Context, _ *core_xds.R
 								RewritePath: statsPath,
 							},
 						}),
+					envoy_listeners.InternalAddresses(xdsCtx.InternalCIDRs(), true),
 				),
 			))
 		case mesh_proto.PrometheusTlsConfig_providedTLS:
@@ -139,6 +140,7 @@ func (g PrometheusEndpointGenerator) Generate(ctx context.Context, _ *core_xds.R
 								RewritePath: statsPath,
 							},
 						}),
+					envoy_listeners.InternalAddresses(xdsCtx.InternalCIDRs(), true),
 				),
 			))
 		}
@@ -153,7 +155,8 @@ func (g PrometheusEndpointGenerator) Generate(ctx context.Context, _ *core_xds.R
 						Path:        prometheusEndpoint.Path,
 						RewritePath: statsPath,
 					},
-				})),
+				}),
+				envoy_listeners.InternalAddresses(xdsCtx.InternalCIDRs(), true)),
 			)).
 			Build()
 	}

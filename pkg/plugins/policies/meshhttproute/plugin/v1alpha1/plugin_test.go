@@ -141,6 +141,7 @@ var _ = Describe("MeshHTTPRoute", func() {
 					AddServiceProtocol("backend", core_mesh.ProtocolHTTP).
 					AddServiceProtocol("external-service", core_mesh.ProtocolHTTP).
 					AddExternalService("external-service").
+					WithInternalCIDRs([]string{"127.0.0.1/32", "192.168.0.0/16"}).
 					Build(),
 				proxy: xds_builders.Proxy().
 					WithDataplane(builders.Dataplane().

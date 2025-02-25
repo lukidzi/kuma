@@ -12,7 +12,7 @@ import (
 )
 
 var _ = Describe("InternalAddressesConfigurer", func() {
-	FIt("should generate proper Envoy config", func() {
+	It("should generate proper Envoy config", func() {
 		listener, err := NewInboundListenerBuilder(envoy_common.APIV3, "127.0.0.1", 99, xds.SocketAddressProtocolTCP).
 			Configure(FilterChain(NewFilterChainBuilder(envoy.APIV3, envoy.AnonymousResource).
 				Configure(HttpConnectionManager("custom", false)).

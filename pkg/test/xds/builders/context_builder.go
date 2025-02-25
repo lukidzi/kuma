@@ -86,6 +86,11 @@ func (mc *ContextBuilder) WithMeshContext(mesh *xds_context.MeshContext) *Contex
 	return mc
 }
 
+func (mc *ContextBuilder) WithInternalCIDRs(cidrs []string) *ContextBuilder {
+	mc.res.ControlPlane.InternalCIDRs = cidrs
+	return mc
+}
+
 func (mc *ContextBuilder) WithMeshLocalResources(rs []model.Resource) *ContextBuilder {
 	mc.res.Mesh.Resources = context.Resources{MeshLocalResources: map[model.ResourceType]model.ResourceList{}}
 	for _, p := range rs {

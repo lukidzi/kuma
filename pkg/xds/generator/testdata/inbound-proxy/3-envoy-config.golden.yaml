@@ -140,6 +140,8 @@ resources:
           - name: envoy.filters.http.router
             typedConfig:
               '@type': type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
+          internalAddressConfig:
+            unixSockets: true
           routeConfig:
             name: inbound:backend1
             requestHeadersToRemove:
@@ -319,6 +321,8 @@ resources:
           - name: envoy.filters.http.router
             typedConfig:
               '@type': type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
+          internalAddressConfig:
+            unixSockets: true
           routeConfig:
             name: inbound:backend3
             requestHeadersToRemove:
