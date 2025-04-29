@@ -22,6 +22,7 @@ func MakeTCPSplit(
 	servicesAcc envoy_common.ServicesAccumulator,
 	refs []resolve.ResolvedBackendRef,
 	meshCtx xds_context.MeshContext,
+	proxy *core_xds.Proxy,
 ) []envoy_common.Split {
 	return makeSplit(
 		map[core_mesh.Protocol]struct{}{
@@ -36,6 +37,7 @@ func MakeTCPSplit(
 		servicesAcc,
 		refs,
 		meshCtx,
+		proxy,
 	)
 }
 
@@ -44,6 +46,7 @@ func MakeHTTPSplit(
 	servicesAcc envoy_common.ServicesAccumulator,
 	refs []resolve.ResolvedBackendRef,
 	meshCtx xds_context.MeshContext,
+	proxy *core_xds.Proxy,
 ) []envoy_common.Split {
 	return makeSplit(
 		map[core_mesh.Protocol]struct{}{
@@ -55,6 +58,7 @@ func MakeHTTPSplit(
 		servicesAcc,
 		refs,
 		meshCtx,
+		proxy,
 	)
 }
 
@@ -236,12 +240,13 @@ func makeSplit(
 	servicesAcc envoy_common.ServicesAccumulator,
 	refs []resolve.ResolvedBackendRef,
 	meshCtx xds_context.MeshContext,
+	proxy *core_xds.Proxy,
 ) []envoy_common.Split {
 	var split []envoy_common.Split
 
 	for _, ref := range refs {
 		if ref.ReferencesRealResource() {
-			if s := handleRealResources(protocols, clusterCache, servicesAcc, ref.RealResourceBackendRef(), meshCtx); s != nil {
+			if s := handleRealResources(protocols, clusterCache, servicesAcc, ref.RealResourceBackendRef(), meshCtx, proxy); s != nil {
 				split = append(split, s)
 			}
 		} else {
@@ -260,6 +265,7 @@ func handleRealResources(
 	servicesAcc envoy_common.ServicesAccumulator,
 	ref *resolve.RealResourceBackendRef,
 	meshCtx xds_context.MeshContext,
+	proxy *core_xds.Proxy,
 ) envoy_common.Split {
 	if ref.Weight == 0 {
 		return nil
@@ -274,16 +280,29 @@ func handleRealResources(
 	}
 
 	var clusterName string
+	var statsName string
 	var isExternalService bool
 
 	switch common_api.TargetRefKind(ref.Resource.ResourceType) {
 	case common_api.MeshExternalService:
-		clusterName = meshCtx.GetMeshExternalServiceByKRI(pointer.Deref(ref.Resource)).DestinationName(port)
+		clusterName = pointer.Deref(ref.Resource).String()
+		statsName = meshCtx.GetMeshMultiZoneServiceByKRI(pointer.Deref(ref.Resource)).DestinationName(port)
+		if proxy.Metadata.Features.HasFeature(xds_types.FeatureKRIStats) {
+			statsName = clusterName
+		}
 		isExternalService = true
 	case common_api.MeshMultiZoneService:
-		clusterName = meshCtx.GetMeshMultiZoneServiceByKRI(pointer.Deref(ref.Resource)).DestinationName(port)
+		clusterName = pointer.Deref(ref.Resource).String()
+		statsName = meshCtx.GetMeshMultiZoneServiceByKRI(pointer.Deref(ref.Resource)).DestinationName(port)
+		if proxy.Metadata.Features.HasFeature(xds_types.FeatureKRIStats) {
+			statsName = clusterName
+		}
 	case common_api.MeshService:
-		clusterName = meshCtx.GetMeshServiceByKRI(pointer.Deref(ref.Resource)).DestinationName(port)
+		clusterName = pointer.Deref(ref.Resource).String()
+		statsName = meshCtx.GetMeshServiceByKRI(pointer.Deref(ref.Resource)).DestinationName(port)
+		if proxy.Metadata.Features.HasFeature(xds_types.FeatureKRIStats) {
+			statsName = clusterName
+		}
 	}
 
 	// todo(lobkovilya): instead of computing hash we should use ResourceIdentifier as a key in clusterCache (or maybe we don't need clusterCache)
@@ -307,6 +326,7 @@ func handleRealResources(
 	clusterBuilder := plugins_xds.NewClusterBuilder().
 		WithService(service).
 		WithName(clusterName).
+		WithStatName(statsName).
 		WithTags(envoy_tags.Tags{}.WithTags(mesh_proto.ServiceTag, service)). // todo(lobkovilya): do we need tags for real resource cluster?
 		WithExternalService(isExternalService)
 

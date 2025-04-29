@@ -205,10 +205,10 @@ func (g *ExternalServicesGenerator) addFilterChains(
 	}
 
 	for _, mes := range meshDestinations.BackendRefs {
-		if !services[mes.DestinationName] {
+		if !services[mes.Name] {
 			return
 		}
-		endpoints := endpointMap[mes.DestinationName]
+		endpoints := endpointMap[mes.Name]
 		if sniUsed[mes.SNI] {
 			continue
 		}
@@ -217,7 +217,7 @@ func (g *ExternalServicesGenerator) addFilterChains(
 		g.configureFilterChain(
 			apiVersion,
 			internalAddresses,
-			mes.DestinationName,
+			mes.Name,
 			mes.SNI,
 			meshName,
 			endpoints,

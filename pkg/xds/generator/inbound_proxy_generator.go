@@ -2,14 +2,17 @@ package generator
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/pkg/errors"
 
 	"github.com/kumahq/kuma/api/common/v1alpha1/tls"
 	mesh_proto "github.com/kumahq/kuma/api/mesh/v1alpha1"
 	core_mesh "github.com/kumahq/kuma/pkg/core/resources/apis/mesh"
+	"github.com/kumahq/kuma/pkg/core/resources/model"
 	"github.com/kumahq/kuma/pkg/core/validators"
 	core_xds "github.com/kumahq/kuma/pkg/core/xds"
+	xds_types "github.com/kumahq/kuma/pkg/core/xds/types"
 	defaults_mesh "github.com/kumahq/kuma/pkg/defaults/mesh"
 	"github.com/kumahq/kuma/pkg/util/net"
 	xds_context "github.com/kumahq/kuma/pkg/xds/context"
@@ -39,6 +42,11 @@ func (g InboundProxyGenerator) Generate(ctx context.Context, _ *core_xds.Resourc
 
 		// generate CDS resource
 		localClusterName := envoy_names.GetLocalClusterName(endpoint.WorkloadPort)
+		if proxy.Metadata.Features.HasFeature(xds_types.FeatureKRIStats) {
+			ns := model.GetNamespace(proxy.Dataplane.Meta, xdsCtx.ControlPlane.SystemNamespace)
+			display := model.GetDisplayName(proxy.Dataplane.Meta)
+			localClusterName = fmt.Sprintf("kri_dp_%s_%s_%s_%s_%d", xdsCtx.Mesh.Resource.Meta.GetMesh(), proxy.Zone, ns, display, endpoint.WorkloadPort)
+		}
 		clusterBuilder := envoy_clusters.NewClusterBuilder(proxy.APIVersion, localClusterName).
 			Configure(envoy_clusters.ProvidedEndpointCluster(false, core_xds.Endpoint{Target: endpoint.WorkloadIP, Port: endpoint.WorkloadPort})).
 			Configure(envoy_clusters.Timeout(defaults_mesh.DefaultInboundTimeout(), protocol))

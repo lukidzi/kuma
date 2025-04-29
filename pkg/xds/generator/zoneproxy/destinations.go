@@ -30,9 +30,9 @@ type MeshDestinations struct {
 type BackendRefDestination struct {
 	Mesh string
 	// DestinationName is a string to reference Type+Name+Mesh+Port. Effectively an Envoy Cluster name
-	DestinationName string
-	SNI             string
-	Resource        *resolve.ResolvedBackendRef
+	Name     string
+	SNI      string
+	Resource *resolve.ResolvedBackendRef
 }
 
 func BuildMeshDestinations(
@@ -69,9 +69,9 @@ func buildMeshServiceDestinations(
 				nil,
 			)
 			msDestinations = append(msDestinations, BackendRefDestination{
-				Mesh:            ms.GetMeta().GetMesh(),
-				DestinationName: ms.DestinationName(port.Port),
-				SNI:             sni,
+				Mesh: ms.GetMeta().GetMesh(),
+				Name: kri.From(ms, port.GetName()).String(),
+				SNI:  sni,
 				Resource: resolve.BackendRef(
 					ms.Meta,
 					resourceToBackendRef(ms, meshservice_api.MeshServiceType, port.Port),
@@ -109,9 +109,9 @@ func buildMeshExternalServiceDestinations(
 			nil,
 		)
 		mesDestinations = append(mesDestinations, BackendRefDestination{
-			Mesh:            mes.GetMeta().GetMesh(),
-			DestinationName: mes.DestinationName(uint32(mes.Spec.Match.Port)),
-			SNI:             sni,
+			Mesh: mes.GetMeta().GetMesh(),
+			Name: kri.From(mes, "").String(),
+			SNI:  sni,
 			Resource: resolve.BackendRef(
 				mes.Meta,
 				resourceToBackendRef(mes, meshexternalservice_api.MeshExternalServiceType, uint32(mes.Spec.Match.Port)),
@@ -130,8 +130,8 @@ func buildMeshMultiZoneServiceDestinations(
 	for _, ms := range meshMzSvc {
 		for _, port := range ms.Spec.Ports {
 			msDestinations = append(msDestinations, BackendRefDestination{
-				Mesh:            ms.GetMeta().GetMesh(),
-				DestinationName: ms.DestinationName(port.Port),
+				Mesh: ms.GetMeta().GetMesh(),
+				Name: kri.From(ms, port.GetName()).String(),
 				Resource: resolve.BackendRef(
 					ms.Meta,
 					resourceToBackendRef(ms, meshexternalservice_api.MeshExternalServiceType, port.Port),

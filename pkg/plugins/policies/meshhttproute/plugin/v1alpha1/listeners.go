@@ -9,6 +9,7 @@ import (
 	core_mesh "github.com/kumahq/kuma/pkg/core/resources/apis/mesh"
 	core_model "github.com/kumahq/kuma/pkg/core/resources/model"
 	core_xds "github.com/kumahq/kuma/pkg/core/xds"
+	xds_types "github.com/kumahq/kuma/pkg/core/xds/types"
 	"github.com/kumahq/kuma/pkg/plugins/policies/core/rules"
 	"github.com/kumahq/kuma/pkg/plugins/policies/core/rules/resolve"
 	"github.com/kumahq/kuma/pkg/plugins/policies/core/rules/subsetutils"
@@ -38,6 +39,17 @@ func generateFromService(
 
 	resourceName := svc.ServiceName
 
+	if svc.Outbound.Resource != nil {
+		listenerBuilder.WithOverwriteName(svc.Outbound.Resource.String())
+	}
+	if proxy.Metadata.HasFeature(xds_types.FeatureKRIStats) {
+		if svc.Outbound.Resource != nil {
+			resourceName = 	svc.Outbound.Resource.String()
+		}
+		
+	}
+	
+
 	filterChainBuilder := envoy_listeners.NewFilterChainBuilder(proxy.APIVersion, envoy_common.AnonymousResource).
 		Configure(envoy_listeners.AddFilterChainConfigurer(&envoy_listeners_v3.HttpConnectionManagerConfigurer{
 			StatsName:                resourceName,
@@ -48,7 +60,7 @@ func generateFromService(
 
 	var routes []xds.OutboundRoute
 	for _, route := range prepareRoutes(rules, svc, meshCtx) {
-		split := meshroute_xds.MakeHTTPSplit(clusterCache, servicesAcc, route.BackendRefs, meshCtx)
+		split := meshroute_xds.MakeHTTPSplit(clusterCache, servicesAcc, route.BackendRefs, meshCtx, proxy)
 		if split == nil {
 			continue
 		}
@@ -59,6 +71,7 @@ func generateFromService(
 					clusterCache, servicesAcc,
 					[]resolve.ResolvedBackendRef{*resolve.NewResolvedBackendRef(pointer.To(resolve.LegacyBackendRef(filter.RequestMirror.BackendRef)))},
 					meshCtx,
+					proxy,
 				)
 			}
 		}

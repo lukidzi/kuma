@@ -6,6 +6,7 @@ import (
 	common_api "github.com/kumahq/kuma/api/common/v1alpha1"
 	mesh_proto "github.com/kumahq/kuma/api/mesh/v1alpha1"
 	core_xds "github.com/kumahq/kuma/pkg/core/xds"
+	xds_types "github.com/kumahq/kuma/pkg/core/xds/types"
 	"github.com/kumahq/kuma/pkg/plugins/policies/core/rules"
 	meshroute_xds "github.com/kumahq/kuma/pkg/plugins/policies/core/xds/meshroute"
 	meshhttproute_api "github.com/kumahq/kuma/pkg/plugins/policies/meshhttproute/api/v1alpha1"
@@ -36,8 +37,13 @@ func generateFromService(
 		return nil, nil
 	}
 
-	splits := meshroute_xds.MakeTCPSplit(clusterCache, servicesAccumulator, backendRefs, meshCtx)
-	filterChain := buildFilterChain(proxy, serviceName, splits, protocol)
+	statName := serviceName
+	if proxy.Metadata.Features.HasFeature(xds_types.FeatureKRIStats) {
+		statName = svc.Outbound.Resource.String()
+	}
+
+	splits := meshroute_xds.MakeTCPSplit(clusterCache, servicesAccumulator, backendRefs, meshCtx, proxy)
+	filterChain := buildFilterChain(proxy, statName, splits, protocol)
 
 	listener, err := buildOutboundListener(proxy, svc, filterChain)
 	if err != nil {
@@ -97,6 +103,9 @@ func buildOutboundListener(
 		core_xds.SocketAddressProtocolTCP,
 	)
 
+	if svc.Outbound.Resource != nil {
+		builder.WithOverwriteName(svc.Outbound.Resource.String())
+	}
 	tproxy := envoy_listeners.TransparentProxying(proxy)
 
 	tagsMetadata := envoy_listeners.TagsMetadata(

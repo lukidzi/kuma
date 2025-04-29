@@ -34,6 +34,7 @@ var DefaultConfig = func() Config {
 			ReadinessPort:                 9902,
 			ResilientComponentMaxBackoff:  config_types.Duration{Duration: 1 * time.Minute},
 			ResilientComponentBaseBackoff: config_types.Duration{Duration: 5 * time.Second},
+			
 		},
 		DataplaneRuntime: DataplaneRuntime{
 			BinaryPath: "envoy",
@@ -84,6 +85,9 @@ func (c *Config) Features() []string {
 		base = append(base, xds_types.FeatureTransparentProxyInDataplaneMetadata)
 	}
 
+	if c.DataplaneRuntime.Metrics.KRIStats {
+		base = append(base, xds_types.FeatureKRIStats)
+	}
 	return base
 }
 
@@ -252,6 +256,7 @@ type Metrics struct {
 	CertPath string `json:"metricsCertPath,omitempty" envconfig:"kuma_dataplane_runtime_metrics_cert_path"`
 	// KeyPath path to the key for metrics listener
 	KeyPath string `json:"metricsKeyPath,omitempty" envconfig:"kuma_dataplane_runtime_metrics_key_path"`
+	KRIStats bool `json:"kriStats,omitempty" envconfig:"kuma_dataplane_runtime_metrics_kri_stats"`
 }
 
 type DynamicConfiguration struct {
