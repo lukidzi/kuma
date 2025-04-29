@@ -89,6 +89,11 @@ func GenerateClusters(
 				edsClusterBuilder.
 					Configure(envoy_clusters.EdsCluster()).
 					Configure(envoy_clusters.Http2())
+				if realResourceRef := service.BackendRef().RealResourceBackendRef(); realResourceRef != nil {
+					if !proxy.Metadata.HasFeature(xds_types.FeatureKRIStats) {
+						edsClusterBuilder.Configure(envoy_clusters.CustomStatName(statName))
+					}
+				}	
 
 				if upstreamMeshName := cluster.Mesh(); upstreamMeshName != "" {
 					for _, otherMesh := range meshCtx.Resources.Meshes().Items {

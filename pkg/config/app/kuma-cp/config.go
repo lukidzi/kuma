@@ -301,7 +301,7 @@ var DefaultConfig = func() Config {
 		MeshService: MeshServiceConfig{
 			GenerationInterval:  config_types.Duration{Duration: 2 * time.Second},
 			DeletionGracePeriod: config_types.Duration{Duration: 1 * time.Hour},
-			KRIStatsEnabled: true,
+			KRIStatsEnabled: false,
 		},
 	}
 }
