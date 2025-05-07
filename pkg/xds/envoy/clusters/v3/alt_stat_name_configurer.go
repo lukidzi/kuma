@@ -7,14 +7,14 @@ import (
 )
 
 type AltStatNameConfigurer struct{
-	statName string
+	StatName string
 }
 
 var _ ClusterConfigurer = &AltStatNameConfigurer{}
 
 func (e *AltStatNameConfigurer) Configure(cluster *envoy_cluster.Cluster) error {
-	if e.statName != "" {
-		cluster.AltStatName = e.statName
+	if e.StatName != "" {
+		cluster.AltStatName = e.StatName
 		return nil
 	}
 	sanitizedName := util_xds.SanitizeMetric(cluster.Name)

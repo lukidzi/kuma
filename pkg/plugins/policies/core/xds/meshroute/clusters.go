@@ -5,6 +5,7 @@ import (
 
 	common_api "github.com/kumahq/kuma/api/common/v1alpha1"
 	mesh_proto "github.com/kumahq/kuma/api/mesh/v1alpha1"
+	"github.com/kumahq/kuma/pkg/core"
 	"github.com/kumahq/kuma/pkg/core/kri"
 	core_mesh "github.com/kumahq/kuma/pkg/core/resources/apis/mesh"
 	meshservice_api "github.com/kumahq/kuma/pkg/core/resources/apis/meshservice/api/v1alpha1"
@@ -37,7 +38,8 @@ func GenerateClusters(
 		for _, cluster := range service.Clusters() {
 			clusterName := cluster.Name()
 			statName := clusterName
-			if proxy.Metadata.HasFeature(xds_types.FeatureKRIStats) {
+			core.Log.Info("TEST", "statName", statName, "cluster", cluster)
+			if !proxy.Metadata.HasFeature(xds_types.FeatureKRIStats) {
 				statName = cluster.StatName()
 			}
 			edsClusterBuilder := envoy_clusters.NewClusterBuilder(proxy.APIVersion, clusterName)
@@ -133,7 +135,7 @@ func GenerateClusters(
 					}
 				}
 			}
-
+			core.Log.Info("TEST", "statName", statName)
 			edsCluster, err := edsClusterBuilder.Build()
 			if err != nil {
 				return nil, errors.Wrapf(err, "build CDS for cluster %s failed", clusterName)
