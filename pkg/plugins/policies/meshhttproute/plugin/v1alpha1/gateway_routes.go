@@ -10,6 +10,8 @@ import (
 	mesh_proto "github.com/kumahq/kuma/api/mesh/v1alpha1"
 	core_mesh "github.com/kumahq/kuma/pkg/core/resources/apis/mesh"
 	"github.com/kumahq/kuma/pkg/core/resources/model"
+	core_xds "github.com/kumahq/kuma/pkg/core/xds"
+	xds_types "github.com/kumahq/kuma/pkg/core/xds/types"
 	"github.com/kumahq/kuma/pkg/plugins/policies/core/rules"
 	"github.com/kumahq/kuma/pkg/plugins/policies/core/rules/resolve"
 	"github.com/kumahq/kuma/pkg/plugins/policies/core/xds/meshroute"
@@ -38,6 +40,7 @@ func sortRulesToHosts(
 	protocol mesh_proto.MeshGateway_Listener_Protocol,
 	sublisteners []meshroute_gateway.Sublistener,
 	resolver resolve.LabelResourceIdentifierResolver,
+	proxy *core_xds.Proxy,
 ) []plugin_gateway.GatewayListenerHostname {
 	hostInfosByHostname := map[string]plugin_gateway.GatewayListenerHostname{}
 
@@ -158,7 +161,7 @@ func sortRulesToHosts(
 			hostInfo := plugin_gateway.GatewayHostInfo{
 				Host: host,
 			}
-			hostInfo.AppendEntries(generateEnvoyRouteEntries(meshCtx, host, rules, resolver))
+			hostInfo.AppendEntries(generateEnvoyRouteEntries(meshCtx, host, rules, resolver, proxy))
 
 			meshroute_gateway.AddToListenerByHostname(
 				hostInfosByHostname,
@@ -179,6 +182,7 @@ func generateEnvoyRouteEntries(
 	host plugin_gateway.GatewayHost,
 	toRules []ruleByHostname,
 	resolver resolve.LabelResourceIdentifierResolver,
+	proxy *core_xds.Proxy,
 ) []route.Entry {
 	var entries []route.Entry
 
@@ -197,7 +201,7 @@ func generateEnvoyRouteEntries(
 			}
 			slices.Sort(names)
 
-			entry := makeHttpRouteEntry(meshCtx, strings.Join(names, "_"), rule, rules.Rule.BackendRefOrigin, resolver)
+			entry := makeHttpRouteEntry(meshCtx, strings.Join(names, "_"), rule, rules.Rule.BackendRefOrigin, resolver, proxy)
 
 			hashedMatches := api.HashMatches(rule.Matches)
 			// The rule matches if any of the matches is successful (it has OR
@@ -230,6 +234,7 @@ func makeHttpRouteEntry(
 	rule api.Rule,
 	backendRefToOrigin map[common_api.MatchesHash]model.ResourceMeta,
 	resolver resolve.LabelResourceIdentifierResolver,
+	proxy *core_xds.Proxy,
 ) route.Entry {
 	entry := route.Entry{
 		Route: name,
@@ -241,7 +246,7 @@ func makeHttpRouteEntry(
 		if origin, ok := backendRefToOrigin[api.HashMatches(rule.Matches)]; ok {
 			ref = resolve.BackendRef(origin, b, resolver)
 			if ref.ReferencesRealResource() {
-				service, _, _, ok := meshroute.GetServiceProtocolPortFromRef(meshCtx, ref.RealResourceBackendRef())
+				service, _, _, _, ok := meshroute.GetServiceProtocolPortFromRef(meshCtx, ref.RealResourceBackendRef(), proxy.Metadata.HasFeature(xds_types.FeatureKRIStats))
 				if ok {
 					dest = map[string]string{
 						mesh_proto.ServiceTag: service,

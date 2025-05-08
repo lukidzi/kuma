@@ -5,6 +5,7 @@ import (
 
 	common_api "github.com/kumahq/kuma/api/common/v1alpha1"
 	mesh_proto "github.com/kumahq/kuma/api/mesh/v1alpha1"
+	"github.com/kumahq/kuma/pkg/core/kri"
 	core_mesh "github.com/kumahq/kuma/pkg/core/resources/apis/mesh"
 	core_model "github.com/kumahq/kuma/pkg/core/resources/model"
 	core_xds "github.com/kumahq/kuma/pkg/core/xds"
@@ -194,43 +195,56 @@ func collectServiceTagService(
 func GetServiceProtocolPortFromRef(
 	meshCtx xds_context.MeshContext,
 	ref *resolve.RealResourceBackendRef,
-) (string, core_mesh.Protocol, uint32, bool) {
+	kriStats bool,
+) (string, string, core_mesh.Protocol, uint32, bool) {
 	switch common_api.TargetRefKind(ref.Resource.ResourceType) {
 	case common_api.MeshExternalService:
 		mes := meshCtx.GetMeshExternalServiceByKRI(pointer.Deref(ref.Resource))
 		if mes == nil {
-			return "", "", 0, false
+			return "", "", "", 0, false
 		}
 		port := uint32(mes.Spec.Match.Port)
-		service := mes.DestinationName(port)
+		service := kri.From(mes, "").String()
+		statName := ""
+		if !kriStats {
+			statName = mes.DestinationName(port)
+		}
 		protocol := mes.Spec.Match.Protocol
-		return service, protocol, port, true
+		return service,statName, protocol, port, true
 	case common_api.MeshMultiZoneService:
 		ms := meshCtx.GetMeshMultiZoneServiceByKRI(pointer.Deref(ref.Resource))
 		if ms == nil {
-			return "", "", 0, false
+			return "", "","", 0, false
 		}
 		port, ok := ms.FindPortByName(ref.Resource.SectionName)
 		if !ok {
-			return "", "", 0, false
+			return "", "","", 0, false
 		}
-		service := ms.DestinationName(port.Port)
+		service := kri.From(ms,ref.Resource.SectionName).String()
+		statName := ""
+		if !kriStats {
+			statName = ms.DestinationName(port.Port)
+		}
 		protocol := port.AppProtocol
-		return service, protocol, port.Port, true
+		return service, statName, protocol, port.Port, true
 	case common_api.MeshService:
 		ms := meshCtx.GetMeshServiceByKRI(pointer.Deref(ref.Resource))
 		if ms == nil {
-			return "", "", 0, false
+			return "", "","", 0, false
 		}
 		port, ok := ms.FindPortByName(ref.Resource.SectionName)
 		if !ok {
-			return "", "", 0, false
+			return "", "","", 0, false
 		}
-		service := ms.DestinationName(port.Port)
+		service := kri.From(ms,ref.Resource.SectionName).String()
+		statName := ""
+		if !kriStats {
+			statName = ms.DestinationName(port.Port)
+		}
 		protocol := port.AppProtocol // todo(jakubdyszkiewicz): do we need to default to TCP or will this be done by MeshService defaulter?
-		return service, protocol, port.Port, true
+		return service, statName, protocol, port.Port, true
 	default:
-		return "", "", 0, false
+		return "", "","", 0, false
 	}
 }
 
@@ -270,8 +284,9 @@ func handleRealResources(
 	if ref.Weight == 0 {
 		return nil
 	}
+	useKri := proxy.Metadata.HasFeature(xds_types.FeatureKRIStats)
 
-	service, protocol, port, ok := GetServiceProtocolPortFromRef(meshCtx, ref)
+	service, _, protocol, port, ok := GetServiceProtocolPortFromRef(meshCtx, ref, useKri)
 	if !ok {
 		return nil
 	}
@@ -286,7 +301,7 @@ func handleRealResources(
 	switch common_api.TargetRefKind(ref.Resource.ResourceType) {
 	case common_api.MeshExternalService:
 		clusterName = pointer.Deref(ref.Resource).String()
-		statsName = meshCtx.GetMeshMultiZoneServiceByKRI(pointer.Deref(ref.Resource)).DestinationName(port)
+		statsName = meshCtx.GetMeshExternalServiceByKRI(pointer.Deref(ref.Resource)).DestinationName(port)
 		if proxy.Metadata.Features.HasFeature(xds_types.FeatureKRIStats) {
 			statsName = clusterName
 		}
