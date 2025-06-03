@@ -36,6 +36,21 @@ func ClientSideMTLS(tracker core_xds.SecretsTracker, mesh *core_mesh.MeshResourc
 	})
 }
 
+func NewClientSideMTLS(tracker core_xds.SecretsTracker, mesh *core_mesh.MeshResource, upstreamService string, upstreamTLSReady bool, tags []envoy_tags.Tags, ns, sa string) ClusterBuilderOpt {
+	return ClusterBuilderOptFunc(func(builder *ClusterBuilder) {
+		builder.AddConfigurer(&v3.ClientSideMTLSConfigurer{
+			SecretsTracker:   tracker,
+			UpstreamMesh:     mesh,
+			UpstreamService:  upstreamService,
+			LocalMesh:        mesh,
+			Tags:             tags,
+			UpstreamTLSReady: upstreamTLSReady,
+			Namespace: ns,
+			SA: sa,
+		})
+	})
+}
+
 func ClientSideMTLSCustomSNI(tracker core_xds.SecretsTracker, mesh *core_mesh.MeshResource, upstreamService string, upstreamTLSReady bool, sni string) ClusterBuilderOpt {
 	return ClusterBuilderOptFunc(func(builder *ClusterBuilder) {
 		builder.AddConfigurer(&v3.ClientSideMTLSConfigurer{

@@ -67,16 +67,16 @@ func newWorkloadTemplate(trustDomain string, tags mesh_proto.MultiValueTagSet, p
 		}
 		uris = append(uris, uri.URL())
 	}
-	for _, tag := range tags.Keys() {
-		for _, value := range tags.UniqueValues(tag) {
-			uri := fmt.Sprintf("kuma://%s/%s", tag, value)
-			u, err := url.Parse(uri)
-			if err != nil {
-				return nil, errors.Wrap(err, "invalid Kuma URI")
-			}
-			uris = append(uris, u)
-		}
-	}
+	// for _, tag := range tags.Keys() {
+	// 	for _, value := range tags.UniqueValues(tag) {
+	// 		uri := fmt.Sprintf("kuma://%s/%s", tag, value)
+	// 		u, err := url.Parse(uri)
+	// 		if err != nil {
+	// 			return nil, errors.Wrap(err, "invalid Kuma URI")
+	// 		}
+	// 		uris = append(uris, u)
+	// 	}
+	// }
 
 	now := time.Now()
 	serialNumber, err := newSerialNumber()

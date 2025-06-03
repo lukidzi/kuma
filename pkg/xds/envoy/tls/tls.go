@@ -19,6 +19,10 @@ func MeshSpiffeIDPrefix(mesh string) string {
 	return fmt.Sprintf("spiffe://%s/", mesh)
 }
 
+func NewServiceSpiffeID(mesh, namespace, sa string) string {
+	return fmt.Sprintf("spiffe://%s/ns/%s/sa/%s", mesh, namespace, sa)
+}
+
 func ServiceSpiffeID(mesh string, service string) string {
 	return fmt.Sprintf("spiffe://%s/%s", mesh, service)
 }

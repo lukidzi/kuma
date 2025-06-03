@@ -38,6 +38,9 @@ func GenerateClusters(
 			clusterName := cluster.Name()
 			edsClusterBuilder := envoy_clusters.NewClusterBuilder(proxy.APIVersion, clusterName)
 
+			ns := cluster.Tags()["k8s.kuma.io/namespace"]
+			sa := cluster.Tags()["kuma.io/sa-name"]
+
 			clusterTags := []envoy_tags.Tags{cluster.Tags()}
 			if meshCtx.IsExternalService(serviceName) {
 				switch {
@@ -117,9 +120,9 @@ func GenerateClusters(
 							ServiceTagIdentities(realResourceRef, meshCtx),
 						))
 					} else {
-						edsClusterBuilder.Configure(envoy_clusters.ClientSideMTLS(
+						edsClusterBuilder.Configure(envoy_clusters.NewClientSideMTLS(
 							proxy.SecretsTracker,
-							meshCtx.Resource, serviceName, tlsReady, clusterTags))
+							meshCtx.Resource, serviceName, tlsReady, clusterTags, ns, sa))
 					}
 				}
 			}

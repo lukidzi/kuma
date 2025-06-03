@@ -68,9 +68,44 @@ func CreateUpstreamTlsContext(mesh core_xds.IdentityCertRequest, upstreamMesh co
 	}, nil
 }
 
+func NewCreateUpstreamTlsContext(mesh core_xds.IdentityCertRequest, upstreamMesh core_xds.CaRequest, upstreamService string, sni string, verifyIdentities []string, ns, sa string) (*envoy_tls.UpstreamTlsContext, error) {
+	var validationSANMatchers []*envoy_tls.SubjectAltNameMatcher
+	meshNames := upstreamMesh.MeshName()
+	for _, meshName := range meshNames {
+		if upstreamService == "*" {
+			if len(verifyIdentities) == 0 {
+				validationSANMatchers = append(validationSANMatchers, MeshSpiffeIDPrefixMatcher(meshName))
+			}
+			// for _, identity := range verifyIdentities {
+				stringMatcher := NewServiceSpiffeIDMatcher(meshName, "kuma-demo", "default")
+				matcher := &envoy_tls.SubjectAltNameMatcher{
+					SanType: envoy_tls.SubjectAltNameMatcher_URI,
+					Matcher: stringMatcher,
+				}
+				validationSANMatchers = append(validationSANMatchers, matcher)
+			// }
+		} else {
+			stringMatcher := NewServiceSpiffeIDMatcher(meshName, "kuma-demo", "default")
+			matcher := &envoy_tls.SubjectAltNameMatcher{
+				SanType: envoy_tls.SubjectAltNameMatcher_URI,
+				Matcher: stringMatcher,
+			}
+			validationSANMatchers = append(validationSANMatchers, matcher)
+		}
+	}
+	commonTlsContext := createCommonTlsContext(mesh, upstreamMesh, validationSANMatchers)
+	commonTlsContext.AlpnProtocols = xds_tls.KumaALPNProtocols
+	return &envoy_tls.UpstreamTlsContext{
+		CommonTlsContext: commonTlsContext,
+		Sni:              sni,
+	}, nil
+}
+
 func createCommonTlsContext(ownMesh core_xds.IdentityCertRequest, targetMeshCa core_xds.CaRequest, matchers []*envoy_tls.SubjectAltNameMatcher) *envoy_tls.CommonTlsContext {
-	meshCaSecret := NewSecretConfigSource(targetMeshCa.Name())
-	identitySecret := NewSecretConfigSource(ownMesh.Name())
+	// meshCaSecret := NewSecretConfigSource(targetMeshCa.Name())
+	// identitySecret := NewSecretConfigSource(ownMesh.Name())
+
+	// spire := 
 
 	return &envoy_tls.CommonTlsContext{
 		ValidationContextType: &envoy_tls.CommonTlsContext_CombinedValidationContext{
@@ -78,11 +113,51 @@ func createCommonTlsContext(ownMesh core_xds.IdentityCertRequest, targetMeshCa c
 				DefaultValidationContext: &envoy_tls.CertificateValidationContext{
 					MatchTypedSubjectAltNames: matchers,
 				},
-				ValidationContextSdsSecretConfig: meshCaSecret,
+				ValidationContextSdsSecretConfig: &envoy_tls.SdsSecretConfig{
+					Name: "ROOTCA",
+					SdsConfig: &envoy_core.ConfigSource{
+						ResourceApiVersion:    envoy_core.ApiVersion_V3,
+						ConfigSourceSpecifier: &envoy_core.ConfigSource_ApiConfigSource{
+							ApiConfigSource: &envoy_core.ApiConfigSource{
+								ApiType: envoy_core.ApiConfigSource_GRPC,
+								TransportApiVersion: envoy_core.ApiVersion_V3,
+								GrpcServices: []*envoy_core.GrpcService{
+									{
+										TargetSpecifier: &envoy_core.GrpcService_EnvoyGrpc_{
+											EnvoyGrpc: &envoy_core.GrpcService_EnvoyGrpc{
+												ClusterName: "spire",
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
 			},
 		},
 		TlsCertificateSdsSecretConfigs: []*envoy_tls.SdsSecretConfig{
-			identitySecret,
+			&envoy_tls.SdsSecretConfig{
+				Name: "default",
+				SdsConfig: &envoy_core.ConfigSource{
+					ResourceApiVersion:    envoy_core.ApiVersion_V3,
+					ConfigSourceSpecifier: &envoy_core.ConfigSource_ApiConfigSource{
+						ApiConfigSource: &envoy_core.ApiConfigSource{
+							ApiType: envoy_core.ApiConfigSource_GRPC,
+							TransportApiVersion: envoy_core.ApiVersion_V3,
+							GrpcServices: []*envoy_core.GrpcService{
+								{
+									TargetSpecifier: &envoy_core.GrpcService_EnvoyGrpc_{
+										EnvoyGrpc: &envoy_core.GrpcService_EnvoyGrpc{
+											ClusterName: "spire",
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
 		},
 	}
 }
@@ -224,6 +299,14 @@ func ServiceSpiffeIDMatcher(mesh string, service string) *envoy_type_matcher.Str
 	return &envoy_type_matcher.StringMatcher{
 		MatchPattern: &envoy_type_matcher.StringMatcher_Exact{
 			Exact: xds_tls.ServiceSpiffeID(mesh, service),
+		},
+	}
+}
+
+func NewServiceSpiffeIDMatcher(mesh, namespace, sa string) *envoy_type_matcher.StringMatcher {
+	return &envoy_type_matcher.StringMatcher{
+		MatchPattern: &envoy_type_matcher.StringMatcher_Exact{
+			Exact: xds_tls.NewServiceSpiffeID(mesh, namespace, sa),
 		},
 	}
 }

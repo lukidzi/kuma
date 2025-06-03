@@ -50,6 +50,16 @@ var (
 			},
 		},
 	}
+
+	volumeSpire = kube_core.Volume{
+		Name: "spire-socket",
+		VolumeSource: kube_core.VolumeSource{
+			HostPath: &kube_core.HostPathVolumeSource{
+				Path: "/run/spire/agent-sockets",
+				Type: pointer.To(kube_core.HostPathDirectory),
+			},
+		},
+	}
 	volumeSidecarTmp = kube_core.Volume{
 		Name: "kuma-sidecar-tmp",
 		VolumeSource: kube_core.VolumeSource{
@@ -81,8 +91,10 @@ var (
 var (
 	mountSidecarTmp = kube_core.VolumeMount{Name: volumeSidecarTmp.Name, MountPath: "/tmp"}
 	mountInitTmp    = kube_core.VolumeMount{Name: volumeInitTmp.Name, MountPath: "/tmp"}
-	mountTPBase     = kube_core.VolumeMount{Name: volumeTPBase.Name, MountPath: mountPathTPBase, ReadOnly: true}
-	mountTPCustom   = kube_core.VolumeMount{Name: volumeNameTPCustom, MountPath: mountPathTPCustom, ReadOnly: true}
+
+	mountSpire    = kube_core.VolumeMount{Name: volumeSpire.Name, MountPath: "/run/spire/sockets", ReadOnly: true}
+	mountTPBase   = kube_core.VolumeMount{Name: volumeTPBase.Name, MountPath: mountPathTPBase, ReadOnly: true}
+	mountTPCustom = kube_core.VolumeMount{Name: volumeNameTPCustom, MountPath: mountPathTPCustom, ReadOnly: true}
 )
 
 var (
@@ -164,12 +176,18 @@ func (i *KumaInjector) InjectKuma(ctx context.Context, pod *kube_core.Pod) error
 		return err
 	}
 
-	pod.Spec.Volumes = append(pod.Spec.Volumes, volumeInitTmp, volumeSidecarTmp)
+	pod.Spec.Volumes = append(pod.Spec.Volumes, volumeInitTmp, volumeSidecarTmp, volumeSpire)
 
 	patchedContainer, err := i.applyCustomPatches(logger, container, sidecarPatches)
 	if err != nil {
 		return err
 	}
+
+	sa := pod.Spec.ServiceAccountName
+	if sa == "" {
+		sa = "default"
+	}
+	pod.Annotations["kuma.io/sa-name"] = sa
 
 	var injectedInitContainer *kube_core.Container
 
@@ -518,7 +536,7 @@ func (i *KumaInjector) NewSidecarContainer(
 }
 
 func (i *KumaInjector) NewVolumeMounts(pod *kube_core.Pod) ([]kube_core.VolumeMount, error) {
-	out := []kube_core.VolumeMount{mountSidecarTmp}
+	out := []kube_core.VolumeMount{mountSidecarTmp, mountSpire}
 
 	if i.cfg.TransparentProxyConfigMapName != "" {
 		out = append(out, mountTPBase)
