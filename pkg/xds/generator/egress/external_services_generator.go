@@ -262,7 +262,7 @@ func (*ExternalServicesGenerator) configureFilterChain(
 	}
 
 	filterChainBuilder := envoy_listeners.NewFilterChainBuilder(apiVersion, filterChainName).Configure(
-		envoy_listeners.ServerSideMTLS(meshResources.Mesh, secretsTracker, nil, nil),
+		envoy_listeners.ServerSideMTLS(meshResources.Mesh, secretsTracker, nil, nil, ""),
 		envoy_listeners.MatchTransportProtocol("tls"),
 		envoy_listeners.MatchServerNames(sni),
 		envoy_listeners.NetworkRBAC(

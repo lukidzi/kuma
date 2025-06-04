@@ -26,6 +26,7 @@ func GenerateClusters(
 	meshCtx xds_context.MeshContext,
 	services envoy_common.Services,
 	systemNamespace string,
+	trustedDomain string,
 ) (*core_xds.ResourceSet, error) {
 	resources := core_xds.NewResourceSet()
 
@@ -122,7 +123,7 @@ func GenerateClusters(
 					} else {
 						edsClusterBuilder.Configure(envoy_clusters.NewClientSideMTLS(
 							proxy.SecretsTracker,
-							meshCtx.Resource, serviceName, tlsReady, clusterTags, ns, sa))
+							meshCtx.Resource, serviceName, tlsReady, clusterTags, ns, sa, trustedDomain))
 					}
 				}
 			}

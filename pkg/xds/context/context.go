@@ -41,6 +41,7 @@ type ControlPlaneContext struct {
 	Secrets         secrets.Secrets
 	Zone            string
 	SystemNamespace string
+	TrustedDomain   string
 }
 
 // GlobalContext holds resources that are Global

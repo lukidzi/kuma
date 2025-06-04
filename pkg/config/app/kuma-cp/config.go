@@ -393,6 +393,7 @@ type GeneralConfig struct {
 	ResilientComponentBaseBackoff config_types.Duration `json:"resilientComponentBaseBackoff" envconfig:"kuma_general_resilient_component_base_backoff"`
 	// ResilientComponentMaxBackoff configures max backoff for restarting resilient component: KDS sync, Insight resync, PostgresEventListener, etc.
 	ResilientComponentMaxBackoff config_types.Duration `json:"resilientComponentMaxBackoff" envconfig:"kuma_general_resilient_component_max_backoff"`
+	TrustedDomain string `json:"trustedDomain" envconfig:"kuma_general_trusted_domain"`
 }
 
 var _ config.Config = &GeneralConfig{}

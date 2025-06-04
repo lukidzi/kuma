@@ -17,6 +17,7 @@ type ServerSideMTLSConfigurer struct {
 	SecretsTracker core_xds.SecretsTracker
 	TlsVersion     *common_tls.Version
 	TlsCiphers     []common_tls.TlsCipher
+	TD string
 }
 
 var _ FilterChainConfigurer = &ServerSideMTLSConfigurer{}
@@ -25,7 +26,7 @@ func (c *ServerSideMTLSConfigurer) Configure(filterChain *envoy_listener.FilterC
 	if !c.Mesh.MTLSEnabled() {
 		return nil
 	}
-	tlsContext, err := tls.CreateDownstreamTlsContext(c.SecretsTracker.RequestCa(c.Mesh.GetMeta().GetName()), c.SecretsTracker.RequestIdentityCert())
+	tlsContext, err := tls.CreateDownstreamTlsContext(c.SecretsTracker.RequestCa(c.Mesh.GetMeta().GetName()), c.SecretsTracker.RequestIdentityCert(), c.TD)
 	if err != nil {
 		return err
 	}

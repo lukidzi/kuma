@@ -14,14 +14,20 @@ import (
 // CreateDownstreamTlsContext creates DownstreamTlsContext for incoming connections
 // It verifies that incoming connection has TLS certificate signed by Mesh CA with URI SAN of prefix spiffe://{mesh_name}/
 // It secures inbound listener with certificate of "identity_cert" that will be received from the SDS (it contains URI SANs of all inbounds).
-func CreateDownstreamTlsContext(downstreamMesh core_xds.CaRequest, mesh core_xds.IdentityCertRequest) (*envoy_tls.DownstreamTlsContext, error) {
+func CreateDownstreamTlsContext(downstreamMesh core_xds.CaRequest, mesh core_xds.IdentityCertRequest, td string) (*envoy_tls.DownstreamTlsContext, error) {
 	var validationSANMatchers []*envoy_tls.SubjectAltNameMatcher
-	meshNames := downstreamMesh.MeshName()
-	for _, meshName := range meshNames {
-		validationSANMatchers = append(validationSANMatchers, MeshSpiffeIDPrefixMatcher(meshName))
-	}
+	// meshNames := downstreamMesh.MeshName()
+	// for _, meshName := range meshNames {
+		validationSANMatchers = append(validationSANMatchers, MeshSpiffeIDPrefixMatcher(td))
+		if td == "default.zone2" {
+			validationSANMatchers = append(validationSANMatchers, MeshSpiffeIDPrefixMatcher("default.zone1"))
+		}
+		if td == "default.zone1" {
+			validationSANMatchers = append(validationSANMatchers, MeshSpiffeIDPrefixMatcher("default.zone2"))
+		}
+	// }
 
-	commonTlsContext := createCommonTlsContext(mesh, downstreamMesh, validationSANMatchers)
+	commonTlsContext := createCommonTlsContext(mesh, downstreamMesh, validationSANMatchers, td)
 	return &envoy_tls.DownstreamTlsContext{
 		CommonTlsContext:         commonTlsContext,
 		RequireClientCertificate: util_proto.Bool(true),
@@ -60,7 +66,7 @@ func CreateUpstreamTlsContext(mesh core_xds.IdentityCertRequest, upstreamMesh co
 			validationSANMatchers = append(validationSANMatchers, matcher)
 		}
 	}
-	commonTlsContext := createCommonTlsContext(mesh, upstreamMesh, validationSANMatchers)
+	commonTlsContext := createCommonTlsContext(mesh, upstreamMesh, validationSANMatchers, "default")
 	commonTlsContext.AlpnProtocols = xds_tls.KumaALPNProtocols
 	return &envoy_tls.UpstreamTlsContext{
 		CommonTlsContext: commonTlsContext,
@@ -68,32 +74,64 @@ func CreateUpstreamTlsContext(mesh core_xds.IdentityCertRequest, upstreamMesh co
 	}, nil
 }
 
-func NewCreateUpstreamTlsContext(mesh core_xds.IdentityCertRequest, upstreamMesh core_xds.CaRequest, upstreamService string, sni string, verifyIdentities []string, ns, sa string) (*envoy_tls.UpstreamTlsContext, error) {
+func NewCreateUpstreamTlsContext(mesh core_xds.IdentityCertRequest, upstreamMesh core_xds.CaRequest, upstreamService string, sni string, verifyIdentities []string, ns, sa, td string) (*envoy_tls.UpstreamTlsContext, error) {
 	var validationSANMatchers []*envoy_tls.SubjectAltNameMatcher
-	meshNames := upstreamMesh.MeshName()
-	for _, meshName := range meshNames {
-		if upstreamService == "*" {
-			if len(verifyIdentities) == 0 {
-				validationSANMatchers = append(validationSANMatchers, MeshSpiffeIDPrefixMatcher(meshName))
-			}
-			// for _, identity := range verifyIdentities {
-				stringMatcher := NewServiceSpiffeIDMatcher(meshName, "kuma-demo", "default")
-				matcher := &envoy_tls.SubjectAltNameMatcher{
-					SanType: envoy_tls.SubjectAltNameMatcher_URI,
-					Matcher: stringMatcher,
-				}
-				validationSANMatchers = append(validationSANMatchers, matcher)
-			// }
-		} else {
-			stringMatcher := NewServiceSpiffeIDMatcher(meshName, "kuma-demo", "default")
+	// meshNames := upstreamMesh.MeshName()
+	// for _, meshName := range meshNames {
+	if upstreamService == "*" {
+		if len(verifyIdentities) == 0 {
+			validationSANMatchers = append(validationSANMatchers, MeshSpiffeIDPrefixMatcher(td))
+		}
+		// for _, identity := range verifyIdentities {
+			stringMatcher := NewServiceSpiffeIDMatcher(td, "kuma-demo", "default")
 			matcher := &envoy_tls.SubjectAltNameMatcher{
 				SanType: envoy_tls.SubjectAltNameMatcher_URI,
 				Matcher: stringMatcher,
 			}
 			validationSANMatchers = append(validationSANMatchers, matcher)
+			if td == "default.zone1" {
+				anotherMatcher := NewServiceSpiffeIDMatcher("default.zone2", "kuma-demo", "default")
+				match := &envoy_tls.SubjectAltNameMatcher{
+					SanType: envoy_tls.SubjectAltNameMatcher_URI,
+					Matcher: anotherMatcher,
+				}
+				validationSANMatchers = append(validationSANMatchers, match)
+			}
+			if td == "default.zone2" {
+				anotherMatcher := NewServiceSpiffeIDMatcher("default.zone1", "kuma-demo", "default")
+				match := &envoy_tls.SubjectAltNameMatcher{
+					SanType: envoy_tls.SubjectAltNameMatcher_URI,
+					Matcher: anotherMatcher,
+				}
+				validationSANMatchers = append(validationSANMatchers, match)
+			}
+		// }
+	} else {
+		stringMatcher := NewServiceSpiffeIDMatcher(td, "kuma-demo", "default")
+		matcher := &envoy_tls.SubjectAltNameMatcher{
+			SanType: envoy_tls.SubjectAltNameMatcher_URI,
+			Matcher: stringMatcher,
+		}
+		validationSANMatchers = append(validationSANMatchers, matcher)
+		if td == "default.zone1" {
+				anotherMatcher := NewServiceSpiffeIDMatcher("default.zone2", "kuma-demo", "default")
+				match := &envoy_tls.SubjectAltNameMatcher{
+					SanType: envoy_tls.SubjectAltNameMatcher_URI,
+					Matcher: anotherMatcher,
+				}
+				validationSANMatchers = append(validationSANMatchers, match)
+		}
+		if td == "default.zone2" {
+			anotherMatcher := NewServiceSpiffeIDMatcher("default.zone1", "kuma-demo", "default")
+			match := &envoy_tls.SubjectAltNameMatcher{
+				SanType: envoy_tls.SubjectAltNameMatcher_URI,
+				Matcher: anotherMatcher,
+			}
+			validationSANMatchers = append(validationSANMatchers, match)
 		}
 	}
-	commonTlsContext := createCommonTlsContext(mesh, upstreamMesh, validationSANMatchers)
+	// }
+	commonTlsContext := createCommonTlsContext(mesh, upstreamMesh, validationSANMatchers, td)
 	commonTlsContext.AlpnProtocols = xds_tls.KumaALPNProtocols
 	return &envoy_tls.UpstreamTlsContext{
 		CommonTlsContext: commonTlsContext,
@@ -101,7 +139,7 @@ func NewCreateUpstreamTlsContext(mesh core_xds.IdentityCertRequest, upstreamMesh
 	}, nil
 }
 
-func createCommonTlsContext(ownMesh core_xds.IdentityCertRequest, targetMeshCa core_xds.CaRequest, matchers []*envoy_tls.SubjectAltNameMatcher) *envoy_tls.CommonTlsContext {
+func createCommonTlsContext(ownMesh core_xds.IdentityCertRequest, targetMeshCa core_xds.CaRequest, matchers []*envoy_tls.SubjectAltNameMatcher, trustedDomain string) *envoy_tls.CommonTlsContext {
 	// meshCaSecret := NewSecretConfigSource(targetMeshCa.Name())
 	// identitySecret := NewSecretConfigSource(ownMesh.Name())
 
@@ -114,7 +152,7 @@ func createCommonTlsContext(ownMesh core_xds.IdentityCertRequest, targetMeshCa c
 					MatchTypedSubjectAltNames: matchers,
 				},
 				ValidationContextSdsSecretConfig: &envoy_tls.SdsSecretConfig{
-					Name: "ROOTCA",
+					Name: "ALL",
 					SdsConfig: &envoy_core.ConfigSource{
 						ResourceApiVersion:    envoy_core.ApiVersion_V3,
 						ConfigSourceSpecifier: &envoy_core.ConfigSource_ApiConfigSource{
@@ -138,7 +176,7 @@ func createCommonTlsContext(ownMesh core_xds.IdentityCertRequest, targetMeshCa c
 		},
 		TlsCertificateSdsSecretConfigs: []*envoy_tls.SdsSecretConfig{
 			&envoy_tls.SdsSecretConfig{
-				Name: "default",
+				Name: xds_tls.NewServiceSpiffeID(trustedDomain, "kuma-demo", "default"),
 				SdsConfig: &envoy_core.ConfigSource{
 					ResourceApiVersion:    envoy_core.ApiVersion_V3,
 					ConfigSourceSpecifier: &envoy_core.ConfigSource_ApiConfigSource{
