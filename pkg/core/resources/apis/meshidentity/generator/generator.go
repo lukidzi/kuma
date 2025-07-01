@@ -19,6 +19,18 @@ func (g Generator) Generate(
 	proxy *core_xds.Proxy,
 ) (*core_xds.ResourceSet, error) {
 	resources := core_xds.NewResourceSet()
+	// Matching
+	// Sort identities;
+    //    1. Has the most labels
+	//    2. Has the name alphabetic
+	//    3. Has the creation time
+	// 1. Check which Identities matches this specific dataplane
+	// first match should be the chosen one
+
+	// take the identity and call.CreateIdentity
+	// set secrettracker
+	// 
+
 	// registers providers in one place
 	// take DPP labels and do matches
 	// selector.Matches()
