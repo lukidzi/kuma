@@ -31,6 +31,7 @@ func (g *ProxyTemplateGenerator) Generate(ctx context.Context, xdsCtx xds_contex
 			resources.AddSet(rs)
 		}
 	}
+	// maybe generate secret
 	generator := &ProxyTemplateRawSource{Resources: g.ProxyTemplate.GetConf().GetResources()}
 	if rs, err := generator.Generate(xdsCtx, proxy); err != nil {
 		return nil, fmt.Errorf("resources: %s", err)

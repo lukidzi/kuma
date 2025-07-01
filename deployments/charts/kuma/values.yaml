@@ -914,6 +914,7 @@ plugins:
   resources:
     hostnamegenerators: true
     meshexternalservices: true
+    meshidentities: true
     meshmultizoneservices: true
     meshservices: true
   policies:

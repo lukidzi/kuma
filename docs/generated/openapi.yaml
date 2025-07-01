@@ -3259,6 +3259,140 @@ paths:
       responses:
         '200':
           $ref: '#/components/responses/MeshExternalServiceList'
+  /meshes/{mesh}/meshidentities/{name}:
+    get:
+      operationId: getMeshIdentity
+      summary: Returns MeshIdentity entity
+      tags:
+        - MeshIdentity
+      parameters:
+        - in: path
+          name: mesh
+          schema:
+            type: string
+          required: true
+          description: name of the mesh
+        - in: path
+          name: name
+          schema:
+            type: string
+          required: true
+          description: name of the MeshIdentity
+      responses:
+        '200':
+          $ref: '#/components/responses/MeshIdentityItem'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      operationId: putMeshIdentity
+      summary: Creates or Updates MeshIdentity entity
+      tags:
+        - MeshIdentity
+      parameters:
+        - in: path
+          name: mesh
+          schema:
+            type: string
+          required: true
+          description: name of the mesh
+        - in: path
+          name: name
+          schema:
+            type: string
+          required: true
+          description: name of the MeshIdentity
+      requestBody:
+        description: Put request
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MeshIdentityItem'
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeshIdentityCreateOrUpdateSuccessResponse'
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeshIdentityCreateOrUpdateSuccessResponse'
+    delete:
+      operationId: deleteMeshIdentity
+      summary: Deletes MeshIdentity entity
+      tags:
+        - MeshIdentity
+      parameters:
+        - in: path
+          name: mesh
+          schema:
+            type: string
+          required: true
+          description: name of the mesh
+        - in: path
+          name: name
+          schema:
+            type: string
+          required: true
+          description: name of the MeshIdentity
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeshIdentityDeleteSuccessResponse'
+          description: Successful response
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /meshes/{mesh}/meshidentities:
+    get:
+      operationId: getMeshIdentityList
+      summary: Returns a list of MeshIdentity in the mesh.
+      tags:
+        - MeshIdentity
+      parameters:
+        - in: query
+          name: offset
+          description: offset in the list of entities
+          required: false
+          schema:
+            type: integer
+          example: 0
+        - in: query
+          name: size
+          description: the number of items per page
+          required: false
+          schema:
+            type: integer
+            default: 100
+            maximum: 1000
+            minimum: 1
+        - in: query
+          name: filter
+          description: filter by labels when multiple filters are present, they are ANDed
+          required: false
+          schema:
+            type: object
+            properties:
+              key:
+                type: string
+              value:
+                type: string
+          example:
+            label.k8s.kuma.io/namespace: my-ns
+        - in: path
+          name: mesh
+          schema:
+            type: string
+          required: true
+          description: name of the mesh
+      responses:
+        '200':
+          $ref: '#/components/responses/MeshIdentityList'
   /meshes/{mesh}/meshmultizoneservices/{name}:
     get:
       operationId: getMeshMultiZoneService
@@ -16938,6 +17072,217 @@ components:
     MeshExternalServiceDeleteSuccessResponse:
       type: object
       properties: {}
+    MeshIdentityItem:
+      type: object
+      required:
+        - type
+        - name
+        - spec
+      properties:
+        type:
+          description: the type of the resource
+          type: string
+          enum:
+            - MeshIdentity
+        mesh:
+          description: >-
+            Mesh is the name of the Kuma mesh this resource belongs to. It may
+            be omitted for cluster-scoped resources.
+          type: string
+          default: default
+        name:
+          description: Name of the Kuma resource
+          type: string
+        labels:
+          additionalProperties:
+            type: string
+          description: The labels to help identity resources
+          type: object
+        spec:
+          description: Spec is the specification of the Kuma MeshIdentity resource.
+          properties:
+            provider:
+              properties:
+                builtin:
+                  properties:
+                    dataplaneCertificate:
+                      properties:
+                        duration:
+                          type: string
+                      type: object
+                  type: object
+                provided:
+                  properties:
+                    certificate:
+                      description: DataSource defines the source of bytes to use.
+                      properties:
+                        inline:
+                          description: Data source is inline bytes.
+                          format: byte
+                          type: string
+                        inlineString:
+                          description: Data source is inline string`
+                          type: string
+                        secret:
+                          description: Data source is a secret with given Secret key.
+                          type: string
+                      type: object
+                    dataplaneCertificate:
+                      properties:
+                        duration:
+                          type: string
+                      type: object
+                    privateKey:
+                      description: DataSource defines the source of bytes to use.
+                      properties:
+                        inline:
+                          description: Data source is inline bytes.
+                          format: byte
+                          type: string
+                        inlineString:
+                          description: Data source is inline string`
+                          type: string
+                        secret:
+                          description: Data source is a secret with given Secret key.
+                          type: string
+                      type: object
+                  required:
+                    - certificate
+                    - privateKey
+                  type: object
+                spire:
+                  properties:
+                    agent:
+                      properties:
+                        address:
+                          type: string
+                        timeout:
+                          type: string
+                      type: object
+                  type: object
+                type:
+                  allOf:
+                    - enum:
+                        - Builtin
+                        - Provided
+                        - Spire
+                    - enum:
+                        - 'True'
+                        - 'False'
+                        - Unknown
+                  type: string
+              required:
+                - type
+              type: object
+            selector:
+              properties:
+                dataplane:
+                  description: >-
+                    A label selector is a label query over a set of resources.
+                    The result of matchLabels and
+
+                    matchExpressions are ANDed. An empty label selector matches
+                    all objects. A null
+
+                    label selector matches no objects.
+                  properties:
+                    matchExpressions:
+                      description: >-
+                        matchExpressions is a list of label selector
+                        requirements. The requirements are ANDed.
+                      items:
+                        description: >-
+                          A label selector requirement is a selector that
+                          contains values, a key, and an operator that
+
+                          relates the key and values.
+                        properties:
+                          key:
+                            description: key is the label key that the selector applies to.
+                            type: string
+                          operator:
+                            description: >-
+                              operator represents a key's relationship to a set
+                              of values.
+
+                              Valid operators are In, NotIn, Exists and
+                              DoesNotExist.
+                            type: string
+                          values:
+                            description: >-
+                              values is an array of string values. If the
+                              operator is In or NotIn,
+
+                              the values array must be non-empty. If the
+                              operator is Exists or DoesNotExist,
+
+                              the values array must be empty. This array is
+                              replaced during a strategic
+
+                              merge patch.
+                            items:
+                              type: string
+                            type: array
+                            x-kubernetes-list-type: atomic
+                        required:
+                          - key
+                          - operator
+                        type: object
+                      type: array
+                      x-kubernetes-list-type: atomic
+                    matchLabels:
+                      additionalProperties:
+                        type: string
+                      description: >-
+                        matchLabels is a map of {key,value} pairs. A single
+                        {key,value} in the matchLabels
+
+                        map is equivalent to an element of matchExpressions,
+                        whose key field is "key", the
+
+                        operator is "In", and the values array contains only
+                        "value". The requirements are ANDed.
+                      type: object
+                  type: object
+                  x-kubernetes-map-type: atomic
+              type: object
+            spiffeID:
+              properties:
+                path:
+                  type: string
+                trustDomain:
+                  type: string
+              type: object
+          type: object
+        creationTime:
+          readOnly: true
+          type: string
+          description: Time at which the resource was created
+          format: date-time
+          example: '0001-01-01T00:00:00Z'
+        modificationTime:
+          readOnly: true
+          type: string
+          description: Time at which the resource was updated
+          format: date-time
+          example: '0001-01-01T00:00:00Z'
+    MeshIdentityCreateOrUpdateSuccessResponse:
+      type: object
+      properties:
+        warnings:
+          type: array
+          readOnly: true
+          description: >
+            warnings is a list of warning messages to return to the requesting
+            Kuma API clients.
+
+            Warning messages describe a problem the client making the API
+            request should correct or be aware of.
+          items:
+            type: string
+    MeshIdentityDeleteSuccessResponse:
+      type: object
+      properties: {}
     MeshMultiZoneServiceItem:
       type: object
       required:
@@ -18023,6 +18368,29 @@ components:
                 type: array
                 items:
                   $ref: '#/components/schemas/MeshExternalServiceItem'
+              total:
+                type: number
+                description: The total number of entities
+              next:
+                type: string
+                description: URL to the next page
+    MeshIdentityItem:
+      description: Successful response
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/MeshIdentityItem'
+    MeshIdentityList:
+      description: List
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              items:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MeshIdentityItem'
               total:
                 type: number
                 description: The total number of entities
