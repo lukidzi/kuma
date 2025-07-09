@@ -6,7 +6,6 @@ package v1alpha1
 
 import (
 	_ "embed"
-	"errors"
 	"fmt"
 
 	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
@@ -54,13 +53,15 @@ const (
 var _ model.Resource = &MeshIdentityResource{}
 
 type MeshIdentityResource struct {
-	Meta model.ResourceMeta
-	Spec *MeshIdentity
+	Meta   model.ResourceMeta
+	Spec   *MeshIdentity
+	Status *MeshIdentityStatus
 }
 
 func NewMeshIdentityResource() *MeshIdentityResource {
 	return &MeshIdentityResource{
-		Spec: &MeshIdentity{},
+		Spec:   &MeshIdentity{},
+		Status: &MeshIdentityStatus{},
 	}
 }
 
@@ -91,11 +92,21 @@ func (t *MeshIdentityResource) SetSpec(spec model.ResourceSpec) error {
 }
 
 func (t *MeshIdentityResource) GetStatus() model.ResourceStatus {
-	return nil
+	return t.Status
 }
 
-func (t *MeshIdentityResource) SetStatus(_ model.ResourceStatus) error {
-	return errors.New("status not supported")
+func (t *MeshIdentityResource) SetStatus(status model.ResourceStatus) error {
+	protoType, ok := status.(*MeshIdentityStatus)
+	if !ok {
+		return fmt.Errorf("invalid type %T for Status", status)
+	} else {
+		if protoType == nil {
+			t.Status = &MeshIdentityStatus{}
+		} else {
+			t.Status = protoType
+		}
+		return nil
+	}
 }
 
 func (t *MeshIdentityResource) Descriptor() model.ResourceTypeDescriptor {
@@ -169,7 +180,7 @@ var MeshIdentityResourceTypeDescriptor = model.ResourceTypeDescriptor{
 	HasToTargetRef:               false,
 	HasFromTargetRef:             false,
 	HasRulesTargetRef:            false,
-	HasStatus:                    false,
+	HasStatus:                    true,
 	AllowedOnSystemNamespaceOnly: true,
 	IsReferenceableInTo:          false,
 	ShortName:                    "mi",
