@@ -23,8 +23,8 @@ type MeshIdentity struct {
 }
 
 type SpiffeID struct {
-	TrustDomain string `json:"trustDomain,omitempty"`
-	Path        string `json:"path,omitempty"`
+	TrustDomain *string `json:"trustDomain,omitempty"`
+	Path        *string `json:"path,omitempty"`
 }
 
 // +kubebuilder:validation:Enum=Bundled;Spire
@@ -48,7 +48,7 @@ type Provider struct {
 }
 
 type CertificateParameters struct {
-	Expiry *k8s.Duration `json:"duration,omitempty"`
+	Expiry *k8s.Duration `json:"expiry,omitempty"`
 }
 
 // +kubebuilder:validation:Enum=Enabled;Disabled
@@ -60,7 +60,7 @@ const (
 )
 
 type Autogenerate struct {
-	Enabled bool `json:"enabled,omitempty"`
+	Enabled *bool `json:"enabled,omitempty"`
 }
 
 type Bundled struct {
@@ -68,7 +68,7 @@ type Bundled struct {
 	// from an existing MeshIdentity. If not defined, the control plane automatically generates a MeshTrust.
 	MeshTrustCreation *MeshTrustCreationMode `json:"meshTrustCreation,omitempty"`
 	// InsecureAllowSelfSigned allows users to enable the use of self-signed certificates.
-	InsecureAllowSelfSigned bool `json:"insecureAllowSelfSigned,omitempty"`
+	InsecureAllowSelfSigned *bool `json:"insecureAllowSelfSigned,omitempty"`
 	// Autogenerate configures the control plane to use self-signed certificates.
 	Autogenerate *Autogenerate `json:"autogenerate,omitempty"`
 	// Certificate allows the user to specify a custom certificate.

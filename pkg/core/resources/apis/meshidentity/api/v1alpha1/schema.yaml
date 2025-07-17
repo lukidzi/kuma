@@ -51,7 +51,7 @@ properties:
               certificateParameters:
                 description: CertificateParameters allows users to define certificate generation parameters.
                 properties:
-                  duration:
+                  expiry:
                     type: string
                 type: object
               insecureAllowSelfSigned:

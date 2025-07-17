@@ -172,6 +172,7 @@ var MeshIdentityResourceTypeDescriptor = model.ResourceTypeDescriptor{
 	KumactlListArg:               "meshidentities",
 	AllowToInspect:               false,
 	IsPolicy:                     false,
+	IsDestination:                false,
 	IsExperimental:               false,
 	SingularDisplayName:          "Mesh Identity",
 	PluralDisplayName:            "Mesh Identities",
