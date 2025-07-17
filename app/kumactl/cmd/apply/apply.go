@@ -74,7 +74,7 @@ $ kumactl apply -f https://example.com/resource.yaml
 					client := &http.Client{
 						Timeout: timeout,
 					}
-					req, err := http.NewRequest("GET", ctx.args.file, http.NoBody)
+					req, err := http.NewRequest(http.MethodGet, ctx.args.file, http.NoBody)
 					if err != nil {
 						return errors.Wrap(err, "error creating new http request")
 					}
@@ -104,7 +104,7 @@ $ kumactl apply -f https://example.com/resource.yaml
 			rawResources := yaml.SplitYAML(string(b))
 			var hasErrors bool
 			for i, rawResource := range rawResources {
-				if len(rawResource) == 0 {
+				if rawResource == "" {
 					continue
 				}
 				bytes := []byte(rawResource)

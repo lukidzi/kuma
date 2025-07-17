@@ -6,6 +6,7 @@ import (
 
 	"github.com/pkg/errors"
 
+	common_api "github.com/kumahq/kuma/api/common/v1alpha1"
 	mesh_proto "github.com/kumahq/kuma/api/mesh/v1alpha1"
 	"github.com/kumahq/kuma/pkg/core/faultinjections"
 	"github.com/kumahq/kuma/pkg/core/kri"
@@ -14,6 +15,7 @@ import (
 	"github.com/kumahq/kuma/pkg/core/permissions"
 	core_plugins "github.com/kumahq/kuma/pkg/core/plugins"
 	"github.com/kumahq/kuma/pkg/core/ratelimits"
+	core_resources "github.com/kumahq/kuma/pkg/core/resources/apis/core"
 	core_mesh "github.com/kumahq/kuma/pkg/core/resources/apis/mesh"
 	meshextenralservice_api "github.com/kumahq/kuma/pkg/core/resources/apis/meshexternalservice/api/v1alpha1"
 	core_model "github.com/kumahq/kuma/pkg/core/resources/model"
@@ -21,6 +23,7 @@ import (
 	core_xds "github.com/kumahq/kuma/pkg/core/xds"
 	xds_types "github.com/kumahq/kuma/pkg/core/xds/types"
 	"github.com/kumahq/kuma/pkg/plugins/policies/core/ordered"
+	"github.com/kumahq/kuma/pkg/plugins/policies/core/rules/resolve"
 	tproxy_dp "github.com/kumahq/kuma/pkg/transparentproxy/config/dataplane"
 	"github.com/kumahq/kuma/pkg/util/pointer"
 	xds_context "github.com/kumahq/kuma/pkg/xds/context"
@@ -122,15 +125,16 @@ func (p *DataplaneProxyBuilder) resolveVIPOutbounds(
 	bindOutbounds bool,
 ) []*xds_types.Outbound {
 	if !tpEnabled && !bindOutbounds {
-		return dataplane.AsOutbounds(meshContext.ResolveResourceIdentifier)
+		return asOutbounds(dataplane, meshContext.ResolveResourceIdentifier)
 	}
 	reachableServices := map[string]bool{}
-	var reachableBackends *xds_context.ReachableBackends
+	var reachableBackends map[kri.Identifier]core_resources.Port
+	var onlySelectedBackends bool
 	if dataplane.Spec.GetNetworking().GetTransparentProxying() != nil {
 		for _, reachableService := range dataplane.Spec.GetNetworking().GetTransparentProxying().GetReachableServices() {
 			reachableServices[reachableService] = true
 		}
-		reachableBackends = meshContext.GetReachableBackends(dataplane)
+		reachableBackends, onlySelectedBackends = meshContext.BaseMeshContext.DestinationIndex.GetReachableBackends(dataplane)
 	}
 
 	// Update the outbound of the dataplane with the generatedVips
@@ -159,12 +163,22 @@ func (p *DataplaneProxyBuilder) resolveVIPOutbounds(
 		} else {
 			// we need to verify if the user has already reachableServices defined, and to don't send additional clusters and ruin the performance
 			// of the dataplane
-			if len(reachableServices) != 0 && reachableBackends == nil {
+			if len(reachableServices) != 0 && !onlySelectedBackends {
 				continue
 			}
-			if reachableBackends != nil {
+
+			// we need to skip adding Mesh*Service outbounds when ReachableBackends are not configured and MeshServicesMode is set to ReachableBackends,
+			// so we don't send additional clusters and to not impact performance
+			if dataplane.Spec.GetNetworking().GetTransparentProxying().GetReachableBackends() == nil &&
+				meshContext.Resource.Spec.MeshServicesMode() == mesh_proto.Mesh_MeshServices_ReachableBackends {
+				continue
+			}
+
+			if onlySelectedBackends {
 				// check if there is an entry with specific port or without port
-				if !(*reachableBackends)[pointer.Deref(outbound.Resource)] && !(*reachableBackends)[kri.NoSectionName(pointer.Deref(outbound.Resource))] {
+				_, selected := reachableBackends[pointer.Deref(outbound.Resource)]
+				_, selectedBySectionName := reachableBackends[kri.NoSectionName(pointer.Deref(outbound.Resource))]
+				if !selected && !selectedBySectionName {
 					// ignore VIP outbound if reachableServices is defined and not specified
 					// Reachable services takes precedence over reachable services graph.
 					continue
@@ -231,4 +245,35 @@ func (p *DataplaneProxyBuilder) matchPolicies(meshContext xds_context.MeshContex
 		matchedPolicies.Dynamic[res.Type] = res
 	}
 	return matchedPolicies, nil
+}
+
+func asOutbounds(dataplane *core_mesh.DataplaneResource, resolver resolve.LabelResourceIdentifierResolver) xds_types.Outbounds {
+	var outbounds xds_types.Outbounds
+	for _, o := range dataplane.Spec.Networking.Outbound {
+		if o.BackendRef != nil {
+			// convert proto BackendRef to common_api.BackendRef
+			backendRef := common_api.BackendRef{
+				TargetRef: common_api.TargetRef{
+					Kind:   common_api.TargetRefKind(o.BackendRef.Kind),
+					Name:   pointer.To(o.BackendRef.Name),
+					Labels: pointer.To(o.BackendRef.Labels),
+				},
+				Port: pointer.To(o.BackendRef.Port),
+			}
+			ref, ok := resolve.BackendRef(dataplane.GetMeta(), backendRef, resolver)
+			if !ok {
+				continue
+			}
+			if ref.ReferencesRealResource() {
+				outbounds = append(outbounds, &xds_types.Outbound{
+					Address:  o.Address,
+					Port:     o.Port,
+					Resource: ref.RealResourceBackendRef().Resource,
+				})
+			}
+		} else {
+			outbounds = append(outbounds, &xds_types.Outbound{LegacyOutbound: o})
+		}
+	}
+	return outbounds
 }

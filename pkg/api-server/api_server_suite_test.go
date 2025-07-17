@@ -303,7 +303,7 @@ func apiTest(inputResourceFile string, apiServer *api_server.ApiServer, resource
 		ginkgo.By(fmt.Sprintf("when calling: %d %s", i, act))
 		// Given
 		url := fmt.Sprintf("http://%s%s", apiServer.Address(), act.path)
-		var body io.Reader = nil
+		var body io.Reader
 		if act.method == http.MethodPut || act.method == http.MethodPost {
 			requestFile := strings.ReplaceAll(inputResourceFile, ".input.yaml", ".request.json")
 			if len(actions) > 1 {
@@ -329,7 +329,7 @@ func apiTest(inputResourceFile string, apiServer *api_server.ApiServer, resource
 		b, err := io.ReadAll(response.Body)
 		result := strings.ReplaceAll(string(b), apiServer.Address(), "{{address}}")
 		// Cleanup times
-		result = regexp.MustCompile("[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9][^\"]+").ReplaceAllString(result, "0001-01-01T00:00:00Z")
+		result = regexp.MustCompile(`\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d[^"]+`).ReplaceAllString(result, "0001-01-01T00:00:00Z")
 		Expect(err).ToNot(HaveOccurred())
 		goldenFile := strings.ReplaceAll(inputResourceFile, ".input.yaml", ".golden.json")
 		if len(actions) > 1 {

@@ -261,7 +261,7 @@ func processMetrics(contents <-chan []byte, contentType expfmt.Format) []byte {
 		metrics = bytes.ReplaceAll(metrics, []byte("# EOF"), []byte(""))
 
 		buf.Write(metrics)
-		buf.Write([]byte("\n"))
+		buf.WriteString("\n")
 	}
 
 	processedMetrics := append(processNewlineChars(buf.Bytes()), '\n')
@@ -270,7 +270,7 @@ func processMetrics(contents <-chan []byte, contentType expfmt.Format) []byte {
 
 	if contentType == FmtOpenMetrics_1_0_0 || contentType == FmtOpenMetrics_0_0_1 {
 		// make metrics OpenMetrics compliant
-		buf.Write([]byte("# EOF\n"))
+		buf.WriteString("# EOF\n")
 	}
 
 	return buf.Bytes()
@@ -337,7 +337,7 @@ func selectContentType(contentTypes <-chan expfmt.Format, reqHeader http.Header)
 }
 
 func (s *Hijacker) getStats(ctx context.Context, initReq *http.Request, app ApplicationToScrape) ([]byte, expfmt.Format) {
-	req, err := http.NewRequest("GET", rewriteMetricsURL(app.Address, app.Port, app.Path, app.QueryModifier, initReq.URL), http.NoBody)
+	req, err := http.NewRequest(http.MethodGet, rewriteMetricsURL(app.Address, app.Port, app.Path, app.QueryModifier, initReq.URL), http.NoBody)
 	if err != nil {
 		logger.Error(err, "failed to create request")
 		return nil, ""

@@ -20,7 +20,7 @@ type Selector struct {
 // +kuma:policy:kds_flags=model.GlobalToZonesFlag | model.ZoneToGlobalFlag
 type HostnameGenerator struct {
 	Selector Selector `json:"selector,omitempty"`
-	Template string   `json:"template,omitempty"`
+	Template string   `json:"template"`
 	// Extension struct for a plugin configuration
 	Extension *Extension `json:"extension,omitempty"`
 }

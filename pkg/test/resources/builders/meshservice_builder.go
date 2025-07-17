@@ -5,11 +5,13 @@ import (
 
 	"k8s.io/apimachinery/pkg/util/intstr"
 
+	mesh_proto "github.com/kumahq/kuma/api/mesh/v1alpha1"
 	core_mesh "github.com/kumahq/kuma/pkg/core/resources/apis/mesh"
 	"github.com/kumahq/kuma/pkg/core/resources/apis/meshservice/api/v1alpha1"
 	core_model "github.com/kumahq/kuma/pkg/core/resources/model"
 	"github.com/kumahq/kuma/pkg/core/resources/store"
 	test_model "github.com/kumahq/kuma/pkg/test/resources/model"
+	"github.com/kumahq/kuma/pkg/util/pointer"
 )
 
 type MeshServiceBuilder struct {
@@ -20,8 +22,9 @@ func MeshService() *MeshServiceBuilder {
 	return &MeshServiceBuilder{
 		res: &v1alpha1.MeshServiceResource{
 			Meta: &test_model.ResourceMeta{
-				Mesh: core_model.DefaultMesh,
-				Name: "backend",
+				Mesh:   core_model.DefaultMesh,
+				Name:   "backend",
+				Labels: map[string]string{},
 			},
 			Spec:   &v1alpha1.MeshService{},
 			Status: &v1alpha1.MeshServiceStatus{},
@@ -44,6 +47,16 @@ func (m *MeshServiceBuilder) WithMesh(mesh string) *MeshServiceBuilder {
 	return m
 }
 
+func (m *MeshServiceBuilder) WithZone(zone string) *MeshServiceBuilder {
+	m.res.Meta.(*test_model.ResourceMeta).Labels[mesh_proto.ZoneTag] = zone
+	return m
+}
+
+func (m *MeshServiceBuilder) WithNamespace(namespace string) *MeshServiceBuilder {
+	m.res.Meta.(*test_model.ResourceMeta).Labels[mesh_proto.KubeNamespaceTag] = namespace
+	return m
+}
+
 func (m *MeshServiceBuilder) WithDataplaneRefNameSelector(name string) *MeshServiceBuilder {
 	m.res.Spec.Selector = v1alpha1.Selector{
 		DataplaneRef: &v1alpha1.DataplaneRef{
@@ -55,7 +68,7 @@ func (m *MeshServiceBuilder) WithDataplaneRefNameSelector(name string) *MeshServ
 
 func (m *MeshServiceBuilder) WithDataplaneTagsSelector(selector map[string]string) *MeshServiceBuilder {
 	m.res.Spec.Selector = v1alpha1.Selector{
-		DataplaneTags: selector,
+		DataplaneTags: &selector,
 	}
 	return m
 }
@@ -67,7 +80,7 @@ func (m *MeshServiceBuilder) WithDataplaneTagsSelectorKV(selectorKV ...string) *
 func (m *MeshServiceBuilder) AddIntPort(port, target int32, protocol core_mesh.Protocol) *MeshServiceBuilder {
 	m.res.Spec.Ports = append(m.res.Spec.Ports, v1alpha1.Port{
 		Port: port,
-		TargetPort: intstr.IntOrString{
+		TargetPort: &intstr.IntOrString{
 			Type:   intstr.Int,
 			IntVal: target,
 		},
@@ -79,21 +92,21 @@ func (m *MeshServiceBuilder) AddIntPort(port, target int32, protocol core_mesh.P
 func (m *MeshServiceBuilder) AddIntPortWithName(port, target int32, protocol core_mesh.Protocol, name string) *MeshServiceBuilder {
 	m.res.Spec.Ports = append(m.res.Spec.Ports, v1alpha1.Port{
 		Port: port,
-		TargetPort: intstr.IntOrString{
+		TargetPort: &intstr.IntOrString{
 			Type:   intstr.Int,
 			IntVal: target,
 		},
 		AppProtocol: protocol,
-		Name:        name,
+		Name:        &name,
 	})
 	return m
 }
 
 func (m *MeshServiceBuilder) AddServiceTagIdentity(identity string) *MeshServiceBuilder {
-	m.res.Spec.Identities = append(m.res.Spec.Identities, v1alpha1.MeshServiceIdentity{
+	m.res.Spec.Identities = pointer.To(append(pointer.Deref(m.res.Spec.Identities), v1alpha1.MeshServiceIdentity{
 		Type:  v1alpha1.MeshServiceIdentityServiceTagType,
 		Value: identity,
-	})
+	}))
 	return m
 }
 

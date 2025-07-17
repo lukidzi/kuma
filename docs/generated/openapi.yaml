@@ -4425,6 +4425,7 @@ components:
           type: string
         port:
           type: integer
+          x-go-type: int32
         protocol:
           type: string
     DataplaneOutbound:
@@ -4438,6 +4439,7 @@ components:
           type: string
         port:
           type: integer
+          x-go-type: int32
         protocol:
           type: string
     PolicyOrigin:
@@ -16677,6 +16679,8 @@ components:
               type: object
             template:
               type: string
+          required:
+            - template
           type: object
         creationTime:
           readOnly: true
