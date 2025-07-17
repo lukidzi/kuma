@@ -309,7 +309,7 @@ var _ = Describe("MeshHTTPRoute", func() {
 				Spec: &meshmultizoneservice_api.MeshMultiZoneService{
 					Selector: meshmultizoneservice_api.Selector{
 						MeshService: common_api.LabelSelector{
-							MatchLabels: map[string]string{
+							MatchLabels: &map[string]string{
 								"service": "backend",
 							},
 						},
@@ -1087,8 +1087,8 @@ var _ = Describe("MeshHTTPRoute", func() {
 				},
 				Spec: &meshmultizoneservice_api.MeshMultiZoneService{
 					Selector: meshmultizoneservice_api.Selector{
-						MeshService: meshmultizoneservice_api.MeshServiceSelector{
-							MatchLabels: map[string]string{
+						MeshService: common_api.LabelSelector{
+							MatchLabels: &map[string]string{
 								"app": "backend",
 							},
 						},

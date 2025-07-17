@@ -15,6 +15,7 @@ type Selector struct {
 // +kuma:policy:is_policy=false
 // +kuma:policy:has_status=true
 // +kuma:policy:allowed_on_system_namespace_only=true
+// +kuma:policy:short_name=mid
 // +kuma:policy:kds_flags=model.GlobalToZonesFlag | model.ZoneToGlobalFlag
 type MeshIdentity struct {
 	Selector *Selector `json:"selector,omitempty"`
@@ -83,6 +84,7 @@ type Bundled struct {
 
 type SpireAgent struct {
 	// Connection timeout to the socket exposed by Spire agent
+	// Default 1 second.
 	Timeout *k8s.Duration `json:"timeout,omitempty"`
 }
 

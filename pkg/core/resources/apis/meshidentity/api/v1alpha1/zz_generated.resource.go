@@ -184,6 +184,6 @@ var MeshIdentityResourceTypeDescriptor = model.ResourceTypeDescriptor{
 	HasStatus:                    true,
 	AllowedOnSystemNamespaceOnly: true,
 	IsReferenceableInTo:          false,
-	ShortName:                    "mi",
+	ShortName:                    "mid",
 	IsFromAsRules:                false,
 }

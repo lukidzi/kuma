@@ -21,7 +21,7 @@ func (g Generator) Generate(
 	resources := core_xds.NewResourceSet()
 	// Matching
 	// Sort identities;
-    //    1. Has the most labels
+	//    1. Has the most labels
 	//    2. Has the name alphabetic
 	//    3. Has the creation time
 	// 1. Check which Identities matches this specific dataplane
@@ -29,7 +29,7 @@ func (g Generator) Generate(
 
 	// take the identity and call.CreateIdentity
 	// set secrettracker
-	// 
+	//
 
 	// registers providers in one place
 	// take DPP labels and do matches

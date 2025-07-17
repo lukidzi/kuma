@@ -17,7 +17,7 @@ import (
 )
 
 // +kubebuilder:object:root=true
-// +kubebuilder:resource:categories=kuma,scope=Namespaced,shortName=mi
+// +kubebuilder:resource:categories=kuma,scope=Namespaced,shortName=mid
 type MeshIdentity struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

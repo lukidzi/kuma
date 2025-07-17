@@ -87,7 +87,9 @@ properties:
                 description: Spire agent configuration
                 properties:
                   timeout:
-                    description: Connection timeout to the socket exposed by Spire agent
+                    description: |-
+                      Connection timeout to the socket exposed by Spire agent
+                      Default 1 second.
                     type: string
                 type: object
             type: object

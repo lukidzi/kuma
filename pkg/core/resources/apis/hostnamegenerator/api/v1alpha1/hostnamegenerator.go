@@ -2,8 +2,9 @@
 package v1alpha1
 
 import (
-	common_api "github.com/kumahq/kuma/api/common/v1alpha1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+
+	common_api "github.com/kumahq/kuma/api/common/v1alpha1"
 )
 
 type Selector struct {

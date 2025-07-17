@@ -18,14 +18,12 @@ func NewBuiltinProvider(secretManager manager.ResourceManager) providers.Provide
 var _ providers.Provider = &builtinProvider{}
 
 func (b *builtinProvider) GetUpstreamTLSContext(identity string, destIdentities []string) {
-
 }
 
 func (b *builtinProvider) GetDownstreamTLSContext(trustDomains []string) {
-
 }
-func (b *builtinProvider) CreateIdentity() {
 
+func (b *builtinProvider) CreateIdentity() {
 }
 
 // 1. controller which detect creation of MeshIdentity create CA
