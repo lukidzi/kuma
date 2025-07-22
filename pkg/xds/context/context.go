@@ -34,6 +34,8 @@ type ConnectionInfo struct {
 type ControlPlaneContext struct {
 	CLACache        envoy.CLACache
 	Secrets         secrets.Secrets
+	// Here we can create a new interface IdentityProvider which can be called by services and later used by other components
+	// Identities       
 	Zone            string
 	SystemNamespace string
 }
