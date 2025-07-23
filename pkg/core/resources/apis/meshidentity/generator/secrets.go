@@ -5,6 +5,8 @@ import (
 	core_xds "github.com/kumahq/kuma/pkg/core/xds"
 )
 
+// this needs to be registered
+
 var _ core_plugins.CoreResourcePlugin = &plugin{}
 
 type plugin struct{}

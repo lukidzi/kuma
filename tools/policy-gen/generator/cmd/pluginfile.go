@@ -53,6 +53,7 @@ func newPluginFile(rootArgs *args) *cobra.Command {
 				GoModule    string
 				ResourceDir string
 				IsPolicy    bool
+				Register    bool
 			}{
 				Package:     strings.ToLower(pconfig.Name),
 				Name:        pconfig.Name,

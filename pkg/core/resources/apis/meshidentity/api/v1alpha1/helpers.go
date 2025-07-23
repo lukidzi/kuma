@@ -1,21 +1,19 @@
-package meshidentity
+package v1alpha1
 
 import (
 	"sort"
 
 	"github.com/kumahq/kuma/pkg/util/pointer"
-
-	meshidentity_api "github.com/kumahq/kuma/pkg/core/resources/apis/meshidentity/api/v1alpha1"
 )
 
 func Matched(
 	labels map[string]string,
-	meshIdentities []*meshidentity_api.MeshIdentityResource,
-) (*meshidentity_api.MeshIdentity, bool) {
+	meshIdentities []*MeshIdentityResource,
+) (*MeshIdentity, bool) {
 	type scoredMatch struct {
 		matchCount int
 		name       string
-		policy     *meshidentity_api.MeshIdentity
+		policy     *MeshIdentity
 	}
 
 	var matches []scoredMatch
