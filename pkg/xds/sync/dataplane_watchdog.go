@@ -55,6 +55,14 @@ type DataplaneWatchdog struct {
 	envoyAdminMTLS   *core_xds.ServerSideMTLSCerts
 	dpAddress        string
 	xdsMeta          *core_xds.DataplaneMetadata
+	workloadIdentity workloadIdentity
+}
+
+type workloadIdentity struct {
+	// expirationtime
+	// identity provider KRI - if nil there is no identity
+	// hash of all meshidentities? 
+	// cert, key
 }
 
 func NewDataplaneWatchdog(deps DataplaneWatchdogDependencies, meta *core_xds.DataplaneMetadata, dpKey core_model.ResourceKey) *DataplaneWatchdog {
@@ -117,6 +125,16 @@ func (d *DataplaneWatchdog) syncDataplane(ctx context.Context) (SyncResult, erro
 	if err != nil {
 		return SyncResult{}, errors.Wrap(err, "could not get mesh context")
 	}
+	// d.proxy.IsExpired()
+	// generate certs here
+	// proxy.Key = 
+	// proxy.Cert = 
+
+   // spiffeId -> SA/namespace 
+   // d.
+
+   // list of identities
+   // find more specific
 
 	certInfo := d.EnvoyCpCtx.Secrets.Info(mesh_proto.DataplaneProxyType, d.key)
 	syncForCert := certInfo != nil && certInfo.ExpiringSoon() // check if we need to regenerate config because identity cert is expiring soon.
@@ -145,6 +163,11 @@ func (d *DataplaneWatchdog) syncDataplane(ctx context.Context) (SyncResult, erro
 		result.Status = SkipStatus
 		return result, nil
 	}
+	// if 
+	// take dp
+	// generate identity
+	// proxy.Key = 
+	// proxy.Cert = 
 	proxy, err := d.DataplaneProxyBuilder.Build(ctx, d.key, d.xdsMeta, meshCtx)
 	if err != nil {
 		return SyncResult{}, errors.Wrap(err, "could not build dataplane proxy")

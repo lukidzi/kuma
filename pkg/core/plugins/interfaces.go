@@ -131,3 +131,10 @@ type ProxyPlugin interface {
 	// Apply mutate the proxy as needed.
 	Apply(ctx context.Context, meshCtx xds_context.MeshContext, proxy *core_xds.Proxy) error
 }
+
+// CoreResourcePlugin a plugin to add a resource to Kuma
+type CoreResourcePlugin interface {
+	Plugin
+	// Apply to `rs` using `proxy` the mutation or new resources.
+	Apply(rs *core_xds.ResourceSet, proxy *core_xds.Proxy) error
+}
