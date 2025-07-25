@@ -2,13 +2,18 @@ package sync
 
 import (
 	"context"
+	"encoding/base64"
 	std_errors "errors"
+	"hash/fnv"
 
 	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
 
 	mesh_proto "github.com/kumahq/kuma/api/mesh/v1alpha1"
 	"github.com/kumahq/kuma/pkg/core"
+	core_mesh "github.com/kumahq/kuma/pkg/core/resources/apis/mesh"
+	meshidentity_api "github.com/kumahq/kuma/pkg/core/resources/apis/meshidentity/api/v1alpha1"
+	"github.com/kumahq/kuma/pkg/core/resources/apis/meshidentity/providers"
 	core_manager "github.com/kumahq/kuma/pkg/core/resources/manager"
 	core_model "github.com/kumahq/kuma/pkg/core/resources/model"
 	core_xds "github.com/kumahq/kuma/pkg/core/xds"
@@ -56,12 +61,14 @@ type DataplaneWatchdog struct {
 	dpAddress        string
 	xdsMeta          *core_xds.DataplaneMetadata
 	workloadIdentity workloadIdentity
+	identity         *providers.Identity
+	lastIdentityHash string // last Hash of MeshIdentities
 }
 
 type workloadIdentity struct {
 	// expirationtime
 	// identity provider KRI - if nil there is no identity
-	// hash of all meshidentities? 
+	// hash of all meshidentities?
 	// cert, key
 }
 
@@ -125,24 +132,27 @@ func (d *DataplaneWatchdog) syncDataplane(ctx context.Context) (SyncResult, erro
 	if err != nil {
 		return SyncResult{}, errors.Wrap(err, "could not get mesh context")
 	}
-	// d.proxy.IsExpired()
-	// generate certs here
-	// proxy.Key = 
-	// proxy.Cert = 
+	result := SyncResult{
+		ProxyType: mesh_proto.DataplaneProxyType,
+	}
 
-   // spiffeId -> SA/namespace 
-   // d.
-
-   // list of identities
-   // find more specific
+	var dpp *core_mesh.DataplaneResource
+	var found bool
+	if dpp, found = meshCtx.DataplanesByName[d.key.Name]; !found {
+		d.log.Info("Dataplane object not found. Can't regenerate XDS configuration. It's expected during Kubernetes namespace termination. " +
+			"If it persists it's a bug.")
+		result.Status = SkipStatus
+		return result, nil
+	}
 
 	certInfo := d.EnvoyCpCtx.Secrets.Info(mesh_proto.DataplaneProxyType, d.key)
 	syncForCert := certInfo != nil && certInfo.ExpiringSoon() // check if we need to regenerate config because identity cert is expiring soon.
 	syncForConfig := meshCtx.Hash != d.lastHash               // check if we need to regenerate config because Kuma policies has changed.
-	result := SyncResult{
-		ProxyType: mesh_proto.DataplaneProxyType,
-	}
-	if !syncForCert && !syncForConfig {
+	identity := d.EnvoyCpCtx.IdentityManager.SelectedIdentity(dpp, meshCtx.Resources.MeshIdentities().Items)
+	identityHash := base64.StdEncoding.EncodeToString(hashMeshIdentity(identity))
+	syncIdentity := identityHash != d.lastIdentityHash || (d.identity != nil && d.identity.ExpiringSoon())
+	core.Log.Info("TEST IDEN", "identityHash != d.lastIdentityHash", identityHash != d.lastIdentityHash, "d.identity != nil && d.identity.ExpiringSoon()", d.identity != nil && d.identity.ExpiringSoon())
+	if !syncForCert && !syncForConfig && !syncIdentity {
 		result.Status = SkipStatus
 		return result, nil
 	}
@@ -163,15 +173,28 @@ func (d *DataplaneWatchdog) syncDataplane(ctx context.Context) (SyncResult, erro
 		result.Status = SkipStatus
 		return result, nil
 	}
-	// if 
-	// take dp
-	// generate identity
-	// proxy.Key = 
-	// proxy.Cert = 
 	proxy, err := d.DataplaneProxyBuilder.Build(ctx, d.key, d.xdsMeta, meshCtx)
 	if err != nil {
 		return SyncResult{}, errors.Wrap(err, "could not build dataplane proxy")
 	}
+	core.Log.Info("TEST IDEN", "syncIdentity", syncIdentity)
+	if syncIdentity {
+		identity, err := d.EnvoyCpCtx.IdentityManager.GetWorkloadIdentity(ctx, dpp, identity)
+		if err != nil {
+			return SyncResult{}, errors.Wrap(err, "could not get identity")
+		}
+		d.identity = identity
+	}
+	if d.identity != nil {
+		proxy.Identity = &core_xds.Identity{
+			Type:       core_xds.ProviderType(d.identity.Type),
+			Cert:       d.identity.CertPEM,
+			PrivateKey: d.identity.KeyPEM,
+			SecretName: d.identity.SecretName,
+			CA:         d.identity.CA,
+		}
+	}
+
 	networking := proxy.Dataplane.Spec.Networking
 	envoyAdminMTLS, err := d.getEnvoyAdminMTLS(ctx, networking.Address, networking.AdvertisedAddress)
 	if err != nil {
@@ -186,6 +209,7 @@ func (d *DataplaneWatchdog) syncDataplane(ctx context.Context) (SyncResult, erro
 		return SyncResult{}, errors.Wrap(err, "could not reconcile")
 	}
 	d.lastHash = meshCtx.Hash
+	d.lastIdentityHash = identityHash
 
 	if changed {
 		result.Status = ChangedStatus
@@ -193,6 +217,14 @@ func (d *DataplaneWatchdog) syncDataplane(ctx context.Context) (SyncResult, erro
 		result.Status = GeneratedStatus
 	}
 	return result, nil
+}
+
+func hashMeshIdentity(identity *meshidentity_api.MeshIdentityResource) []byte {
+	hasher := fnv.New128a()
+	if identity != nil {
+		_, _ = hasher.Write(core_model.Hash(identity))
+	}
+	return hasher.Sum(nil)
 }
 
 // syncIngress synces state of Ingress Dataplane.

@@ -8,7 +8,7 @@ Technical Story: https://github.com/kumahq/kuma/issues/13875
 
 While working on SPIFFE compliance, we identified limitations in our existing `DataSource` structure. It currently supports only inline values or secret references:
 
-[Source](https://github.com/kumahq/kuma/blob/4ac717ba99aae596da3114455d4ba8967e084191/api/common/v1alpha1/datasource.go#L10-L18)
+[Source](https://github.com/kumahq/kuma/blob/master/api/common/v1alpha1/datasource.go)
 ```golang
 // DataSource defines the source of bytes to use.
 type DataSource struct {
@@ -25,7 +25,10 @@ The current solution has following limitations:
 * Users cannot provide values via file path or environment variable.
 * Defining private keys inline is insecure, especially since these values are synced to the global control plane.
 
-There is another issue when user wants to explicitly use the `DataSource` in the resource. It's not clear if value provided by the data source should be accessed by the proxy or control plane. In some resources it makes sense to have it on the control plane while for others on the proxy.
+
+There is another issue when user wants to explicitly use the `DataSource` in the resource. It's not clear if value provided
+by the data source should be accessed by the data plane or control plane. In some resources it makes sense to have it on the control plane
+while for others on the data plane.
 
 **Example**
 
@@ -79,7 +82,7 @@ This ambiguity in resolution context leads to confusion and potential misconfigu
 * Create a reusable structure applicable across different resources.
 * Clearly define where the `DataSource` should be resolved:
   * On the control plane (e.g., secrets)
-  * On the proxy (data plane, zone ingress, or zone egress) via files or environment variables
+  * On the data plane (e.g., files or environment variables)
 
 ## User stories
 
@@ -105,7 +108,7 @@ It should be feasible to define a `MeshExternalService` with all required mTLS c
 
 ### As a Mesh Operator, I want to configure mTLS for MeshExternalService using a Secret
 
-To maintain a strong security boundary, the control plane should only access `Secrets` from the system namespace (e.g., kuma-system). When a `MeshExternalService` is configured with a `Secret`, it makes sense for the control plane to read that `Secret` and securely deliver it to the proxy via SDS.
+To maintain a strong security boundary, the control plane should only access `Secrets` from the system namespace (e.g., kuma-system). When a `MeshExternalService` is configured with a `Secret`, it makes sense for the control plane to read that `Secret` and securely deliver it to the data plane via SDS.
 
 ## Design
 
@@ -152,7 +155,7 @@ type EnvVar struct {
 This model is extensible and aligns with Kubernetes conventions (e.g., `SecretRef`). However, it introduces ambiguity regarding where the value should be resolved.
 To address this, we could introduce a resource-specific `ResourceDescriptor` parameter that defines where the `DataSource` should be resolved:
 * Control plane - for example, when signing certificates in `MeshIdentity`.
-* Proxy (data plane, zone ingress, or zone egress) - for example, when doing mTLS for `MeshExternalService` via `ZoneEgress`
+* Data plane - for example, when performing mutual TLS in `MeshExternalService` via `ZoneEgress`.
 
 #### Pros
 * Provides a unified structure.
@@ -160,8 +163,8 @@ To address this, we could introduce a resource-specific `ResourceDescriptor` par
 * Inline secrets are no longer synced to the global control plane, improving security.
 
 #### Cons
-* Responsibility for resolving the configuration (control plane vs. proxy) is ambiguous.
-* It's unclear where values like file paths or environment variables should be configured - in the control plane or proxy context.
+* Responsibility for resolving the configuration (control plane vs. data plane) is ambiguous.
+* It's unclear where values like file paths or environment variables should be configured - in the control plane or data plane context.
 * There's a potential security risk if private keys are delivered by the control plane.
 * The API is not self-explanatory: the resolution behavior is only discoverable by reading the code.
 
@@ -169,66 +172,66 @@ To address this, we could introduce a resource-specific `ResourceDescriptor` par
 
 ```golang
 // +kubebuilder:validation:Enum=File;Secret;EnvVar
-type ControlPlaneType string
+type CPType string
 
 const (
-	FileType   ControlPlaneType = "File"
-	SecretType ControlPlaneType = "Secret"
-	EnvVarType ControlPlaneType = "EnvVar"
+    FileType   CPType = "File"
+    SecretType CPType = "Secret"
+    EnvVarType CPType = "EnvVar"
 )
 
 type ControlPlaneDataSource struct {
-	Type      ControlPlaneType `json:"type,omitempty"`
-	File      *File            `json:"file,omitempty"`
-	SecretRef *SecretRef       `json:"secretRef,omitempty"`
-	EnvVar    *EnvVar          `json:"envVar,omitempty"`
+    Type      CPType     `json:"type,omitempty"`
+    File      *File      `json:"file,omitempty"`
+    SecretRef *SecretRef `json:"secretRef,omitempty"`
+    EnvVar    *EnvVar    `json:"envVar,omitempty"`
 }
 
 // +kubebuilder:validation:Enum=File;EnvVar
-type ProxyType string
+type DpType string
 
 const (
-	FileType   ProxyType = "File"
-	EnvVarType ProxyType = "EnvVar"
+    FileType   DpType = "File"
+    EnvVarType DpType = "EnvVar"
 )
 
-type ProxyDataSource struct {
-	Type   ProxyType `json:"type,omitempty"`
-	File   *File     `json:"file,omitempty"`
-	EnvVar *EnvVar   `json:"envVar,omitempty"`
+type DataplaneDataSource struct {
+    Type   DpType  `json:"type,omitempty"`
+    File   *File   `json:"file,omitempty"`
+    EnvVar *EnvVar `json:"envVar,omitempty"`
 }
 
 type File struct {
-	Path string `json:"path,omitempty"`
+    Path string `json:"path,omitempty"`
 }
 
 // +kubebuilder:validation:Enum=Secret
 type RefType string
 
 const (
-	SecretRefType RefType = "Secret"
+    SecretRefType RefType = "Secret"
 )
 
 type SecretRef struct {
-	Kind RefType `json:"kind,omitempty"`
-	Name string  `json:"name,omitempty"`
+    Kind RefType `json:"kind,omitempty"`
+    Name string  `json:"name,omitempty"`
 }
 
 type EnvVar struct {
-	Name string `json:"name,omitempty"`
+    Name string `json:"name,omitempty"`
 }
 ```
 
-The proposed model addresses the issues of the previous approach by clearly specifying where the `DataSource` should be resolved - either on the control plane or the proxy. It also avoids exposing unsupported options, such as referencing a `Secret` in contexts where it cannot be accessed by the proxy.
+The proposed model addresses the issues of the previous approach by clearly specifying where the `DataSource` should be resolved - either on the control plane or the data plane. It also avoids exposing unsupported options, such as referencing a `Secret` in contexts where it cannot be accessed by the data plane.
 
 #### Pros
 * Clear API boundaries — it’s explicitly defined what can be configured for each resource type.
-* Improved security — avoids delivering sensitive materials like private keys to the proxy via SDS.
+* Improved security — avoids delivering sensitive materials like private keys to the data plane via SDS.
 * Inline secrets are no longer synced to the global control plane.
 
 #### Cons
 * Requires maintaining two similar but separate structures, which introduces duplication and potential maintenance overhead.
-* No explicit support for Secret in the proxy context — users must manually mount secrets as files or environment variables.
+* No explicit support for Secret in the data plane context — users must manually mount secrets as files or environment variables.
 * No support for inline values.
 
 ### Option 3: Separate Structures for Secrets and Other Data Sources with an Explicit Resolution Context
@@ -268,13 +271,13 @@ type DataSource struct {
 	Inline *Inline        `json:"inline,omitempty"`
 }
 
-// +kubebuilder:validation:Enum=ControlPlane;Proxy
+// +kubebuilder:validation:Enum=ControlPlane;DataPlane
 // default: ControlPlane
 type ResolveOn string
 
 const (
-	ResolveOnControlPlane ResolveOn = "ControlPlane"
-	ResolveOnProxy        ResolveOn = "Proxy"
+	ResolveOnCP ResolveOn = "ControlPlane"
+	ResolveOnDP ResolveOn = "DataPlane"
 )
 
 type File struct {
@@ -304,7 +307,7 @@ type Inline struct {
 }
 ```
 
-The proposed model introduces clear semantics for resource resolution, allowing users to specify whether a file (or other data source) should be loaded by the control plane or the proxy. Additionally, it separates secret-related data sources from general ones, making it clearer which options are allowed in which contexts.
+The proposed model introduces clear semantics for resource resolution, allowing users to specify whether a file (or other data source) should be loaded by the control plane or the data plane. Additionally, it separates secret-related data sources from general ones, making it clearer which options are allowed in which contexts.
 
 #### Pros
 * Clear API boundaries - users can explicitly configure where the resource should be loaded.
@@ -342,7 +345,7 @@ type DataSourceType string
 const (
 	DataSourceFile   DataSourceType = "File"
 	DataSourceEnvVar DataSourceType = "EnvVar"
-	DataSourceEnvVar DataSourceType = "Inline"
+  DataSourceEnvVar DataSourceType = "Inline"
 )
 
 // DataSource is just a way to provide data. Not necessarily secrets, 
@@ -458,7 +461,7 @@ spec:
 ```
 
 #### Pros
-* Clear API boundaries - users can explicitly define where the resource should be resolved (control plane or proxy).
+* Clear API boundaries - users can explicitly define where the resource should be resolved (control plane or data plane).
 * Inline secrets are clearly marked as insecure, improving security visibility and awareness.
 * Resolution logic is embedded in the object itself, making it clear what is supported and expected for each resource.
 
@@ -469,7 +472,9 @@ spec:
 
 Following changes increases security:
 * Inline secrets are explicitly marked as `insecure`, helping to discourage their use in production environments.
-* In Option 2, the private key is not transmitted over the network to the proxy.
+* In Option 2, the private key is not transmitted over the network to the data plane.
+
+## Reliability implications
 
 ## Implications for Kong Mesh
 
@@ -477,4 +482,4 @@ Following changes increases security:
 
 ## Decision
 
-Option 4 offers the most flexibility, enabling users to explicitly (on specific resource) choose whether a value is resolved by the control plane or accessed directly by the proxy. Additionally, by providing two separate models, it becomes easier to understand which options are available and valid in each API context.
+Option 4 offers the most flexibility, enabling users to explicitly (on specific resource) choose whether a value is resolved by the control plane or accessed directly by the data plane. Additionally, by providing two separate models, it becomes easier to understand which options are available and valid in each API context.

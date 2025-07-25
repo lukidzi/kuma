@@ -19,4 +19,7 @@ import (
 	_ "github.com/kumahq/kuma/pkg/plugins/runtime/universal"
 	_ "github.com/kumahq/kuma/pkg/plugins/secrets/k8s"
 	_ "github.com/kumahq/kuma/pkg/plugins/secrets/universal"
+
+	// identity providers
+	_ "github.com/kumahq/kuma/pkg/core/resources/apis/meshidentity/providers"
 )

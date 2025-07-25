@@ -161,15 +161,6 @@ func (s *dataplaneInsightSink) Start(stop <-chan struct{}) {
 			// On Kubernetes, because of the cache subsequent Get, Update requests can fail, because the cache is not strongly consistent.
 			// We handle the Resource Conflict logging on V1, but we can try to avoid the situation with backoff
 			time.Sleep(s.flushBackoff)
-		case <- eventbus.Read():
-			//update map
-			// IdentityChange
-			// DPkey
-			// IdentityProvider -> kri
-			// Expiration 
-			// CABundleChange
-			// DPKey
-			// SUpportedBackends [] KRI mesh trusts
 		case <-stop:
 			flush(true)
 			return

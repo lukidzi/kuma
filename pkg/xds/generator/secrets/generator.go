@@ -33,6 +33,7 @@ func createCaSecretResource(name string, ca *core_xds.CaSecret) *core_xds.Resour
 
 func createIdentitySecretResource(name string, identity *core_xds.IdentitySecret) *core_xds.Resource {
 	identitySecret := envoy_secrets.CreateIdentitySecret(identity, name)
+	core.Log.Info("identity cert", "identitySecret", identitySecret)
 	return &core_xds.Resource{
 		Name:     identitySecret.Name,
 		Origin:   OriginSecrets,
@@ -94,6 +95,10 @@ func (g Generator) Generate(
 
 	if proxy.Dataplane != nil {
 		log = log.WithValues("mesh", xdsCtx.Mesh.Resource.GetMeta().GetName())
+	}
+
+	if !xdsCtx.Mesh.Resource.MTLSEnabled() {
+		return nil, nil
 	}
 
 	usedIdentity := proxy.SecretsTracker.UsedIdentity()

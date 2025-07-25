@@ -69,8 +69,8 @@ func CreateUpstreamTlsContext(mesh core_xds.IdentityCertRequest, upstreamMesh co
 }
 
 func createCommonTlsContext(ownMesh core_xds.IdentityCertRequest, targetMeshCa core_xds.CaRequest, matchers []*envoy_tls.SubjectAltNameMatcher) *envoy_tls.CommonTlsContext {
-	meshCaSecret := NewSecretConfigSource(targetMeshCa.Name())
-	identitySecret := NewSecretConfigSource(ownMesh.Name())
+	meshCaSecret := NewSecretConfigSource("system_identity_ca")
+	identitySecret := NewSecretConfigSource("system_identity_privateKey")
 
 	return &envoy_tls.CommonTlsContext{
 		ValidationContextType: &envoy_tls.CommonTlsContext_CombinedValidationContext{

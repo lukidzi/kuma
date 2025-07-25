@@ -37,6 +37,7 @@ type meshContextBuilder struct {
 	topLevelDomain  string
 	vipPort         uint32
 	rsGraphBuilder  ReachableServicesGraphBuilder
+	// map of identities
 }
 
 // MeshContextBuilder

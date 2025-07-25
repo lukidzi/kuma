@@ -1,29 +1,37 @@
 package providers
 
 import (
+	"context"
+	"crypto/x509"
 	"time"
 
-	core_mesh "github.com/kumahq/kuma/pkg/core/resources/apis/mesh"
-	"github.com/kumahq/kuma/pkg/core/resources/apis/meshidentity/api/v1alpha1"
+	"github.com/kumahq/kuma/pkg/core"
+	meshidentity_api "github.com/kumahq/kuma/pkg/core/resources/apis/meshidentity/api/v1alpha1"
+	util_tls "github.com/kumahq/kuma/pkg/tls"
 )
 
-type ProviderType string
-
-const (
-	BundledProviderType ProviderType = "Bundled"
-)
+type CertOptsFn = func(*x509.Certificate)
 
 type Identity struct {
-	Type            ProviderType
+	Type            meshidentity_api.ProviderType
 	ExpirationTime  time.Time
-	Certificate     []byte
-	PrivateKey      []byte
-	CertificateName string
-	PrivateKeyName  string
+	GenerationTime  time.Time
+	SecretName      string
+	CA              []byte
+	*util_tls.KeyPair
+}
+
+func (c *Identity) CertLifetime() time.Duration {
+	return c.ExpirationTime.Sub(c.GenerationTime)
+}
+
+func (i *Identity) ExpiringSoon() bool {
+	return core.Now().After(i.GenerationTime.Add(i.CertLifetime() / 5 * 4))
 }
 
 type IdentityProvider interface {
-	GenerateIdentity(*core_mesh.DataplaneResource, *v1alpha1.MeshIdentity) (*Identity, error)
+	CreateIdentity(string, *util_tls.KeyPair, ...CertOptsFn) (*Identity, error)
+	GetKeyPair(context.Context, meshidentity_api.Provider, string) (*util_tls.KeyPair, error)
 }
 
 type IdentityProviders = map[string]IdentityProvider

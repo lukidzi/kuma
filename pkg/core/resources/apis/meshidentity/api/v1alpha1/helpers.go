@@ -9,11 +9,11 @@ import (
 func Matched(
 	labels map[string]string,
 	meshIdentities []*MeshIdentityResource,
-) (*MeshIdentity, bool) {
+) (*MeshIdentityResource, bool) {
 	type scoredMatch struct {
 		matchCount int
 		name       string
-		policy     *MeshIdentity
+		policy     *MeshIdentityResource
 	}
 
 	var matches []scoredMatch
@@ -27,7 +27,7 @@ func Matched(
 		matches = append(matches, scoredMatch{
 			matchCount: matchCount,
 			name:       mi.GetMeta().GetName(),
-			policy:     mi.Spec,
+			policy:     mi,
 		})
 	}
 

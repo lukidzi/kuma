@@ -185,6 +185,9 @@ type Proxy struct {
 	// we can be sure to include only those secrets later on.
 	SecretsTracker SecretsTracker
 
+	// Identity of the proxy
+	Identity *Identity
+
 	// ZoneEgressProxy is available only when XDS is generated for ZoneEgress data plane proxy.
 	ZoneEgressProxy *ZoneEgressProxy
 	// ZoneIngressProxy is available only when XDS is generated for ZoneIngress data plane proxy.
@@ -195,6 +198,20 @@ type Proxy struct {
 	Zone string
 	// InternalAddresses is a set of address prefixes that are considered internal to the mesh, it will be configured to in Envoy HCM config
 	InternalAddresses []InternalAddress
+}
+
+type ProviderType string
+
+const (
+	BundledProviderType ProviderType = "bundled"
+)
+
+type Identity struct {
+	Type       ProviderType
+	Cert       []byte
+	PrivateKey []byte
+	SecretName string
+	CA         []byte
 }
 
 func (p *Proxy) GetTransparentProxy() *tproxy_dp.DataplaneConfig {

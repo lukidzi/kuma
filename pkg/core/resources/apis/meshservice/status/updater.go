@@ -120,7 +120,6 @@ func (s *StatusUpdater) updateStatus(ctx context.Context) error {
 		log := s.logger.WithValues("meshservice", ms.GetMeta().GetName(), "mesh", ms.GetMeta().GetMesh())
 
 		var changeReasons []string
-
 		identities := buildIdentities(dpps)
 		if !reflect.DeepEqual(pointer.Deref(ms.Spec.Identities), identities) {
 			changeReasons = append(changeReasons, "identities")

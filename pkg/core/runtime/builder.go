@@ -119,6 +119,7 @@ func BuilderFor(appCtx context.Context, cfg kuma_cp.Config) (*Builder, error) {
 		cam:         core_ca.Managers{},
 		RuntimeInfo: NewRuntimeInfo(fmt.Sprintf("%s-%s", hostname, suffix), cfg.Mode),
 		appCtx:      appCtx,
+		identityProviders: providers.IdentityProviders{},
 	}, nil
 }
 
@@ -292,8 +293,8 @@ func (b *Builder) WithAPIWebServiceCustomize(customize func(*restful.WebService)
 	return b
 }
 
-func (b *Builder) WithIdentityProviders(identityProviders providers.IdentityProviders) *Builder {
-	b.identityProviders = identityProviders
+func (b *Builder) WithIdentityProviders(name string, identityProviders providers.IdentityProvider) *Builder {
+	b.identityProviders[name] = identityProviders
 	return b
 }
 

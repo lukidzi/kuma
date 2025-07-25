@@ -184,6 +184,7 @@ type Config struct {
 	IPAM IPAMConfig `json:"ipam"`
 	// MeshService holds configuration for features around MeshServices
 	MeshService MeshServiceConfig `json:"meshService"`
+	
 }
 
 func (c Config) IsFederatedZoneCP() bool {

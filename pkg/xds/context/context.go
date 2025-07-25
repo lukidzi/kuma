@@ -10,6 +10,7 @@ import (
 	"github.com/kumahq/kuma/pkg/core/kri"
 	core_resources "github.com/kumahq/kuma/pkg/core/resources/apis/core"
 	core_mesh "github.com/kumahq/kuma/pkg/core/resources/apis/mesh"
+	"github.com/kumahq/kuma/pkg/core/resources/apis/meshidentity/providers"
 	core_model "github.com/kumahq/kuma/pkg/core/resources/model"
 	"github.com/kumahq/kuma/pkg/core/xds"
 	xds_types "github.com/kumahq/kuma/pkg/core/xds/types"
@@ -34,8 +35,7 @@ type ConnectionInfo struct {
 type ControlPlaneContext struct {
 	CLACache        envoy.CLACache
 	Secrets         secrets.Secrets
-	// Here we can create a new interface IdentityProvider which can be called by services and later used by other components
-	// Identities       
+	IdentityManager providers.IdentityProviderManager    
 	Zone            string
 	SystemNamespace string
 }
