@@ -18,6 +18,8 @@ type Config struct {
 type ConfigGenerators struct {
 	// How often we run a component reconciling MeshIdentity resources
 	MeshIdentityInterval config_types.Duration `json:"meshIdentityInterval" envconfig:"KUMA_CORE_RESOURCES_GENERATORS_MESH_IDENTITY_INTERVAL"`
+	// How often we run a component reconciling MeshIdentity resources
+	MeshIdentityFullSync config_types.Duration `json:"meshIdentityFullSync" envconfig:"KUMA_CORE_RESOURCES_GENERATORS_MESH_IDENTITY_FULL_SYNC"`
 }
 
 type ConfigStatus struct {
@@ -30,6 +32,10 @@ type ConfigStatus struct {
 func Default() *Config {
 	return &Config{
 		Enabled: DefaultEnabled,
+		Generators: ConfigGenerators{
+			MeshIdentityInterval: config_types.Duration{Duration: 1 * time.Second},
+			MeshIdentityFullSync: config_types.Duration{Duration: 1 * time.Second},
+		},
 		Status: ConfigStatus{
 			MeshMultiZoneServiceInterval: config_types.Duration{Duration: 5 * time.Second},
 			MeshServiceInterval:          config_types.Duration{Duration: 5 * time.Second},

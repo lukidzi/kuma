@@ -60,16 +60,8 @@ type DataplaneWatchdog struct {
 	envoyAdminMTLS   *core_xds.ServerSideMTLSCerts
 	dpAddress        string
 	xdsMeta          *core_xds.DataplaneMetadata
-	workloadIdentity workloadIdentity
 	identity         *providers.Identity
 	lastIdentityHash string // last Hash of MeshIdentities
-}
-
-type workloadIdentity struct {
-	// expirationtime
-	// identity provider KRI - if nil there is no identity
-	// hash of all meshidentities?
-	// cert, key
 }
 
 func NewDataplaneWatchdog(deps DataplaneWatchdogDependencies, meta *core_xds.DataplaneMetadata, dpKey core_model.ResourceKey) *DataplaneWatchdog {
@@ -177,7 +169,6 @@ func (d *DataplaneWatchdog) syncDataplane(ctx context.Context) (SyncResult, erro
 	if err != nil {
 		return SyncResult{}, errors.Wrap(err, "could not build dataplane proxy")
 	}
-	core.Log.Info("TEST IDEN", "syncIdentity", syncIdentity)
 	if syncIdentity {
 		identity, err := d.EnvoyCpCtx.IdentityManager.GetWorkloadIdentity(ctx, dpp, identity)
 		if err != nil {
@@ -187,14 +178,14 @@ func (d *DataplaneWatchdog) syncDataplane(ctx context.Context) (SyncResult, erro
 	}
 	if d.identity != nil {
 		proxy.Identity = &core_xds.Identity{
-			Type:       core_xds.ProviderType(d.identity.Type),
+			Type:       string(d.identity.Type),
 			Cert:       d.identity.CertPEM,
 			PrivateKey: d.identity.KeyPEM,
 			SecretName: d.identity.SecretName,
 			CA:         d.identity.CA,
 		}
 	}
-
+	core.Log.Info("TEST IDEN", "syncIdentity", d.identity)
 	networking := proxy.Dataplane.Spec.Networking
 	envoyAdminMTLS, err := d.getEnvoyAdminMTLS(ctx, networking.Address, networking.AdvertisedAddress)
 	if err != nil {

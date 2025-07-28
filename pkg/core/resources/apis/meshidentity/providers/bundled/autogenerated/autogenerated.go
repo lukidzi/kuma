@@ -12,27 +12,23 @@ package bundled
 // 	"github.com/pkg/errors"
 // 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 
+// 	"context"
+
 // 	"github.com/kumahq/kuma/pkg/core"
 // 	core_ca "github.com/kumahq/kuma/pkg/core/ca"
 // 	util_tls "github.com/kumahq/kuma/pkg/tls"
 // 	util_rsa "github.com/kumahq/kuma/pkg/util/rsa"
-// 		"context"
-// 	"fmt"
 
-// 	"github.com/asaskevich/govalidator"
 // 	"github.com/pkg/errors"
 
 // 	mesh_proto "github.com/kumahq/kuma/api/mesh/v1alpha1"
 // 	system_proto "github.com/kumahq/kuma/api/system/v1alpha1"
 // 	"github.com/kumahq/kuma/pkg/core"
 // 	core_ca "github.com/kumahq/kuma/pkg/core/ca"
-// 	ca_issuer "github.com/kumahq/kuma/pkg/core/ca/issuer"
 // 	core_mesh "github.com/kumahq/kuma/pkg/core/resources/apis/mesh"
 // 	core_system "github.com/kumahq/kuma/pkg/core/resources/apis/system"
-// 	"github.com/kumahq/kuma/pkg/core/resources/manager"
 // 	core_model "github.com/kumahq/kuma/pkg/core/resources/model"
 // 	core_store "github.com/kumahq/kuma/pkg/core/resources/store"
-// 	core_validators "github.com/kumahq/kuma/pkg/core/validators"
 // 	"github.com/kumahq/kuma/pkg/plugins/ca/builtin/config"
 // 	util_proto "github.com/kumahq/kuma/pkg/util/proto"
 // )
@@ -42,89 +38,7 @@ package bundled
 // 	DefaultCACertValidityPeriod = 10 * 365 * 24 * time.Hour
 // )
 
-// import (
-// 	"context"
-// 	"fmt"
-
-// 	"github.com/asaskevich/govalidator"
-// 	"github.com/pkg/errors"
-
-// 	mesh_proto "github.com/kumahq/kuma/api/mesh/v1alpha1"
-// 	system_proto "github.com/kumahq/kuma/api/system/v1alpha1"
-// 	"github.com/kumahq/kuma/pkg/core"
-// 	core_ca "github.com/kumahq/kuma/pkg/core/ca"
-// 	ca_issuer "github.com/kumahq/kuma/pkg/core/ca/issuer"
-// 	core_mesh "github.com/kumahq/kuma/pkg/core/resources/apis/mesh"
-// 	core_system "github.com/kumahq/kuma/pkg/core/resources/apis/system"
-// 	"github.com/kumahq/kuma/pkg/core/resources/manager"
-// 	core_model "github.com/kumahq/kuma/pkg/core/resources/model"
-// 	core_store "github.com/kumahq/kuma/pkg/core/resources/store"
-// 	core_validators "github.com/kumahq/kuma/pkg/core/validators"
-// 	"github.com/kumahq/kuma/pkg/plugins/ca/builtin/config"
-// 	util_proto "github.com/kumahq/kuma/pkg/util/proto"
-// )
-
-// var log = core.Log.WithName("ca").WithName("builtin")
-
-// const MaxBackendNameLength = 255
-
-// type builtinCaManager struct {
-// 	secretManager manager.ResourceManager
-// }
-
-// func NewBuiltinCaManager(secretManager manager.ResourceManager) core_ca.Manager {
-// 	return &builtinCaManager{
-// 		secretManager: secretManager,
-// 	}
-// }
-
-// var _ core_ca.Manager = &builtinCaManager{}
-
-// func (b *builtinCaManager) EnsureBackends(ctx context.Context, mesh core_model.Resource, backends []*mesh_proto.CertificateAuthorityBackend) error {
-// 	for _, backend := range backends {
-// 		meshName := mesh.GetMeta().GetName()
-// 		_, err := b.getCa(ctx, meshName, backend.Name)
-// 		if err == nil {
-// 			log.V(1).Info("CA secrets already exist. Nothing to create", "mesh", mesh, "backend", backend.Name)
-// 			continue
-// 		}
-
-// 		if !core_store.IsNotFound(err) {
-// 			return err
-// 		}
-
-// 		if err := b.create(ctx, mesh, backend); err != nil {
-// 			return errors.Wrapf(err, "failed to create CA for mesh %q and backend %q", mesh, backend.Name)
-// 		}
-// 		log.Info("CA created", "mesh", meshName)
-// 	}
-// 	return nil
-// }
-
-// func (b *builtinCaManager) ValidateBackend(ctx context.Context, mesh string, backend *mesh_proto.CertificateAuthorityBackend) error {
-// 	verr := core_validators.ValidationError{}
-// 	cfg := &config.BuiltinCertificateAuthorityConfig{}
-// 	if err := util_proto.ToTyped(backend.Conf, cfg); err != nil {
-// 		verr.AddViolation("", "could not convert backend config: "+err.Error())
-// 	}
-// 	backendNameWithPrefix := core_system.BuiltinCertSecretName(mesh, backend.Name)
-// 	if len(backendNameWithPrefix) > MaxBackendNameLength {
-// 		verr.AddViolationAt(core_validators.RootedAt("mtls").Field("backends").Field("name"), fmt.Sprintf("Backend name is too long. Max length: %d", MaxBackendNameLength))
-// 	}
-// 	if !govalidator.IsDNSName(backendNameWithPrefix) || !govalidator.IsLowerCase(backendNameWithPrefix) {
-// 		verr.AddViolationAt(core_validators.RootedAt("mtls").Field("backends").Field("name"), fmt.Sprintf("%q name must be valid dns name", backend.Name))
-// 	}
-// 	return verr.OrNil()
-// }
-
-// func (b *builtinCaManager) UsedSecrets(mesh string, backend *mesh_proto.CertificateAuthorityBackend) ([]string, error) {
-// 	return []string{
-// 		certSecretResKey(mesh, backend.Name).Name,
-// 		keySecretResKey(mesh, backend.Name).Name,
-// 	}, nil
-// }
-
-// func (b *builtinCaManager) create(ctx context.Context, mesh core_model.Resource, backend *mesh_proto.CertificateAuthorityBackend) error {
+// func Create(ctx context.Context, mesh core_model.Resource, backend *mesh_proto.CertificateAuthorityBackend) error {
 // 	meshName := mesh.GetMeta().GetName()
 // 	cfg := &config.BuiltinCertificateAuthorityConfig{}
 // 	if err := util_proto.ToTyped(backend.Conf, cfg); err != nil {

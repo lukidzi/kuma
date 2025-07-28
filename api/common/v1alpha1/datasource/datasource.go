@@ -75,7 +75,7 @@ type Inline struct {
 	Value string `json:"value"`
 }
 
-func (sds *SecureDataSource) ReadByControlPlane(ctx context.Context, secretManager manager.ReadOnlyResourceManager, mesh string)([]byte, error){
+func (sds *SecureDataSource) ReadByControlPlane(ctx context.Context, secretManager manager.ReadOnlyResourceManager, mesh string) ([]byte, error) {
 	switch sds.Type {
 	case SecureDataSourceFile:
 		return os.ReadFile(sds.File.Path)
@@ -87,7 +87,7 @@ func (sds *SecureDataSource) ReadByControlPlane(ctx context.Context, secretManag
 		return []byte(value), nil
 	case SecureDataSourceInline:
 		return []byte(sds.InsecureInline.Value), nil
-	case SecureDataSourceSecretRef: 
+	case SecureDataSourceSecretRef:
 		if secretManager == nil {
 			return nil, errors.New("resource manager is not defined")
 		}

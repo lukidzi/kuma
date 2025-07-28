@@ -93,6 +93,7 @@ type Spire struct {
 }
 
 type MeshIdentityStatus struct {
+	TrustDomain string `json:"trustDomain"`
 	// Conditions is an array of hostname generator conditions.
 	//
 	// +optional

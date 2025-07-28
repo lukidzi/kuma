@@ -15,6 +15,7 @@ import (
 	common_api "github.com/kumahq/kuma/api/common/v1alpha1"
 	mesh_proto "github.com/kumahq/kuma/api/mesh/v1alpha1"
 	config_core "github.com/kumahq/kuma/pkg/config/core"
+	"github.com/kumahq/kuma/pkg/core"
 	model_labels "github.com/kumahq/kuma/pkg/core/resources/model/labels"
 	"github.com/kumahq/kuma/pkg/plugins/runtime/k8s/metadata"
 	"github.com/kumahq/kuma/pkg/util/pointer"
@@ -609,6 +610,8 @@ func ComputeLabels(
 	if ns.value != "" && isK8s && IsLocallyOriginated(mode, labels) {
 		setIfNotExist(mesh_proto.KubeNamespaceTag, ns.value)
 	}
+
+	core.Log.Info("labels", "existing ", existingLabels) 
 
 	if ns.value != "" && rd.IsPolicy && rd.IsPluginOriginated && IsLocallyOriginated(mode, labels) {
 		role, err := ComputePolicyRole(spec.(Policy), ns)

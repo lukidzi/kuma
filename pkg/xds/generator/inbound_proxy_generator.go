@@ -18,7 +18,6 @@ import (
 	envoy_listeners "github.com/kumahq/kuma/pkg/xds/envoy/listeners"
 	envoy_names "github.com/kumahq/kuma/pkg/xds/envoy/names"
 	"github.com/kumahq/kuma/pkg/xds/envoy/tags"
-	xds_tls "github.com/kumahq/kuma/pkg/xds/envoy/tls"
 )
 
 // OriginInbound is a marker to indicate by which ProxyGenerator resources were generated.
@@ -80,35 +79,36 @@ func (g InboundProxyGenerator) Generate(ctx context.Context, _ *core_xds.Resourc
 			Configure(envoy_listeners.TransparentProxying(proxy)).
 			Configure(envoy_listeners.TagsMetadata(iface.GetTags()))
 
-		switch xdsCtx.Mesh.Resource.GetEnabledCertificateAuthorityBackend().GetMode() {
-		case mesh_proto.CertificateAuthorityBackend_STRICT:
+		
+		// switch xdsCtx.Mesh.Resource.GetEnabledCertificateAuthorityBackend().GetMode() {
+		// case mesh_proto.CertificateAuthorityBackend_STRICT:
 			listenerBuilder.
 				Configure(envoy_listeners.FilterChain(FilterChainBuilder(true, protocol, proxy, localClusterName, xdsCtx, endpoint, service, &routes, nil, nil).Configure(
-					envoy_listeners.NetworkRBAC(inboundListenerName, xdsCtx.Mesh.Resource.MTLSEnabled(), proxy.Policies.TrafficPermissions[endpoint]),
+					envoy_listeners.NetworkRBAC(inboundListenerName, true, proxy.Policies.TrafficPermissions[endpoint]),
 				)))
-		case mesh_proto.CertificateAuthorityBackend_PERMISSIVE:
-			listenerBuilder.
-				Configure(envoy_listeners.TLSInspector()).
-				Configure(envoy_listeners.FilterChain(
-					FilterChainBuilder(false, protocol, proxy, localClusterName, xdsCtx, endpoint, service, &routes, nil, nil).Configure(
-						envoy_listeners.MatchTransportProtocol("raw_buffer"))),
-				).
-				Configure(envoy_listeners.FilterChain(
-					// we need to differentiate between just TLS and Kuma's TLS, because with permissive mode
-					// the app itself might be protected by TLS.
-					FilterChainBuilder(false, protocol, proxy, localClusterName, xdsCtx, endpoint, service, &routes, nil, nil).Configure(
-						envoy_listeners.MatchTransportProtocol("tls"))),
-				).
-				Configure(envoy_listeners.FilterChain(
-					FilterChainBuilder(true, protocol, proxy, localClusterName, xdsCtx, endpoint, service, &routes, nil, nil).Configure(
-						envoy_listeners.MatchTransportProtocol("tls"),
-						envoy_listeners.MatchApplicationProtocols(xds_tls.KumaALPNProtocols...),
-						envoy_listeners.NetworkRBAC(inboundListenerName, xdsCtx.Mesh.Resource.MTLSEnabled(), proxy.Policies.TrafficPermissions[endpoint]),
-					)),
-				)
-		default:
-			return nil, errors.New("unknown mode for CA backend")
-		}
+		// case mesh_proto.CertificateAuthorityBackend_PERMISSIVE:
+		// 	listenerBuilder.
+		// 		Configure(envoy_listeners.TLSInspector()).
+		// 		Configure(envoy_listeners.FilterChain(
+		// 			FilterChainBuilder(false, protocol, proxy, localClusterName, xdsCtx, endpoint, service, &routes, nil, nil).Configure(
+		// 				envoy_listeners.MatchTransportProtocol("raw_buffer"))),
+		// 		).
+		// 		Configure(envoy_listeners.FilterChain(
+		// 			// we need to differentiate between just TLS and Kuma's TLS, because with permissive mode
+		// 			// the app itself might be protected by TLS.
+		// 			FilterChainBuilder(false, protocol, proxy, localClusterName, xdsCtx, endpoint, service, &routes, nil, nil).Configure(
+		// 				envoy_listeners.MatchTransportProtocol("tls"))),
+		// 		).
+		// 		Configure(envoy_listeners.FilterChain(
+		// 			FilterChainBuilder(true, protocol, proxy, localClusterName, xdsCtx, endpoint, service, &routes, nil, nil).Configure(
+		// 				envoy_listeners.MatchTransportProtocol("tls"),
+		// 				envoy_listeners.MatchApplicationProtocols(xds_tls.KumaALPNProtocols...),
+		// 				envoy_listeners.NetworkRBAC(inboundListenerName, xdsCtx.Mesh.Resource.MTLSEnabled(), proxy.Policies.TrafficPermissions[endpoint]),
+		// 			)),
+		// 		)
+		// default:
+		// 	return nil, errors.New("unknown mode for CA backend")
+		// }
 
 		inboundListener, err := listenerBuilder.Build()
 		if err != nil {

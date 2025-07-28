@@ -114,11 +114,11 @@ func BuilderFor(appCtx context.Context, cfg kuma_cp.Config) (*Builder, error) {
 	}
 	suffix := core.NewUUID()[0:4]
 	return &Builder{
-		cfg:         cfg,
-		ext:         context.Background(),
-		cam:         core_ca.Managers{},
-		RuntimeInfo: NewRuntimeInfo(fmt.Sprintf("%s-%s", hostname, suffix), cfg.Mode),
-		appCtx:      appCtx,
+		cfg:               cfg,
+		ext:               context.Background(),
+		cam:               core_ca.Managers{},
+		RuntimeInfo:       NewRuntimeInfo(fmt.Sprintf("%s-%s", hostname, suffix), cfg.Mode),
+		appCtx:            appCtx,
 		identityProviders: providers.IdentityProviders{},
 	}, nil
 }

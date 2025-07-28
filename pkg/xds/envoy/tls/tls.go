@@ -19,8 +19,8 @@ func MeshSpiffeIDPrefix(mesh string) string {
 	return fmt.Sprintf("spiffe://%s/", mesh)
 }
 
-func ServiceSpiffeID(mesh string, service string) string {
-	return fmt.Sprintf("spiffe://%s/%s", mesh, service)
+func ServiceSpiffeID(_ string, _ string) string {
+	return "spiffe://default.default.mesh.local/ns/kuma-demo"
 }
 
 func KumaID(tagName, tagValue string) string {

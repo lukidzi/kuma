@@ -202,12 +202,8 @@ type Proxy struct {
 
 type ProviderType string
 
-const (
-	BundledProviderType ProviderType = "bundled"
-)
-
 type Identity struct {
-	Type       ProviderType
+	Type       string
 	Cert       []byte
 	PrivateKey []byte
 	SecretName string

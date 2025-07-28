@@ -35,7 +35,7 @@ type ConnectionInfo struct {
 type ControlPlaneContext struct {
 	CLACache        envoy.CLACache
 	Secrets         secrets.Secrets
-	IdentityManager providers.IdentityProviderManager    
+	IdentityManager providers.IdentityProviderManager
 	Zone            string
 	SystemNamespace string
 }

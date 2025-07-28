@@ -224,6 +224,9 @@ func (m *KubernetesMetaAdapter) GetLabels() map[string]string {
 	} else {
 		labels[v1alpha1.DisplayName] = m.GetObjectMeta().GetName()
 	}
+	if serviceAccount, ok := m.GetObjectMeta().GetAnnotations()["k8s.kuma.io/service-account"]; ok {
+		labels["k8s.kuma.io/service-account"] = serviceAccount
+	}
 	return labels
 }
 

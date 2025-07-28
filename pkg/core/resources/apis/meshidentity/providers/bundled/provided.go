@@ -11,15 +11,15 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/pkg/errors"
+	"github.com/spiffe/go-spiffe/v2/spiffeid"
+
 	"github.com/kumahq/kuma/pkg/core"
 	meshidentity_api "github.com/kumahq/kuma/pkg/core/resources/apis/meshidentity/api/v1alpha1"
 	"github.com/kumahq/kuma/pkg/core/resources/apis/meshidentity/providers"
 	"github.com/kumahq/kuma/pkg/core/resources/manager"
 	util_tls "github.com/kumahq/kuma/pkg/tls"
 	"github.com/kumahq/kuma/pkg/util/pointer"
-	"github.com/pkg/errors"
-	"github.com/spiffe/go-spiffe/v2/spiffeid"
-
 	util_rsa "github.com/kumahq/kuma/pkg/util/rsa"
 )
 
@@ -40,7 +40,7 @@ func NewBundledIdentityProvider(secretManager manager.ReadOnlyResourceManager) p
 	}
 }
 
-func (b *bundledIdentityProvider) GetKeyPair(ctx context.Context, identity meshidentity_api.Provider, mesh string) (*util_tls.KeyPair, error) {
+func (b *bundledIdentityProvider) GetCAKeyPair(ctx context.Context, identity meshidentity_api.Provider, mesh string) (*util_tls.KeyPair, error) {
 	var err error
 	var cert, key []byte
 	if identity.Bundled.Autogenerate == nil || !pointer.Deref(identity.Bundled.Autogenerate.Enabled) {
@@ -111,10 +111,10 @@ func (b *bundledIdentityProvider) CreateIdentity(spiffeID string, pair *util_tls
 		return nil, err
 	}
 	return &providers.Identity{
-		ExpirationTime:  template.NotAfter,
-		GenerationTime:  now,
-		KeyPair:         identityPair,
-		CA:              pair.CertPEM,
+		ExpirationTime: template.NotAfter,
+		GenerationTime: now,
+		KeyPair:        identityPair,
+		CA:             pair.CertPEM,
 	}, nil
 }
 

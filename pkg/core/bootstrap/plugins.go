@@ -1,6 +1,8 @@
 package bootstrap
 
 import (
+	// identity providers
+	_ "github.com/kumahq/kuma/pkg/core/resources/apis/meshidentity/providers"
 	// force plugins to get initialized and registered
 	_ "github.com/kumahq/kuma/pkg/plugins/authn/api-server/certs"
 	_ "github.com/kumahq/kuma/pkg/plugins/authn/api-server/tokens"
@@ -19,7 +21,4 @@ import (
 	_ "github.com/kumahq/kuma/pkg/plugins/runtime/universal"
 	_ "github.com/kumahq/kuma/pkg/plugins/secrets/k8s"
 	_ "github.com/kumahq/kuma/pkg/plugins/secrets/universal"
-
-	// identity providers
-	_ "github.com/kumahq/kuma/pkg/core/resources/apis/meshidentity/providers"
 )

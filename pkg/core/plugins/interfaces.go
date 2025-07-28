@@ -142,5 +142,5 @@ type ProxyPlugin interface {
 type CoreResourcePlugin interface {
 	Plugin
 	// Apply to `rs` using `proxy` the mutation or new resources.
-	Apply(rs *core_xds.ResourceSet, proxy *core_xds.Proxy) error
+	Apply(rs *core_xds.ResourceSet, xdsCtx xds_context.Context, proxy *core_xds.Proxy) error
 }

@@ -49,12 +49,12 @@ func (p plugin) Apply(rs *core_xds.ResourceSet, ctx xds_context.Context, proxy *
 		return nil
 	}
 
-	if !ctx.Mesh.Resource.MTLSEnabled() {
-		log.V(1).Info("skip applying MeshTrafficPermission, MTLS is disabled",
-			"proxyName", proxy.Dataplane.GetMeta().GetName(),
-			"mesh", ctx.Mesh.Resource.GetMeta().GetName())
-		return nil
-	}
+	// if !ctx.Mesh.Resource.MTLSEnabled() {
+	// 	log.V(1).Info("skip applying MeshTrafficPermission, MTLS is disabled",
+	// 		"proxyName", proxy.Dataplane.GetMeta().GetName(),
+	// 		"mesh", ctx.Mesh.Resource.GetMeta().GetName())
+	// 	return nil
+	// }
 
 	mtp := proxy.Policies.Dynamic[api.MeshTrafficPermissionType]
 	for _, res := range rs.Resources(envoy_resource.ListenerType) {

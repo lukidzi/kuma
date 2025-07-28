@@ -10,9 +10,6 @@ import (
 func (r *MeshTrustResource) validate() error {
 	var verr validators.ValidationError
 	path := validators.RootedAt("spec")
-	if r.Spec.Origin != nil {
-		verr.AddViolationAt(path.Field("origin"), "cannot be provided by the user")
-	}
 	verr.Add(validateCABundles(path.Field("caBundles"), r.Spec.CABundles))
 	verr.Add(validateTrustDomain(path, r.Spec.TrustDomain))
 	return verr.OrNil()

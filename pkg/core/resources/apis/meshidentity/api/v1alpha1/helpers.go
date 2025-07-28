@@ -1,9 +1,22 @@
 package v1alpha1
 
 import (
+	"fmt"
 	"sort"
+	"strings"
+	"text/template"
 
+	mesh_proto "github.com/kumahq/kuma/api/mesh/v1alpha1"
+	"github.com/kumahq/kuma/pkg/core"
+	"github.com/kumahq/kuma/pkg/core/resources/model"
 	"github.com/kumahq/kuma/pkg/util/pointer"
+	"github.com/pkg/errors"
+)
+
+const (
+	trustDomainTemplate        = "{{ .TrustDomain }}"
+	defaultTrustDomainTemplate = "{{ .Mesh }}.{{ .Zone }}.mesh.local"
+	defaultPathTemplate        = "/ns/{{ .Namespace }}/sa/{{ .ServiceAccount }}"
 )
 
 func Matched(
@@ -43,4 +56,84 @@ func Matched(
 	})
 
 	return matches[0].policy, true
+}
+
+func (i *MeshIdentity) getSpiffeIDTemplate() string {
+	builder := strings.Builder{}
+	builder.WriteString("spiffe://")
+	if i.SpiffeID != nil {
+		builder.WriteString("{{ .TrustDomain }}")
+		if i.SpiffeID.Path == nil {
+			builder.WriteString(defaultPathTemplate)
+		} else {
+			builder.WriteString(pointer.Deref(i.SpiffeID.Path))
+		}
+	} else {
+		builder.WriteString("{{ .TrustDomain }}")
+		builder.WriteString(defaultPathTemplate)
+	}
+	return builder.String()
+}
+
+func (i *MeshIdentity) GetTrustDomain(meta model.ResourceMeta, localZone string) (string, error) {
+	var trustDomainTmpl string
+	if i.SpiffeID == nil || i.SpiffeID.TrustDomain == nil {
+		trustDomainTmpl = defaultTrustDomainTemplate
+	} else {
+		trustDomainTmpl = pointer.Deref(i.SpiffeID.TrustDomain)
+	}
+
+	zone := meta.GetLabels()[mesh_proto.ZoneTag]
+	if zone == "" {
+		zone = localZone
+	}
+
+	data := struct {
+		Mesh string
+		Zone string
+	}{
+		Mesh: meta.GetMesh(),
+		Zone: zone,
+	}
+
+	return renderTemplate(trustDomainTmpl, meta, data)
+}
+
+func (i *MeshIdentity) GetSpiffeID(trustDomain string, meta model.ResourceMeta) (string, error) {
+	spiffeIDTemplate := i.getSpiffeIDTemplate()
+
+	data := struct {
+		TrustDomain    string
+		Namespace      string
+		ServiceAccount string
+	}{
+		TrustDomain:    trustDomain,
+		Namespace:      meta.GetLabels()[mesh_proto.KubeNamespaceTag],
+		ServiceAccount: meta.GetLabels()[mesh_proto.KubeServiceAccount],
+	}
+	core.Log.Info("TEST", "meta", meta)
+
+	return renderTemplate(spiffeIDTemplate, meta, data)
+}
+
+// 👇 Common helper
+func renderTemplate(tmplStr string, meta model.ResourceMeta, data any) (string, error) {
+	tmpl, err := template.New("").Funcs(map[string]any{
+		"label": func(key string) (string, error) {
+			val, ok := meta.GetLabels()[key]
+			if !ok {
+				return "", errors.Errorf("label %s not found", key)
+			}
+			return val, nil
+		},
+	}).Parse(tmplStr)
+	if err != nil {
+		return "", fmt.Errorf("failed compiling Go template: %w", err)
+	}
+
+	var sb strings.Builder
+	if err := tmpl.Execute(&sb, data); err != nil {
+		return "", fmt.Errorf("executing template failed: %w", err)
+	}
+	return sb.String(), nil
 }

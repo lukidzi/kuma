@@ -13,11 +13,11 @@ import (
 type CertOptsFn = func(*x509.Certificate)
 
 type Identity struct {
-	Type            meshidentity_api.ProviderType
-	ExpirationTime  time.Time
-	GenerationTime  time.Time
-	SecretName      string
-	CA              []byte
+	Type           meshidentity_api.ProviderType
+	ExpirationTime time.Time
+	GenerationTime time.Time
+	SecretName     string
+	CA             []byte
 	*util_tls.KeyPair
 }
 
@@ -31,7 +31,7 @@ func (i *Identity) ExpiringSoon() bool {
 
 type IdentityProvider interface {
 	CreateIdentity(string, *util_tls.KeyPair, ...CertOptsFn) (*Identity, error)
-	GetKeyPair(context.Context, meshidentity_api.Provider, string) (*util_tls.KeyPair, error)
+	GetCAKeyPair(context.Context, meshidentity_api.Provider, string) (*util_tls.KeyPair, error)
 }
 
 type IdentityProviders = map[string]IdentityProvider
