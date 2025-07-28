@@ -49,7 +49,7 @@ func (p plugin) Apply(rs *core_xds.ResourceSet, ctx xds_context.Context, proxy *
 	if proxy.Dataplane == nil {
 		return nil
 	}
-	if !ctx.Mesh.Resource.MTLSEnabled() {
+	if !ctx.Mesh.Resource.MTLSEnabled() && proxy.WorkloadIdentity == nil {
 		log.V(1).Info("skip applying MeshTLS, MTLS is disabled",
 			"proxyName", proxy.Dataplane.GetMeta().GetName(),
 			"mesh", ctx.Mesh.Resource.GetMeta().GetName())
@@ -282,12 +282,12 @@ func configure(
 	listenerBuilder := envoy_listeners.NewInboundListenerBuilder(proxy.APIVersion, iface.DataplaneIP, iface.DataplanePort, core_xds.SocketAddressProtocolTCP).
 		Configure(envoy_listeners.TransparentProxying(proxy)).
 		Configure(envoy_listeners.TagsMetadata(inbound.GetTags()))
-
+	
 	switch mode {
 	case api.ModeStrict:
 		listenerBuilder.
 			Configure(envoy_listeners.FilterChain(generator.FilterChainBuilder(true, protocol, proxy, localClusterName, xdsCtx, iface, service, &routes, conf.TlsVersion, pointer.Deref(conf.TlsCiphers)).Configure(
-				envoy_listeners.NetworkRBAC(listener.GetName(), mesh.MTLSEnabled(), proxy.Policies.TrafficPermissions[iface]),
+				envoy_listeners.NetworkRBAC(listener.GetName(), isMTLSEnabled(mesh, proxy), proxy.Policies.TrafficPermissions[iface]),
 			)))
 	case api.ModePermissive:
 		listenerBuilder.
@@ -306,7 +306,7 @@ func configure(
 				generator.FilterChainBuilder(true, protocol, proxy, localClusterName, xdsCtx, iface, service, &routes, conf.TlsVersion, pointer.Deref(conf.TlsCiphers)).Configure(
 					envoy_listeners.MatchTransportProtocol("tls"),
 					envoy_listeners.MatchApplicationProtocols(xds_tls.KumaALPNProtocols...),
-					envoy_listeners.NetworkRBAC(listener.GetName(), xdsCtx.Mesh.Resource.MTLSEnabled(), proxy.Policies.TrafficPermissions[iface]),
+					envoy_listeners.NetworkRBAC(listener.GetName(), isMTLSEnabled(mesh, proxy), proxy.Policies.TrafficPermissions[iface]),
 				)),
 			)
 	}
@@ -320,4 +320,8 @@ func getMeshTLSMode(mesh *core_mesh.MeshResource) api.Mode {
 	default:
 		return api.ModeStrict
 	}
+}
+
+func isMTLSEnabled(mesh *core_mesh.MeshResource, proxy *core_xds.Proxy) bool {
+	return mesh.MTLSEnabled() || proxy.WorkloadIdentity != nil
 }

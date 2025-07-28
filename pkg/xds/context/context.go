@@ -11,6 +11,7 @@ import (
 	core_resources "github.com/kumahq/kuma/pkg/core/resources/apis/core"
 	core_mesh "github.com/kumahq/kuma/pkg/core/resources/apis/mesh"
 	"github.com/kumahq/kuma/pkg/core/resources/apis/meshidentity/providers"
+	meshtrust_api "github.com/kumahq/kuma/pkg/core/resources/apis/meshtrust/api/v1alpha1"
 	core_model "github.com/kumahq/kuma/pkg/core/resources/model"
 	"github.com/kumahq/kuma/pkg/core/xds"
 	xds_types "github.com/kumahq/kuma/pkg/core/xds/types"
@@ -53,10 +54,10 @@ func (g GlobalContext) Hash() string {
 
 // BaseMeshContext holds for a Mesh a set of resources that are changing less often (policies, external services...)
 type BaseMeshContext struct {
-	Mesh             *core_mesh.MeshResource
-	ResourceMap      ResourceMap
-	DestinationIndex *DestinationIndex
-	hash             []byte
+	Mesh                *core_mesh.MeshResource
+	ResourceMap         ResourceMap
+	DestinationIndex    *DestinationIndex
+	hash                []byte
 }
 
 // Hash base64 version of the hash mostly useed for testing
@@ -90,6 +91,7 @@ type MeshContext struct {
 	ServicesInformation         map[string]*ServiceInformation
 	DataSourceLoader            datasource.Loader
 	ReachableServicesGraph      ReachableServicesGraph
+	TrustsByTrustDomain         map[string][]*meshtrust_api.MeshTrust
 }
 
 type ServiceInformation struct {

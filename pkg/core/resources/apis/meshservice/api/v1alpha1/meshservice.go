@@ -93,6 +93,7 @@ type MeshServiceIdentityType string
 
 const (
 	MeshServiceIdentityServiceTagType = "ServiceTag"
+	MeshServiceIdentitySpiffeIDType = "SpiffeID"
 )
 
 type MeshServiceIdentity struct {

@@ -11,8 +11,10 @@ import (
 
 	mesh_proto "github.com/kumahq/kuma/api/mesh/v1alpha1"
 	core_mesh "github.com/kumahq/kuma/pkg/core/resources/apis/mesh"
+	meshidentity_api "github.com/kumahq/kuma/pkg/core/resources/apis/meshidentity/api/v1alpha1"
 	"github.com/kumahq/kuma/pkg/core/resources/apis/meshservice"
 	meshservice_api "github.com/kumahq/kuma/pkg/core/resources/apis/meshservice/api/v1alpha1"
+	meshtrust_api "github.com/kumahq/kuma/pkg/core/resources/apis/meshtrust/api/v1alpha1"
 	"github.com/kumahq/kuma/pkg/core/resources/manager"
 	core_model "github.com/kumahq/kuma/pkg/core/resources/model"
 	"github.com/kumahq/kuma/pkg/core/resources/store"
@@ -107,6 +109,16 @@ func (s *StatusUpdater) updateStatus(ctx context.Context) error {
 		return errors.Wrap(err, "could not list of Meshes")
 	}
 
+	meshIdentities := meshidentity_api.MeshIdentityResourceList{}
+	if err := s.roResManager.List(ctx, &meshIdentities); err != nil {
+		return errors.Wrap(err, "could not list of MeshIdentities")
+	}
+	meshTrusts := meshtrust_api.MeshTrustResourceList{}
+	if err := s.roResManager.List(ctx, &meshIdentities); err != nil {
+		return errors.Wrap(err, "could not list of MeshIdentities")
+	}
+	trustDomains := meshtrust_api.GetAllTrustDomains(meshTrusts)
+
 	insightsByKey := core_model.IndexByKey(dpInsightsList.Items)
 	meshByKey := core_model.IndexByKey(meshList.Items)
 
@@ -118,16 +130,15 @@ func (s *StatusUpdater) updateStatus(ctx context.Context) error {
 			continue
 		}
 		log := s.logger.WithValues("meshservice", ms.GetMeta().GetName(), "mesh", ms.GetMeta().GetMesh())
-		// get mesh iden
 		var changeReasons []string
-		identities := buildIdentities(dpps)
+		identities := s.buildIdentities(dpps, meshIdentities.Items)
 		if !reflect.DeepEqual(pointer.Deref(ms.Spec.Identities), identities) {
 			changeReasons = append(changeReasons, "identities")
 			ms.Spec.Identities = &identities
 		}
 
 		mesh := meshByKey[core_model.ResourceKey{Name: ms.Meta.GetMesh()}]
-		tls := buildTLS(ms.Status.TLS, dpps, insightsByKey, mesh)
+		tls := buildTLS(ms.Status.TLS, dpps, insightsByKey, mesh, meshIdentities.Items, trustDomains)
 		if !reflect.DeepEqual(ms.Status.TLS, tls) {
 			changeReasons = append(changeReasons, "tls status")
 			ms.Status.TLS = tls
@@ -197,13 +208,16 @@ func buildTLS(
 	dpps []*core_mesh.DataplaneResource,
 	insightsByName map[core_model.ResourceKey]*core_mesh.DataplaneInsightResource,
 	mesh *core_mesh.MeshResource,
+	meshIdentities []*meshidentity_api.MeshIdentityResource,
+	trustDomains map[string]struct{},
 ) meshservice_api.TLS {
-	if !mesh.MTLSEnabled() {
+	if !mesh.MTLSEnabled() && len(meshIdentities) == 0 {
 		return meshservice_api.TLS{
 			Status: meshservice_api.TLSNotReady,
 		}
 	}
-	if mesh.MTLSEnabled() && existing.Status == meshservice_api.TLSReady {
+	// TODO: to validate if it's correct assumption (problematic is single dataplane identity)
+	if (mesh.MTLSEnabled() || len(meshIdentities) > 0) && existing.Status == meshservice_api.TLSReady {
 		// If mTLS is enabled, the status should go only one way.
 		// Every new instance always starts with mTLS, so we don't want to count issued backends.
 		// Otherwise, we could get into race when new Dataplane did not receive cert yet,
@@ -212,6 +226,8 @@ func buildTLS(
 	}
 
 	issuedBackends := 0
+	allTrustDomainsSupported := true
+	dppsWithIdentities := 0
 	for _, dpp := range dpps {
 		if insight := insightsByName[core_model.MetaToResourceKey(dpp.Meta)]; insight != nil {
 			// Cert issued by any backend means that mTLS cert was issued to the DP
@@ -220,23 +236,57 @@ func buildTLS(
 				issuedBackends++
 			}
 		}
+		if identity, matches := meshidentity_api.Matched(dpp.Meta.GetLabels(), meshIdentities); matches {
+			if identity.Status.TrustDomain != "" {
+				if _, exists := trustDomains[identity.Status.TrustDomain]; exists {
+					dppsWithIdentities++
+				} else {
+					allTrustDomainsSupported = false
+				}
+			}
+		}
 	}
-	if issuedBackends == len(dpps) {
-		return meshservice_api.TLS{
-			Status: meshservice_api.TLSReady,
+	// TODO do we need to check if this mesh has mesh identities?
+	if mesh.MTLSEnabled() {
+		if issuedBackends == len(dpps) {
+			return meshservice_api.TLS{
+				Status: meshservice_api.TLSReady,
+			}
+		} else {
+			return meshservice_api.TLS{
+				Status: meshservice_api.TLSNotReady,
+			}
 		}
 	} else {
-		return meshservice_api.TLS{
-			Status: meshservice_api.TLSNotReady,
+		if dppsWithIdentities == len(dpps) && allTrustDomainsSupported {
+			return meshservice_api.TLS{
+				Status: meshservice_api.TLSReady,
+			}
+		} else {
+			return meshservice_api.TLS{
+				Status: meshservice_api.TLSNotReady,
+			}
 		}
 	}
+	
 }
 
-func buildIdentities(dpps []*core_mesh.DataplaneResource) []meshservice_api.MeshServiceIdentity {
+func (s *StatusUpdater) buildIdentities(dpps []*core_mesh.DataplaneResource, meshIdentities []*meshidentity_api.MeshIdentityResource) []meshservice_api.MeshServiceIdentity {
 	serviceTagIdentities := map[string]struct{}{}
+	spiffeIDs :=  map[string]struct{}{}
 	for _, dpp := range dpps {
 		for service := range dpp.Spec.TagSet()[mesh_proto.ServiceTag] {
 			serviceTagIdentities[service] = struct{}{}
+		}
+		if identity, matched := meshidentity_api.Matched(dpp.Meta.GetLabels(), meshIdentities); matched {
+			if identity.Status.TrustDomain != "" {
+				spiffeID, err := identity.Spec.GetSpiffeID(identity.Status.TrustDomain, dpp.GetMeta())
+				if err != nil {
+					s.logger.Error(err, "cannot resolve spiffeID, skip", "dataplane", dpp)
+					continue
+				}
+				spiffeIDs[spiffeID] = struct{}{}
+			}
 		}
 	}
 	var identites []meshservice_api.MeshServiceIdentity
@@ -246,7 +296,13 @@ func buildIdentities(dpps []*core_mesh.DataplaneResource) []meshservice_api.Mesh
 			Value: identity,
 		})
 	}
-	return identites
+	for _, identity := range maps.SortedKeys(spiffeIDs) {
+		identites = append(identites, meshservice_api.MeshServiceIdentity{
+			Type:  meshservice_api.MeshServiceIdentitySpiffeIDType,
+			Value: identity,
+		})
+	}
+	return identites 
 }
 
 func (s *StatusUpdater) NeedLeaderElection() bool {

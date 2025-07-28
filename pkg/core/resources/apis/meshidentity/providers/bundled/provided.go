@@ -11,22 +11,25 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/pkg/errors"
-	"github.com/spiffe/go-spiffe/v2/spiffeid"
-
 	"github.com/kumahq/kuma/pkg/core"
+	"github.com/kumahq/kuma/pkg/core/kri"
 	meshidentity_api "github.com/kumahq/kuma/pkg/core/resources/apis/meshidentity/api/v1alpha1"
 	"github.com/kumahq/kuma/pkg/core/resources/apis/meshidentity/providers"
 	"github.com/kumahq/kuma/pkg/core/resources/manager"
+	"github.com/kumahq/kuma/pkg/core/resources/model"
 	util_tls "github.com/kumahq/kuma/pkg/tls"
 	"github.com/kumahq/kuma/pkg/util/pointer"
 	util_rsa "github.com/kumahq/kuma/pkg/util/rsa"
+	"github.com/pkg/errors"
+	"github.com/spiffe/go-spiffe/v2/spiffeid"
+	k8s "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 const (
-	DefaultAllowedClockSkew           = 10 * time.Second
-	DefaultWorkloadCertValidityPeriod = 24 * time.Hour
+	DefaultAllowedClockSkew = 10 * time.Second
 )
+
+var DefaultWorkloadCertValidityPeriod = k8s.Duration{Duration: 24 * time.Hour}
 
 var _ providers.IdentityProvider = &bundledIdentityProvider{}
 
@@ -59,7 +62,7 @@ func (b *bundledIdentityProvider) GetCAKeyPair(ctx context.Context, identity mes
 	}, nil
 }
 
-func (b *bundledIdentityProvider) CreateIdentity(spiffeID string, pair *util_tls.KeyPair, certOpts ...providers.CertOptsFn) (*providers.Identity, error) {
+func (b *bundledIdentityProvider) CreateIdentity(pair *util_tls.KeyPair, identity *meshidentity_api.MeshIdentityResource, meta model.ResourceMeta) (*providers.WorkloadIdentity, error) {
 	if pair == nil {
 		return nil, errors.New("certificate pair cannot be empty")
 	}
@@ -77,17 +80,22 @@ func (b *bundledIdentityProvider) CreateIdentity(spiffeID string, pair *util_tls
 	if err != nil {
 		return nil, err
 	}
+	spiffeID, err := identity.Spec.GetSpiffeID(identity.Status.TrustDomain, meta)
+	if err != nil {
+		return nil, err
+	}
 	id, err := spiffeid.FromString(spiffeID)
 	if err != nil {
 		return nil, err
 	}
+	certValidity := pointer.DerefOr(identity.Spec.Provider.Bundled.CertificateParameters.Expiry, DefaultWorkloadCertValidityPeriod)
 
 	core.Log.Info("CURRENT SPIFFE", "id", id)
 	template := &x509.Certificate{
 		SerialNumber: serialNumber,
 		URIs:         []*url.URL{id.URL()},
 		NotBefore:    now.Add(-DefaultAllowedClockSkew),
-		NotAfter:     now.Add(DefaultWorkloadCertValidityPeriod),
+		NotAfter:     now.Add(certValidity.Duration),
 		KeyUsage: x509.KeyUsageKeyEncipherment |
 			x509.KeyUsageKeyAgreement |
 			x509.KeyUsageDigitalSignature,
@@ -98,10 +106,6 @@ func (b *bundledIdentityProvider) CreateIdentity(spiffeID string, pair *util_tls
 		BasicConstraintsValid: true,
 		PublicKey:             workloadKey.Public(),
 	}
-
-	for _, opt := range certOpts {
-		opt(template)
-	}
 	workloadCert, err := x509.CreateCertificate(rand.Reader, template, caCert, workloadKey.Public(), caPrivateKey)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to generate X509 certificate")
@@ -110,11 +114,12 @@ func (b *bundledIdentityProvider) CreateIdentity(spiffeID string, pair *util_tls
 	if err != nil {
 		return nil, err
 	}
-	return &providers.Identity{
+	return &providers.WorkloadIdentity{
+		KRI:            kri.From(identity, ""),
+		Type:           meshidentity_api.BundledType,
 		ExpirationTime: template.NotAfter,
 		GenerationTime: now,
 		KeyPair:        identityPair,
-		CA:             pair.CertPEM,
 	}, nil
 }
 

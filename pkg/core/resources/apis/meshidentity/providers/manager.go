@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/kumahq/kuma/pkg/core"
-	"github.com/kumahq/kuma/pkg/core/kri"
 	core_mesh "github.com/kumahq/kuma/pkg/core/resources/apis/mesh"
 	meshidentity_api "github.com/kumahq/kuma/pkg/core/resources/apis/meshidentity/api/v1alpha1"
 )
@@ -31,13 +30,11 @@ func (i *IdentityProviderManager) SelectedIdentity(dataplane *core_mesh.Dataplan
 	return identity
 }
 
-func (i *IdentityProviderManager) GetWorkloadIdentity(ctx context.Context, dataplane *core_mesh.DataplaneResource, identity *meshidentity_api.MeshIdentityResource) (*Identity, error) {
+func (i *IdentityProviderManager) GetWorkloadIdentity(ctx context.Context, dataplane *core_mesh.DataplaneResource, identity *meshidentity_api.MeshIdentityResource) (*WorkloadIdentity, error) {
 	if identity == nil {
 		return nil, nil
 	}
-
 	core.Log.Info("identity.Status.TrustDomain", "identity.Status.TrustDomain", identity)
-
 	if identity.Status.TrustDomain == "" {
 		// log to wait for trustDomain to be set
 		return nil, nil
@@ -48,24 +45,14 @@ func (i *IdentityProviderManager) GetWorkloadIdentity(ctx context.Context, datap
 		return nil, fmt.Errorf("identity provider %s not found", identity.Spec.Provider.Type)
 	}
 
-	spiffeID, err := identity.Spec.GetSpiffeID(identity.Status.TrustDomain, dataplane.GetMeta())
+	pair, err := provider.GetCAKeyPair(ctx, identity.Spec.Provider, dataplane.Meta.GetMesh())
 	if err != nil {
 		return nil, err
 	}
-
-	mesh := dataplane.Meta.GetMesh()
-
-	pair, err := provider.GetCAKeyPair(ctx, identity.Spec.Provider, mesh)
+	// core.Log.Info("spiffeID", "spiffeID", spiffeID)
+	workloadIdentity, err := provider.CreateIdentity(pair, identity, dataplane.Meta)
 	if err != nil {
 		return nil, err
 	}
-
-	core.Log.Info("spiffeID", "spiffeID", spiffeID)
-	ident, err := provider.CreateIdentity(spiffeID, pair)
-	if err != nil {
-		return nil, err
-	}
-	ident.SecretName = kri.From(identity, "").String()
-	ident.Type = identity.Spec.Provider.Type
-	return ident, nil
+	return workloadIdentity, nil
 }

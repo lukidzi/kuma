@@ -4,17 +4,19 @@ import (
 	"bytes"
 	"sort"
 
-	envoy_core "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	envoy_auth "github.com/envoyproxy/go-control-plane/envoy/extensions/transport_sockets/tls/v3"
-	"google.golang.org/protobuf/types/known/anypb"
-
 	"github.com/kumahq/kuma/pkg/core"
 	core_plugins "github.com/kumahq/kuma/pkg/core/plugins"
 	meshidentity_api "github.com/kumahq/kuma/pkg/core/resources/apis/meshidentity/api/v1alpha1"
-	meshtrust_api "github.com/kumahq/kuma/pkg/core/resources/apis/meshtrust/api/v1alpha1"
+	"github.com/kumahq/kuma/pkg/core/system_names"
 	core_xds "github.com/kumahq/kuma/pkg/core/xds"
+	bldrs_auth "github.com/kumahq/kuma/pkg/envoy/builders/auth"
+	bldrs_core "github.com/kumahq/kuma/pkg/envoy/builders/core"
 	xds_context "github.com/kumahq/kuma/pkg/xds/context"
+	"google.golang.org/protobuf/types/known/anypb"
 )
+
+var SystemResourceNameCABundle = system_names.MustBeSystemName(system_names.Join("trust", "bundle"))
 
 const OriginWorkloadIdentity = "identity"
 
@@ -28,84 +30,98 @@ func NewPlugin() core_plugins.CoreResourcePlugin {
 
 func (p *plugin) Apply(rs *core_xds.ResourceSet, xdsCtx xds_context.Context, proxy *core_xds.Proxy) error {
 	core.Log.Info("APPLY IN GENERATOR")
-	if proxy.Identity == nil {
+	if proxy.WorkloadIdentity == nil {
 		return nil
 	}
-	core.Log.Info("proxy", "proxy", proxy.Identity)
-	switch proxy.Identity.Type {
+	core.Log.Info("proxy", "proxy", proxy.WorkloadIdentity)
+	// add identity secret
+	switch proxy.WorkloadIdentity.Type {
+	// TODO: how we can do it more dynamic so we can easily add plugin code in parent project
 	case string(meshidentity_api.BundledType):
-		workloadIdentity := &envoy_auth.Secret{
-			Name: proxy.Identity.SecretName,
-			Type: &envoy_auth.Secret_TlsCertificate{
-				TlsCertificate: &envoy_auth.TlsCertificate{
-					CertificateChain: &envoy_core.DataSource{
-						Specifier: &envoy_core.DataSource_InlineBytes{
-							InlineBytes: bytes.Join([][]byte{proxy.Identity.Cert}, []byte("\n")),
-						},
-					},
-					PrivateKey: &envoy_core.DataSource{
-						Specifier: &envoy_core.DataSource_InlineBytes{
-							InlineBytes: proxy.Identity.PrivateKey,
-						},
-					},
-				},
-			},
-		}
-		rs.Add(&core_xds.Resource{
-			Name:     workloadIdentity.Name,
-			Origin:   OriginWorkloadIdentity,
-			Resource: workloadIdentity,
-		})
-	}
-	trustByDomain := map[string][]*meshtrust_api.MeshTrustResource{}
-	for _, trust := range xdsCtx.Mesh.Resources.MeshTrusts().Items {
-		trustByDomain[trust.Spec.TrustDomain] = append(trustByDomain[trust.Spec.TrustDomain], trust)
-	}
-	configTrustDomains := []*envoy_auth.SPIFFECertValidatorConfig_TrustDomain{}
-	for domain, trusts := range trustByDomain {
-		cas := [][]byte{}
-		for _, trust := range trusts {
-			for _, ca := range trust.Spec.CABundles {
-				cas = append(cas, []byte(ca.Pem.Value))
-			}
-		}
-		configTrustDomains = append(configTrustDomains, &envoy_auth.SPIFFECertValidatorConfig_TrustDomain{
-			Name: domain,
-			TrustBundle: &envoy_core.DataSource{
-				Specifier: &envoy_core.DataSource_InlineBytes{
-					InlineBytes: bytes.Join(cas, []byte("\n")),
-				},
-			},
-		})
-
-		// Order by trustdomain name to return in consistent order
-		sort.Slice(configTrustDomains, func(i, j int) bool {
-			return configTrustDomains[i].Name < configTrustDomains[j].Name
-		})
-
-		typedConfig, err := anypb.New(&envoy_auth.SPIFFECertValidatorConfig{
-			TrustDomains: configTrustDomains,
-		})
+		identitySecret, err := identitySecret(proxy)
 		if err != nil {
 			return err
 		}
-		ca := &envoy_auth.Secret{
-			Name: "system_identity_ca",
-			Type: &envoy_auth.Secret_ValidationContext{
-				ValidationContext: &envoy_auth.CertificateValidationContext{
-					CustomValidatorConfig: &envoy_core.TypedExtensionConfig{
-						Name:        "envoy.tls.cert_validator.spiffe",
-						TypedConfig: typedConfig,
-					},
-				},
-			},
+		rs.Add(&core_xds.Resource{
+			Name:     identitySecret.Name,
+			Origin:   OriginWorkloadIdentity,
+			Resource: identitySecret,
+		})
+	}
+	// add validation context secret
+	if len(xdsCtx.Mesh.TrustsByTrustDomain) > 0 {
+		config, err := validationCtx(xdsCtx)
+		if err != nil {
+			return err
 		}
 		rs.Add(&core_xds.Resource{
-			Name:     ca.Name,
+			Name:     config.Name,
 			Origin:   OriginWorkloadIdentity,
-			Resource: ca,
+			Resource: config,
 		})
 	}
 
 	return nil
+}
+
+func validationCtx(xdsCtx xds_context.Context) (*envoy_auth.Secret, error) {
+	validatorsPerTrustDomain := []*envoy_auth.SPIFFECertValidatorConfig_TrustDomain{}
+	for domain, trusts := range xdsCtx.Mesh.TrustsByTrustDomain {
+		// concatenate multiple CAs
+		allCAs := [][]byte{}
+		for _, trust := range trusts {
+			for _, ca := range trust.CABundles {
+				allCAs = append(allCAs, []byte(ca.Pem.Value))
+			}
+		}
+		concatenatedCA := bytes.Join(allCAs, []byte("\n"))
+		validator, err := bldrs_auth.NewSPIFFECertValidator().
+			Configure(
+				bldrs_auth.TrustDomainBundle(domain,
+					bldrs_core.NewDataSource().Configure(bldrs_core.InlineBytes(concatenatedCA)))).Build()
+		if err != nil {
+			return nil, err
+		}
+		validatorsPerTrustDomain = append(validatorsPerTrustDomain, validator)
+	}
+	// Order by trustdomain name to return in consistent order
+	sort.Slice(validatorsPerTrustDomain, func(i, j int) bool {
+		return validatorsPerTrustDomain[i].Name < validatorsPerTrustDomain[j].Name
+	})
+
+	typedConfig, err := anypb.New(&envoy_auth.SPIFFECertValidatorConfig{
+		TrustDomains: validatorsPerTrustDomain,
+	})
+	if err != nil {
+		return nil, err
+	}
+	ca, err := bldrs_auth.NewSecret().
+		Configure(bldrs_auth.Name(SystemResourceNameCABundle)).
+		Configure(bldrs_auth.ValidationContext(
+			bldrs_auth.NewValidationContext().
+				Configure(
+					bldrs_auth.CertificateValidationContext(
+						bldrs_auth.NewCertificateValidationContext().
+							Configure(bldrs_auth.SpiffeCustomValidator(typedConfig)))))).Build()
+	if err != nil {
+		return nil, err
+	}
+	return ca, nil
+}
+
+func identitySecret(proxy *core_xds.Proxy) (*envoy_auth.Secret, error) {
+	identitySecret, err := bldrs_auth.NewSecret().
+		Configure(bldrs_auth.Name(proxy.WorkloadIdentity.SecretName)).
+		Configure(bldrs_auth.TlsCertificate(
+			bldrs_auth.NewTlsCertificate().
+				Configure(bldrs_auth.CertificateChain(
+					bldrs_core.NewDataSource().
+						Configure(bldrs_core.InlineBytes(bytes.Join([][]byte{proxy.WorkloadIdentity.Cert}, []byte("\n")))))).
+				Configure(bldrs_auth.PrivateKey(
+					bldrs_core.NewDataSource().
+						Configure(bldrs_core.InlineBytes(proxy.WorkloadIdentity.PrivateKey)))))).Build()
+	if err != nil {
+		return nil, err
+	}
+	return identitySecret, nil
 }

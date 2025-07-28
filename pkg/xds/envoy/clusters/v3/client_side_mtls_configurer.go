@@ -29,13 +29,13 @@ type ClientSideMTLSConfigurer struct {
 var _ ClusterConfigurer = &ClientSideMTLSConfigurer{}
 
 func (c *ClientSideMTLSConfigurer) Configure(cluster *envoy_cluster.Cluster) error {
-	// if !c.UpstreamMesh.MTLSEnabled() || !c.LocalMesh.MTLSEnabled() {
-	// 	return nil
-	// }
-	// if c.UpstreamMesh.GetEnabledCertificateAuthorityBackend().Mode == mesh_proto.CertificateAuthorityBackend_PERMISSIVE &&
-	// 	!c.UpstreamTLSReady {
-	// 	return nil
-	// }
+	if !c.UpstreamMesh.MTLSEnabled() || !c.LocalMesh.MTLSEnabled() {
+		return nil
+	}
+	if c.UpstreamMesh.GetEnabledCertificateAuthorityBackend().Mode == mesh_proto.CertificateAuthorityBackend_PERMISSIVE &&
+		!c.UpstreamTLSReady {
+		return nil
+	}
 
 	meshName := c.UpstreamMesh.GetMeta().GetName()
 	// there might be a situation when there are multiple sam tags passed here for example two outbound listeners with the same tags, therefore we need to distinguish between them.
@@ -74,9 +74,9 @@ func (c *ClientSideMTLSConfigurer) Configure(cluster *envoy_cluster.Cluster) err
 }
 
 func (c *ClientSideMTLSConfigurer) createTransportSocket(sni string) (*envoy_core.TransportSocket, error) {
-	// if !c.UpstreamMesh.MTLSEnabled() {
-	// 	return nil, nil
-	// }
+	if !c.UpstreamMesh.MTLSEnabled() {
+		return nil, nil
+	}
 
 	ca := c.SecretsTracker.RequestCa(c.UpstreamMesh.GetMeta().GetName())
 	identity := c.SecretsTracker.RequestIdentityCert()

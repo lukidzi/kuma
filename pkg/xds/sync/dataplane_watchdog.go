@@ -60,7 +60,8 @@ type DataplaneWatchdog struct {
 	envoyAdminMTLS   *core_xds.ServerSideMTLSCerts
 	dpAddress        string
 	xdsMeta          *core_xds.DataplaneMetadata
-	identity         *providers.Identity
+	// used by MeshIdentity
+	workloadIdentity *providers.WorkloadIdentity
 	lastIdentityHash string // last Hash of MeshIdentities
 }
 
@@ -142,8 +143,8 @@ func (d *DataplaneWatchdog) syncDataplane(ctx context.Context) (SyncResult, erro
 	syncForConfig := meshCtx.Hash != d.lastHash               // check if we need to regenerate config because Kuma policies has changed.
 	identity := d.EnvoyCpCtx.IdentityManager.SelectedIdentity(dpp, meshCtx.Resources.MeshIdentities().Items)
 	identityHash := base64.StdEncoding.EncodeToString(hashMeshIdentity(identity))
-	syncIdentity := identityHash != d.lastIdentityHash || (d.identity != nil && d.identity.ExpiringSoon())
-	core.Log.Info("TEST IDEN", "identityHash != d.lastIdentityHash", identityHash != d.lastIdentityHash, "d.identity != nil && d.identity.ExpiringSoon()", d.identity != nil && d.identity.ExpiringSoon())
+	syncIdentity := identityHash != d.lastIdentityHash || (d.workloadIdentity != nil && d.workloadIdentity.ExpiringSoon())
+	core.Log.Info("TEST IDEN", "identityHash != d.lastIdentityHash", identityHash != d.lastIdentityHash, "d.identity != nil && d.identity.ExpiringSoon()", d.workloadIdentity != nil && d.workloadIdentity.ExpiringSoon())
 	if !syncForCert && !syncForConfig && !syncIdentity {
 		result.Status = SkipStatus
 		return result, nil
@@ -174,18 +175,17 @@ func (d *DataplaneWatchdog) syncDataplane(ctx context.Context) (SyncResult, erro
 		if err != nil {
 			return SyncResult{}, errors.Wrap(err, "could not get identity")
 		}
-		d.identity = identity
+		d.workloadIdentity = identity
 	}
-	if d.identity != nil {
-		proxy.Identity = &core_xds.Identity{
-			Type:       string(d.identity.Type),
-			Cert:       d.identity.CertPEM,
-			PrivateKey: d.identity.KeyPEM,
-			SecretName: d.identity.SecretName,
-			CA:         d.identity.CA,
+	if d.workloadIdentity != nil {
+		proxy.WorkloadIdentity = &core_xds.WorkloadIdentity{
+			Type:       string(d.workloadIdentity.Type),
+			Cert:       d.workloadIdentity.CertPEM,
+			PrivateKey: d.workloadIdentity.KeyPEM,
+			SecretName: d.workloadIdentity.SecretName,
 		}
 	}
-	core.Log.Info("TEST IDEN", "syncIdentity", d.identity)
+	core.Log.Info("TEST IDEN", "syncIdentity", d.workloadIdentity)
 	networking := proxy.Dataplane.Spec.Networking
 	envoyAdminMTLS, err := d.getEnvoyAdminMTLS(ctx, networking.Address, networking.AdvertisedAddress)
 	if err != nil {

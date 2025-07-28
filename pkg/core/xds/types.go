@@ -186,7 +186,7 @@ type Proxy struct {
 	SecretsTracker SecretsTracker
 
 	// Identity of the proxy
-	Identity *Identity
+	WorkloadIdentity *WorkloadIdentity
 
 	// ZoneEgressProxy is available only when XDS is generated for ZoneEgress data plane proxy.
 	ZoneEgressProxy *ZoneEgressProxy
@@ -202,7 +202,7 @@ type Proxy struct {
 
 type ProviderType string
 
-type Identity struct {
+type WorkloadIdentity struct {
 	Type       string
 	Cert       []byte
 	PrivateKey []byte
