@@ -15,10 +15,12 @@ import (
 type CertOptsFn = func(*x509.Certificate)
 
 type WorkloadIdentity struct {
-	KRI            kri.Identifier
-	Type           meshidentity_api.ProviderType
-	ExpirationTime time.Time
-	GenerationTime time.Time
+	KRI                kri.Identifier
+	Type               meshidentity_api.ProviderType
+	ExpirationTime     time.Time
+	GenerationTime     time.Time
+	IdentitySecretName *string
+	CABundleSecretName *string
 	*util_tls.KeyPair
 }
 
@@ -31,8 +33,10 @@ func (i *WorkloadIdentity) ExpiringSoon() bool {
 }
 
 type IdentityProvider interface {
+	Validate(context.Context, *meshidentity_api.MeshIdentityResource) error
+	Initialize(context.Context, *meshidentity_api.MeshIdentityResource, string) error
 	CreateIdentity(*util_tls.KeyPair, *meshidentity_api.MeshIdentityResource, model.ResourceMeta) (*WorkloadIdentity, error)
-	GetCAKeyPair(context.Context, meshidentity_api.Provider, string) (*util_tls.KeyPair, error)
+	GetCAKeyPair(context.Context, *meshidentity_api.MeshIdentityResource, string) (*util_tls.KeyPair, error)
 }
 
 type IdentityProviders = map[string]IdentityProvider

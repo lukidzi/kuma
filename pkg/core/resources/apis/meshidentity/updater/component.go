@@ -11,7 +11,7 @@ import (
 
 func Setup(rt runtime.Runtime) error {
 	// currently we support only k8s
-	if rt.GetMode() == config_core.Global { //|| rt.Config().Environment != config_core.KubernetesEnvironment {
+	if rt.GetMode() == config_core.Global { // || rt.Config().Environment != config_core.KubernetesEnvironment {
 		return nil
 	}
 	logger := core.Log.WithName("meshidentity").WithName("generator")

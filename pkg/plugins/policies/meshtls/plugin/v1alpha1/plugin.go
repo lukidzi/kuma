@@ -7,6 +7,7 @@ import (
 	envoy_tls "github.com/envoyproxy/go-control-plane/envoy/extensions/transport_sockets/tls/v3"
 	envoy_resource "github.com/envoyproxy/go-control-plane/pkg/resource/v3"
 	"github.com/envoyproxy/go-control-plane/pkg/wellknown"
+	"github.com/spiffe/go-spiffe/v2/spiffeid"
 
 	common_tls "github.com/kumahq/kuma/api/common/v1alpha1/tls"
 	mesh_proto "github.com/kumahq/kuma/api/mesh/v1alpha1"
@@ -15,6 +16,10 @@ import (
 	core_mesh "github.com/kumahq/kuma/pkg/core/resources/apis/mesh"
 	core_xds "github.com/kumahq/kuma/pkg/core/xds"
 	xds_types "github.com/kumahq/kuma/pkg/core/xds/types"
+	bldrs_common "github.com/kumahq/kuma/pkg/envoy/builders/common"
+	bldrs_core "github.com/kumahq/kuma/pkg/envoy/builders/core"
+	bldrs_matcher "github.com/kumahq/kuma/pkg/envoy/builders/matcher"
+	bldrs_tls "github.com/kumahq/kuma/pkg/envoy/builders/tls"
 	"github.com/kumahq/kuma/pkg/plugins/policies/core/matchers"
 	core_rules "github.com/kumahq/kuma/pkg/plugins/policies/core/rules"
 	rules_inbound "github.com/kumahq/kuma/pkg/plugins/policies/core/rules/inbound"
@@ -28,6 +33,7 @@ import (
 	envoy_names "github.com/kumahq/kuma/pkg/xds/envoy/names"
 	xds_tls "github.com/kumahq/kuma/pkg/xds/envoy/tls"
 	"github.com/kumahq/kuma/pkg/xds/generator"
+	"github.com/kumahq/kuma/pkg/xds/generator/system_names"
 )
 
 var (
@@ -64,7 +70,7 @@ func (p plugin) Apply(rs *core_xds.ResourceSet, ctx xds_context.Context, proxy *
 	//   (either as a gateway or a regular inbound)
 	// This avoids unnecessary processing and ensures that xDS config is only generated
 	// when there is an actual policy that affects this proxy.
-	if !ok || len(policies.FromRules.InboundRules) == 0 && len(policies.GatewayRules.InboundRules) == 0 {
+	if proxy.WorkloadIdentity == nil && (!ok || len(policies.FromRules.InboundRules) == 0 && len(policies.GatewayRules.InboundRules) == 0) {
 		return nil
 	}
 	listeners := policies_xds.GatherListeners(rs)
@@ -274,6 +280,10 @@ func configure(
 ) (envoy_common.NamedResource, error) {
 	mesh := xdsCtx.Mesh.Resource
 	mode := pointer.DerefOr(conf.Mode, getMeshTLSMode(mesh))
+	useIdentity := proxy.WorkloadIdentity != nil
+	if useIdentity {
+		mode = pointer.DerefOr(conf.Mode, api.ModeStrict)
+	}
 	protocol := core_mesh.ParseProtocol(inbound.GetProtocol())
 	localClusterName := envoy_names.GetLocalClusterName(iface.WorkloadPort)
 	cluster := envoy_common.NewCluster(envoy_common.WithService(localClusterName))
@@ -282,12 +292,16 @@ func configure(
 	listenerBuilder := envoy_listeners.NewInboundListenerBuilder(proxy.APIVersion, iface.DataplaneIP, iface.DataplanePort, core_xds.SocketAddressProtocolTCP).
 		Configure(envoy_listeners.TransparentProxying(proxy)).
 		Configure(envoy_listeners.TagsMetadata(inbound.GetTags()))
-	
+	downstreamCtx, err := downstreamTLSContext(xdsCtx, proxy, conf)
+	if err != nil {
+		return nil, err
+	}
 	switch mode {
 	case api.ModeStrict:
 		listenerBuilder.
 			Configure(envoy_listeners.FilterChain(generator.FilterChainBuilder(true, protocol, proxy, localClusterName, xdsCtx, iface, service, &routes, conf.TlsVersion, pointer.Deref(conf.TlsCiphers)).Configure(
 				envoy_listeners.NetworkRBAC(listener.GetName(), isMTLSEnabled(mesh, proxy), proxy.Policies.TrafficPermissions[iface]),
+				envoy_listeners.DownstreamTlsContext(downstreamCtx),
 			)))
 	case api.ModePermissive:
 		listenerBuilder.
@@ -307,10 +321,59 @@ func configure(
 					envoy_listeners.MatchTransportProtocol("tls"),
 					envoy_listeners.MatchApplicationProtocols(xds_tls.KumaALPNProtocols...),
 					envoy_listeners.NetworkRBAC(listener.GetName(), isMTLSEnabled(mesh, proxy), proxy.Policies.TrafficPermissions[iface]),
+					envoy_listeners.DownstreamTlsContext(downstreamCtx),
 				)),
 			)
 	}
 	return listenerBuilder.Build()
+}
+
+func downstreamTLSContext(xdsCtx xds_context.Context, proxy *core_xds.Proxy, conf api.Conf) (*envoy_tls.DownstreamTlsContext, error) {
+	sanMatchers := []*bldrs_common.Builder[envoy_tls.SubjectAltNameMatcher]{}
+	for trustDomain := range xdsCtx.Mesh.TrustsByTrustDomain {
+		id, err := spiffeid.TrustDomainFromString(trustDomain)
+		if err != nil {
+			return nil, err
+		}
+		conf := bldrs_tls.NewSubjectAltNameMatcher().Configure(bldrs_tls.URI(bldrs_matcher.NewStringMatcher().Configure(bldrs_matcher.PrefixMatcher(id.IDString()))))
+		sanMatchers = append(sanMatchers, conf)
+	}
+	downstreamCtx, err := bldrs_tls.NewDownstreamTLSContext().
+		Configure(
+			bldrs_tls.DownstreamCommonTlsContext(
+				bldrs_tls.NewCommonTlsContext().
+					ConfigureIf(conf.TlsCiphers != nil, func() bldrs_common.Configurer[envoy_tls.CommonTlsContext] {
+						return bldrs_tls.CipherSuites(*conf.TlsCiphers)
+					}).
+					ConfigureIf(conf.TlsVersion != nil && conf.TlsVersion.Max != nil, func() bldrs_common.Configurer[envoy_tls.CommonTlsContext] {
+						return bldrs_tls.TlsMaxVersion(conf.TlsVersion.Max)
+					}).
+					ConfigureIf(conf.TlsVersion != nil && conf.TlsVersion.Min != nil, func() bldrs_common.Configurer[envoy_tls.CommonTlsContext] {
+						return bldrs_tls.TlsMinVersion(conf.TlsVersion.Min)
+					}).
+					Configure(bldrs_tls.CombinedCertificateValidationContext(
+						bldrs_tls.NewCombinedCertificateValidationContext().Configure(
+							bldrs_tls.DefaultValidationContext(bldrs_tls.NewDefaultValidationContext().Configure(
+								bldrs_tls.SANs(sanMatchers),
+							)),
+						).Configure(bldrs_tls.ValidationContextSdsSecretConfig(
+							bldrs_tls.NewTlsCertificateSdsSecretConfigs().Configure(
+								bldrs_tls.SdsSecretConfigSource(
+									pointer.DerefOr(proxy.WorkloadIdentity.CABundleSecretName, system_names.SystemResourceNameCABundle),
+									bldrs_core.NewConfigSource().Configure(bldrs_core.Sds())))),
+						))).
+					Configure(bldrs_tls.TlsCertificateSdsSecretConfigs([]*bldrs_common.Builder[envoy_tls.SdsSecretConfig]{
+						bldrs_tls.NewTlsCertificateSdsSecretConfigs().Configure(
+							bldrs_tls.SdsSecretConfigSource(
+								pointer.DerefOr(proxy.WorkloadIdentity.IdentitySecretName, proxy.WorkloadIdentity.KRI.String()),
+								bldrs_core.NewConfigSource().Configure(bldrs_core.Sds()),
+							)),
+					})))).
+		Configure(bldrs_tls.RequireClientCertificate(true)).Build()
+	if err != nil {
+		return nil, err
+	}
+	return downstreamCtx, nil
 }
 
 func getMeshTLSMode(mesh *core_mesh.MeshResource) api.Mode {

@@ -125,5 +125,3 @@ func TableSize(tableSize uint32) Configurer[envoy_cluster.Cluster_MaglevLbConfig
 		return nil
 	}
 }
-
-func NewUpstreamTLSContext() *Builder[envoy_]

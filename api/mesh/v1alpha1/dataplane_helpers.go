@@ -18,7 +18,7 @@ const (
 	KubePortTag      = "k8s.kuma.io/service-port"
 	// KDSSyncLabel a label that controls properties of the KDS sync.
 	// currently only disabled/enabled is supported
-	KDSSyncLabel = "kuma.io/kds-sync"
+	KDSSyncLabel       = "kuma.io/kds-sync"
 	KubeServiceAccount = "k8s.kuma.io/service-account"
 )
 

@@ -611,7 +611,7 @@ func ComputeLabels(
 		setIfNotExist(mesh_proto.KubeNamespaceTag, ns.value)
 	}
 
-	core.Log.Info("labels", "existing ", existingLabels) 
+	core.Log.Info("labels", "existing ", existingLabels)
 
 	if ns.value != "" && rd.IsPolicy && rd.IsPluginOriginated && IsLocallyOriginated(mode, labels) {
 		role, err := ComputePolicyRole(spec.(Policy), ns)

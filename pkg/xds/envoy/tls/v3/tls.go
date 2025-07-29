@@ -16,18 +16,10 @@ import (
 // It secures inbound listener with certificate of "identity_cert" that will be received from the SDS (it contains URI SANs of all inbounds).
 func CreateDownstreamTlsContext(downstreamMesh core_xds.CaRequest, mesh core_xds.IdentityCertRequest) (*envoy_tls.DownstreamTlsContext, error) {
 	var validationSANMatchers []*envoy_tls.SubjectAltNameMatcher
-	// meshNames := downstreamMesh.MeshName()
-
-	stringMatcher := &envoy_type_matcher.StringMatcher{
-		MatchPattern: &envoy_type_matcher.StringMatcher_Prefix{
-			Prefix: "spiffe://default.default.mesh.local",
-		},
+	meshNames := downstreamMesh.MeshName()
+	for _, meshName := range meshNames {
+		validationSANMatchers = append(validationSANMatchers, MeshSpiffeIDPrefixMatcher(meshName))
 	}
-
-	validationSANMatchers = append(validationSANMatchers, &envoy_tls.SubjectAltNameMatcher{
-		SanType: envoy_tls.SubjectAltNameMatcher_URI,
-		Matcher: stringMatcher,
-	})
 
 	commonTlsContext := createCommonTlsContext(mesh, downstreamMesh, validationSANMatchers)
 	return &envoy_tls.DownstreamTlsContext{
@@ -77,8 +69,8 @@ func CreateUpstreamTlsContext(mesh core_xds.IdentityCertRequest, upstreamMesh co
 }
 
 func createCommonTlsContext(ownMesh core_xds.IdentityCertRequest, targetMeshCa core_xds.CaRequest, matchers []*envoy_tls.SubjectAltNameMatcher) *envoy_tls.CommonTlsContext {
-	meshCaSecret := NewSecretConfigSource("system_identity_ca")
-	identitySecret := NewSecretConfigSource("kri_mid_default_default_kuma-system_identity_")
+	meshCaSecret := NewSecretConfigSource(targetMeshCa.Name())
+	identitySecret := NewSecretConfigSource(ownMesh.Name())
 
 	return &envoy_tls.CommonTlsContext{
 		ValidationContextType: &envoy_tls.CommonTlsContext_CombinedValidationContext{
@@ -86,7 +78,6 @@ func createCommonTlsContext(ownMesh core_xds.IdentityCertRequest, targetMeshCa c
 				DefaultValidationContext: &envoy_tls.CertificateValidationContext{
 					MatchTypedSubjectAltNames: matchers,
 				},
-
 				ValidationContextSdsSecretConfig: meshCaSecret,
 			},
 		},

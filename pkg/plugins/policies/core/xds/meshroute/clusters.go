@@ -1,6 +1,7 @@
 package meshroute
 
 import (
+	envoy_tls "github.com/envoyproxy/go-control-plane/envoy/extensions/transport_sockets/tls/v3"
 	"github.com/pkg/errors"
 
 	common_api "github.com/kumahq/kuma/api/common/v1alpha1"
@@ -11,6 +12,10 @@ import (
 	meshservice_api "github.com/kumahq/kuma/pkg/core/resources/apis/meshservice/api/v1alpha1"
 	core_model "github.com/kumahq/kuma/pkg/core/resources/model"
 	core_xds "github.com/kumahq/kuma/pkg/core/xds"
+	bldrs_common "github.com/kumahq/kuma/pkg/envoy/builders/common"
+	bldrs_core "github.com/kumahq/kuma/pkg/envoy/builders/core"
+	bldrs_matcher "github.com/kumahq/kuma/pkg/envoy/builders/matcher"
+	bldrs_tls "github.com/kumahq/kuma/pkg/envoy/builders/tls"
 	"github.com/kumahq/kuma/pkg/plugins/policies/core/rules/resolve"
 	util_maps "github.com/kumahq/kuma/pkg/util/maps"
 	"github.com/kumahq/kuma/pkg/util/pointer"
@@ -20,6 +25,7 @@ import (
 	envoy_tags "github.com/kumahq/kuma/pkg/xds/envoy/tags"
 	"github.com/kumahq/kuma/pkg/xds/envoy/tls"
 	"github.com/kumahq/kuma/pkg/xds/generator"
+	"github.com/kumahq/kuma/pkg/xds/generator/system_names"
 )
 
 func GenerateClusters(
@@ -112,6 +118,7 @@ func GenerateClusters(
 								}
 							}
 						}
+						// ClientSideMultiIdentitiesMTLS validate MTLS enabled on the mesh
 						edsClusterBuilder.Configure(envoy_clusters.ClientSideMultiIdentitiesMTLS(
 							proxy.SecretsTracker,
 							meshCtx.Resource,
@@ -119,6 +126,40 @@ func GenerateClusters(
 							SniForBackendRef(realResourceRef, meshCtx, systemNamespace),
 							ServiceTagIdentities(realResourceRef, meshCtx),
 						))
+						if proxy.WorkloadIdentity != nil {
+							sanMatchers := []*bldrs_common.Builder[envoy_tls.SubjectAltNameMatcher]{}
+							for _, san := range ServiceTagIdentities(realResourceRef, meshCtx) {
+								conf := bldrs_tls.NewSubjectAltNameMatcher().Configure(bldrs_tls.URI(bldrs_matcher.NewStringMatcher().Configure(bldrs_matcher.ExactMatcher(san))))
+								sanMatchers = append(sanMatchers, conf)
+							}
+							upstreamCtx, err := bldrs_tls.NewUpstreamTLSContext().
+								Configure(bldrs_tls.SNI(SniForBackendRef(realResourceRef, meshCtx, systemNamespace))).
+								Configure(bldrs_tls.UpstreamCommonTlsContext(
+									bldrs_tls.NewCommonTlsContext().
+										Configure(
+											bldrs_tls.CombinedCertificateValidationContext(
+												bldrs_tls.NewCombinedCertificateValidationContext().Configure(
+													bldrs_tls.ValidationContextSdsSecretConfig(
+														bldrs_tls.NewTlsCertificateSdsSecretConfigs().Configure(
+															bldrs_tls.SdsSecretConfigSource(pointer.DerefOr(proxy.WorkloadIdentity.CABundleSecretName, system_names.SystemResourceNameCABundle), bldrs_core.NewConfigSource().Configure(
+																bldrs_core.Sds()))))).Configure(
+													bldrs_tls.DefaultValidationContext(
+														bldrs_tls.NewDefaultValidationContext().Configure(
+															bldrs_tls.SANs(sanMatchers)))))).
+										Configure(
+											bldrs_tls.TlsCertificateSdsSecretConfigs([]*bldrs_common.Builder[envoy_tls.SdsSecretConfig]{
+												bldrs_tls.NewTlsCertificateSdsSecretConfigs().Configure(
+													bldrs_tls.SdsSecretConfigSource(
+														pointer.DerefOr(proxy.WorkloadIdentity.IdentitySecretName, proxy.WorkloadIdentity.KRI.String()),
+														bldrs_core.NewConfigSource().Configure(bldrs_core.Sds()),
+													)),
+											})).
+										Configure(bldrs_tls.KumaAlpnProtocol()))).Build()
+							if err != nil {
+								return nil, err
+							}
+							edsClusterBuilder.Configure(envoy_clusters.UpstreamTLSContext(upstreamCtx))
+						}
 					} else {
 						edsClusterBuilder.Configure(envoy_clusters.ClientSideMTLS(
 							proxy.SecretsTracker,
@@ -179,6 +220,9 @@ func ServiceTagIdentities(
 			if identity.Type == meshservice_api.MeshServiceIdentityServiceTagType {
 				result = append(result, identity.Value)
 			}
+			if identity.Type == meshservice_api.MeshServiceIdentitySpiffeIDType {
+				result = append(result, identity.Value)
+			}
 		}
 	case common_api.MeshMultiZoneService:
 		svc := meshCtx.GetServiceByKRI(pointer.Deref(backendRef.Resource))
@@ -200,6 +244,9 @@ func ServiceTagIdentities(
 			}
 			for _, identity := range pointer.Deref(ms.(*meshservice_api.MeshServiceResource).Spec.Identities) {
 				if identity.Type == meshservice_api.MeshServiceIdentityServiceTagType {
+					identities[identity.Value] = struct{}{}
+				}
+				if identity.Type == meshservice_api.MeshServiceIdentitySpiffeIDType {
 					identities[identity.Value] = struct{}{}
 				}
 			}

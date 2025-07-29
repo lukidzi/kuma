@@ -54,10 +54,10 @@ func (g GlobalContext) Hash() string {
 
 // BaseMeshContext holds for a Mesh a set of resources that are changing less often (policies, external services...)
 type BaseMeshContext struct {
-	Mesh                *core_mesh.MeshResource
-	ResourceMap         ResourceMap
-	DestinationIndex    *DestinationIndex
-	hash                []byte
+	Mesh             *core_mesh.MeshResource
+	ResourceMap      ResourceMap
+	DestinationIndex *DestinationIndex
+	hash             []byte
 }
 
 // Hash base64 version of the hash mostly useed for testing

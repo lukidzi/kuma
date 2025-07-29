@@ -203,11 +203,12 @@ type Proxy struct {
 type ProviderType string
 
 type WorkloadIdentity struct {
-	Type       string
-	Cert       []byte
-	PrivateKey []byte
-	SecretName string
-	CA         []byte
+	KRI                kri.Identifier
+	Type               string
+	Cert               []byte
+	PrivateKey         []byte
+	IdentitySecretName *string
+	CABundleSecretName *string
 }
 
 func (p *Proxy) GetTransparentProxy() *tproxy_dp.DataplaneConfig {

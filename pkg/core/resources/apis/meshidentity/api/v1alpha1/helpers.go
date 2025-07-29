@@ -6,11 +6,12 @@ import (
 	"strings"
 	"text/template"
 
+	"github.com/pkg/errors"
+
 	mesh_proto "github.com/kumahq/kuma/api/mesh/v1alpha1"
 	"github.com/kumahq/kuma/pkg/core"
 	"github.com/kumahq/kuma/pkg/core/resources/model"
 	"github.com/kumahq/kuma/pkg/util/pointer"
-	"github.com/pkg/errors"
 )
 
 const (

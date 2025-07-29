@@ -5,18 +5,18 @@ import (
 	"sort"
 
 	envoy_auth "github.com/envoyproxy/go-control-plane/envoy/extensions/transport_sockets/tls/v3"
+	"google.golang.org/protobuf/types/known/anypb"
+
 	"github.com/kumahq/kuma/pkg/core"
 	core_plugins "github.com/kumahq/kuma/pkg/core/plugins"
 	meshidentity_api "github.com/kumahq/kuma/pkg/core/resources/apis/meshidentity/api/v1alpha1"
-	"github.com/kumahq/kuma/pkg/core/system_names"
 	core_xds "github.com/kumahq/kuma/pkg/core/xds"
 	bldrs_auth "github.com/kumahq/kuma/pkg/envoy/builders/auth"
 	bldrs_core "github.com/kumahq/kuma/pkg/envoy/builders/core"
+	"github.com/kumahq/kuma/pkg/util/pointer"
 	xds_context "github.com/kumahq/kuma/pkg/xds/context"
-	"google.golang.org/protobuf/types/known/anypb"
+	"github.com/kumahq/kuma/pkg/xds/generator/system_names"
 )
-
-var SystemResourceNameCABundle = system_names.MustBeSystemName(system_names.Join("trust", "bundle"))
 
 const OriginWorkloadIdentity = "identity"
 
@@ -50,7 +50,7 @@ func (p *plugin) Apply(rs *core_xds.ResourceSet, xdsCtx xds_context.Context, pro
 	}
 	// add validation context secret
 	if len(xdsCtx.Mesh.TrustsByTrustDomain) > 0 {
-		config, err := validationCtx(xdsCtx)
+		config, err := validationCtx(xdsCtx, proxy)
 		if err != nil {
 			return err
 		}
@@ -64,7 +64,7 @@ func (p *plugin) Apply(rs *core_xds.ResourceSet, xdsCtx xds_context.Context, pro
 	return nil
 }
 
-func validationCtx(xdsCtx xds_context.Context) (*envoy_auth.Secret, error) {
+func validationCtx(xdsCtx xds_context.Context, proxy *core_xds.Proxy) (*envoy_auth.Secret, error) {
 	validatorsPerTrustDomain := []*envoy_auth.SPIFFECertValidatorConfig_TrustDomain{}
 	for domain, trusts := range xdsCtx.Mesh.TrustsByTrustDomain {
 		// concatenate multiple CAs
@@ -96,7 +96,7 @@ func validationCtx(xdsCtx xds_context.Context) (*envoy_auth.Secret, error) {
 		return nil, err
 	}
 	ca, err := bldrs_auth.NewSecret().
-		Configure(bldrs_auth.Name(SystemResourceNameCABundle)).
+		Configure(bldrs_auth.Name(pointer.DerefOr(proxy.WorkloadIdentity.CABundleSecretName, system_names.SystemResourceNameCABundle))).
 		Configure(bldrs_auth.ValidationContext(
 			bldrs_auth.NewValidationContext().
 				Configure(
@@ -111,7 +111,7 @@ func validationCtx(xdsCtx xds_context.Context) (*envoy_auth.Secret, error) {
 
 func identitySecret(proxy *core_xds.Proxy) (*envoy_auth.Secret, error) {
 	identitySecret, err := bldrs_auth.NewSecret().
-		Configure(bldrs_auth.Name(proxy.WorkloadIdentity.SecretName)).
+		Configure(bldrs_auth.Name(pointer.DerefOr(proxy.WorkloadIdentity.IdentitySecretName, proxy.WorkloadIdentity.KRI.String()))).
 		Configure(bldrs_auth.TlsCertificate(
 			bldrs_auth.NewTlsCertificate().
 				Configure(bldrs_auth.CertificateChain(

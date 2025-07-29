@@ -9,7 +9,6 @@ import (
 	meshidentity_api "github.com/kumahq/kuma/pkg/core/resources/apis/meshidentity/api/v1alpha1"
 )
 
-
 type IdentityProviderManager struct {
 	providers IdentityProviders
 	zone      string
@@ -45,7 +44,7 @@ func (i *IdentityProviderManager) GetWorkloadIdentity(ctx context.Context, datap
 		return nil, fmt.Errorf("identity provider %s not found", identity.Spec.Provider.Type)
 	}
 
-	pair, err := provider.GetCAKeyPair(ctx, identity.Spec.Provider, dataplane.Meta.GetMesh())
+	pair, err := provider.GetCAKeyPair(ctx, identity, dataplane.Meta.GetMesh())
 	if err != nil {
 		return nil, err
 	}

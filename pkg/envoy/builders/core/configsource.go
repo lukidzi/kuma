@@ -10,7 +10,7 @@ func NewConfigSource() *Builder[envoy_core.ConfigSource] {
 	return &Builder[envoy_core.ConfigSource]{}
 }
 
-func Sds(value []byte) Configurer[envoy_core.ConfigSource] {
+func Sds() Configurer[envoy_core.ConfigSource] {
 	return func(cs *envoy_core.ConfigSource) error {
 		cs.ResourceApiVersion = envoy_core.ApiVersion_V3
 		cs.ConfigSourceSpecifier = &envoy_core.ConfigSource_Ads{}

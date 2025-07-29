@@ -3,8 +3,9 @@ package auth
 import (
 	envoy_core "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	envoy_auth "github.com/envoyproxy/go-control-plane/envoy/extensions/transport_sockets/tls/v3"
-	. "github.com/kumahq/kuma/pkg/envoy/builders/common"
 	"google.golang.org/protobuf/types/known/anypb"
+
+	. "github.com/kumahq/kuma/pkg/envoy/builders/common"
 )
 
 func NewSecret() *Builder[envoy_auth.Secret] {
@@ -79,6 +80,9 @@ func CertificateChain(datasource *Builder[envoy_core.DataSource]) Configurer[env
 		if err != nil {
 			return nil
 		}
+		if s.TlsCertificate == nil {
+			s.TlsCertificate = &envoy_auth.TlsCertificate{}
+		}
 		s.TlsCertificate.CertificateChain = ds
 		return nil
 	}
@@ -89,6 +93,9 @@ func PrivateKey(datasource *Builder[envoy_core.DataSource]) Configurer[envoy_aut
 		ds, err := datasource.Build()
 		if err != nil {
 			return nil
+		}
+		if s.TlsCertificate == nil {
+			s.TlsCertificate = &envoy_auth.TlsCertificate{}
 		}
 		s.TlsCertificate.PrivateKey = ds
 		return nil

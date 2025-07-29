@@ -10,6 +10,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 
 	mesh_proto "github.com/kumahq/kuma/api/mesh/v1alpha1"
+	"github.com/kumahq/kuma/pkg/core"
 	core_mesh "github.com/kumahq/kuma/pkg/core/resources/apis/mesh"
 	meshidentity_api "github.com/kumahq/kuma/pkg/core/resources/apis/meshidentity/api/v1alpha1"
 	"github.com/kumahq/kuma/pkg/core/resources/apis/meshservice"
@@ -114,7 +115,7 @@ func (s *StatusUpdater) updateStatus(ctx context.Context) error {
 		return errors.Wrap(err, "could not list of MeshIdentities")
 	}
 	meshTrusts := meshtrust_api.MeshTrustResourceList{}
-	if err := s.roResManager.List(ctx, &meshIdentities); err != nil {
+	if err := s.roResManager.List(ctx, &meshTrusts); err != nil {
 		return errors.Wrap(err, "could not list of MeshIdentities")
 	}
 	trustDomains := meshtrust_api.GetAllTrustDomains(meshTrusts)
@@ -237,7 +238,9 @@ func buildTLS(
 			}
 		}
 		if identity, matches := meshidentity_api.Matched(dpp.Meta.GetLabels(), meshIdentities); matches {
+			core.Log.Info("test updater", "identity", identity)
 			if identity.Status.TrustDomain != "" {
+				core.Log.Info("test updater", "identity.Status.TrustDomain", identity.Status.TrustDomain, "trustDomains", trustDomains)
 				if _, exists := trustDomains[identity.Status.TrustDomain]; exists {
 					dppsWithIdentities++
 				} else {
@@ -258,6 +261,7 @@ func buildTLS(
 			}
 		}
 	} else {
+		core.Log.Info("test updater", "dppsWithIdentities", dppsWithIdentities, "allTrustDomainsSupported", allTrustDomainsSupported)
 		if dppsWithIdentities == len(dpps) && allTrustDomainsSupported {
 			return meshservice_api.TLS{
 				Status: meshservice_api.TLSReady,
@@ -268,12 +272,12 @@ func buildTLS(
 			}
 		}
 	}
-	
+
 }
 
 func (s *StatusUpdater) buildIdentities(dpps []*core_mesh.DataplaneResource, meshIdentities []*meshidentity_api.MeshIdentityResource) []meshservice_api.MeshServiceIdentity {
 	serviceTagIdentities := map[string]struct{}{}
-	spiffeIDs :=  map[string]struct{}{}
+	spiffeIDs := map[string]struct{}{}
 	for _, dpp := range dpps {
 		for service := range dpp.Spec.TagSet()[mesh_proto.ServiceTag] {
 			serviceTagIdentities[service] = struct{}{}
@@ -302,7 +306,7 @@ func (s *StatusUpdater) buildIdentities(dpps []*core_mesh.DataplaneResource, mes
 			Value: identity,
 		})
 	}
-	return identites 
+	return identites
 }
 
 func (s *StatusUpdater) NeedLeaderElection() bool {

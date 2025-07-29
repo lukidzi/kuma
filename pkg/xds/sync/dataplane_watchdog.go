@@ -179,10 +179,12 @@ func (d *DataplaneWatchdog) syncDataplane(ctx context.Context) (SyncResult, erro
 	}
 	if d.workloadIdentity != nil {
 		proxy.WorkloadIdentity = &core_xds.WorkloadIdentity{
+			KRI:        d.workloadIdentity.KRI,
 			Type:       string(d.workloadIdentity.Type),
 			Cert:       d.workloadIdentity.CertPEM,
 			PrivateKey: d.workloadIdentity.KeyPEM,
-			SecretName: d.workloadIdentity.SecretName,
+			IdentitySecretName: d.workloadIdentity.IdentitySecretName,
+			CABundleSecretName: d.workloadIdentity.CABundleSecretName,
 		}
 	}
 	core.Log.Info("TEST IDEN", "syncIdentity", d.workloadIdentity)
