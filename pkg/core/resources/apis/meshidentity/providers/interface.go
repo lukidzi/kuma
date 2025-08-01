@@ -32,11 +32,12 @@ func (i *WorkloadIdentity) ExpiringSoon() bool {
 	return core.Now().After(i.GenerationTime.Add(i.CertLifetime() / 5 * 4))
 }
 
+// This interface is a subject to changes based on other providers to find one that serves for all
 type IdentityProvider interface {
 	Validate(context.Context, *meshidentity_api.MeshIdentityResource) error
 	Initialize(context.Context, *meshidentity_api.MeshIdentityResource, string) error
-	CreateIdentity(*util_tls.KeyPair, *meshidentity_api.MeshIdentityResource, model.ResourceMeta) (*WorkloadIdentity, error)
-	GetCAKeyPair(context.Context, *meshidentity_api.MeshIdentityResource, string) (*util_tls.KeyPair, error)
+	CreateIdentity(context.Context, *meshidentity_api.MeshIdentityResource, model.ResourceMeta, string) (*WorkloadIdentity, error)
+	GetRootCA(context.Context, *meshidentity_api.MeshIdentityResource, string) ([]byte, error)
 }
 
 type IdentityProviders = map[string]IdentityProvider

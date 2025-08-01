@@ -144,7 +144,6 @@ func (d *DataplaneWatchdog) syncDataplane(ctx context.Context) (SyncResult, erro
 	identity := d.EnvoyCpCtx.IdentityManager.SelectedIdentity(dpp, meshCtx.Resources.MeshIdentities().Items)
 	identityHash := base64.StdEncoding.EncodeToString(hashMeshIdentity(identity))
 	syncIdentity := identityHash != d.lastIdentityHash || (d.workloadIdentity != nil && d.workloadIdentity.ExpiringSoon())
-	core.Log.Info("TEST IDEN", "identityHash != d.lastIdentityHash", identityHash != d.lastIdentityHash, "d.identity != nil && d.identity.ExpiringSoon()", d.workloadIdentity != nil && d.workloadIdentity.ExpiringSoon())
 	if !syncForCert && !syncForConfig && !syncIdentity {
 		result.Status = SkipStatus
 		return result, nil
@@ -154,6 +153,9 @@ func (d *DataplaneWatchdog) syncDataplane(ctx context.Context) (SyncResult, erro
 	}
 	if syncForCert {
 		d.log.V(1).Info("certs expiring soon, reconcile")
+	}
+	if syncIdentity {
+		d.log.V(1).Info("config generation based on identity change, reconcile")
 	}
 
 	envoyCtx := &xds_context.Context{
@@ -179,15 +181,14 @@ func (d *DataplaneWatchdog) syncDataplane(ctx context.Context) (SyncResult, erro
 	}
 	if d.workloadIdentity != nil {
 		proxy.WorkloadIdentity = &core_xds.WorkloadIdentity{
-			KRI:        d.workloadIdentity.KRI,
-			Type:       string(d.workloadIdentity.Type),
-			Cert:       d.workloadIdentity.CertPEM,
-			PrivateKey: d.workloadIdentity.KeyPEM,
+			KRI:                d.workloadIdentity.KRI,
+			Type:               string(d.workloadIdentity.Type),
+			Cert:               d.workloadIdentity.CertPEM,
+			PrivateKey:         d.workloadIdentity.KeyPEM,
 			IdentitySecretName: d.workloadIdentity.IdentitySecretName,
 			CABundleSecretName: d.workloadIdentity.CABundleSecretName,
 		}
 	}
-	core.Log.Info("TEST IDEN", "syncIdentity", d.workloadIdentity)
 	networking := proxy.Dataplane.Spec.Networking
 	envoyAdminMTLS, err := d.getEnvoyAdminMTLS(ctx, networking.Address, networking.AdvertisedAddress)
 	if err != nil {

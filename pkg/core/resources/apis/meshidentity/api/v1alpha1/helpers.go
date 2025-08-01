@@ -7,9 +7,9 @@ import (
 	"text/template"
 
 	"github.com/pkg/errors"
+	kube_meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	mesh_proto "github.com/kumahq/kuma/api/mesh/v1alpha1"
-	"github.com/kumahq/kuma/pkg/core"
 	"github.com/kumahq/kuma/pkg/core/resources/model"
 	"github.com/kumahq/kuma/pkg/util/pointer"
 )
@@ -112,12 +112,10 @@ func (i *MeshIdentity) GetSpiffeID(trustDomain string, meta model.ResourceMeta) 
 		Namespace:      meta.GetLabels()[mesh_proto.KubeNamespaceTag],
 		ServiceAccount: meta.GetLabels()[mesh_proto.KubeServiceAccount],
 	}
-	core.Log.Info("TEST", "meta", meta)
 
 	return renderTemplate(spiffeIDTemplate, meta, data)
 }
 
-// 👇 Common helper
 func renderTemplate(tmplStr string, meta model.ResourceMeta, data any) (string, error) {
 	tmpl, err := template.New("").Funcs(map[string]any{
 		"label": func(key string) (string, error) {
@@ -137,4 +135,13 @@ func renderTemplate(tmplStr string, meta model.ResourceMeta, data any) (string, 
 		return "", fmt.Errorf("executing template failed: %w", err)
 	}
 	return sb.String(), nil
+}
+
+func (s *MeshIdentityStatus) IsInitialized() bool {
+	for _, condition := range s.Conditions {
+		if condition.Type == ReadyConditionType && condition.Status == kube_meta.ConditionTrue {
+			return true
+		}
+	}
+	return false
 }

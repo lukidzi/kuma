@@ -2,6 +2,8 @@ package bundled
 
 import (
 	"crypto"
+	"crypto/ecdsa"
+	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/x509"
 	"crypto/x509/pkix"
@@ -16,7 +18,6 @@ import (
 	"github.com/kumahq/kuma/pkg/core"
 	core_ca "github.com/kumahq/kuma/pkg/core/ca"
 	util_tls "github.com/kumahq/kuma/pkg/tls"
-	util_rsa "github.com/kumahq/kuma/pkg/util/rsa"
 )
 
 const (
@@ -32,15 +33,15 @@ func PrivateKeyName(resourceName string) string {
 }
 
 func GenerateRootCA(trustDomain string) (*core_ca.KeyPair, error) {
-	key, err := util_rsa.GenerateKey(util_rsa.DefaultKeySize)
+	privateKey, err := ecdsa.GenerateKey(elliptic.P384(), rand.Reader)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to generate a private key")
+		return nil, errors.Wrap(err, "failed to generate Ed25519 key")
 	}
-	cert, err := newCACert(key, trustDomain)
+	cert, err := newCACert(privateKey, trustDomain)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to generate X509 certificate")
 	}
-	return util_tls.ToKeyPair(key, cert)
+	return util_tls.ToKeyPair(privateKey, cert)
 }
 
 func newCACert(signer crypto.Signer, trustDomain string) ([]byte, error) {

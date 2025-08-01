@@ -17486,10 +17486,6 @@ components:
               x-kubernetes-list-map-keys:
                 - type
               x-kubernetes-list-type: map
-            trustDomain:
-              type: string
-          required:
-            - trustDomain
           type: object
           readOnly: true
     MeshIdentityCreateOrUpdateSuccessResponse:
@@ -17762,6 +17758,7 @@ components:
                   type:
                     enum:
                       - ServiceTag
+                      - SpiffeID
                     type: string
                   value:
                     type: string

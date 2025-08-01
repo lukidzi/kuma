@@ -15,6 +15,7 @@ import (
 	"github.com/kumahq/kuma/pkg/core/kri"
 	core_plugins "github.com/kumahq/kuma/pkg/core/plugins"
 	core_mesh "github.com/kumahq/kuma/pkg/core/resources/apis/mesh"
+	meshidentity_api "github.com/kumahq/kuma/pkg/core/resources/apis/meshidentity/api/v1alpha1"
 	meshservice_api "github.com/kumahq/kuma/pkg/core/resources/apis/meshservice/api/v1alpha1"
 	core_model "github.com/kumahq/kuma/pkg/core/resources/model"
 	core_xds "github.com/kumahq/kuma/pkg/core/xds"
@@ -59,6 +60,7 @@ var _ = Describe("MeshTLS", func() {
 		caseName    string
 		meshBuilder *builders.MeshBuilder
 		meshService bool
+		workloadIdentity *core_xds.WorkloadIdentity
 	}
 	DescribeTable("should generate proper Envoy config",
 		func(given testCase) {
@@ -79,6 +81,7 @@ var _ = Describe("MeshTLS", func() {
 
 			proxy := xds_builders.Proxy().
 				WithSecretsTracker(secretsTracker).
+				WithWorkloadIdentity(given.workloadIdentity).
 				WithApiVersion(envoy_common.APIV3).
 				WithOutbounds(xds_types.Outbounds{&xds_types.Outbound{
 					LegacyOutbound: builders.Outbound().
@@ -145,6 +148,24 @@ var _ = Describe("MeshTLS", func() {
 			caseName:    "strict-with-permissive-mtls-meshservice",
 			meshBuilder: samples.MeshMTLSBuilder().WithPermissiveMTLSBackends(),
 			meshService: true,
+		}),
+		Entry("strict based on workload identity", testCase{
+			caseName:    "strict-with-workload-identity",
+			meshBuilder: samples.MeshMTLSBuilder(),
+			meshService: true,
+			workloadIdentity: &core_xds.WorkloadIdentity{
+				KRI: kri.Identifier{ResourceType: meshidentity_api.MeshIdentityType, Mesh: "default", Zone: "default", Name: "my-identity"},
+			},
+		}),
+		Entry("permissive based on workload identity and custom secret names", testCase{
+			caseName:    "permissive-with-workload-identity-custom-secrets",
+			meshBuilder: samples.MeshMTLSBuilder(),
+			meshService: true,
+			workloadIdentity: &core_xds.WorkloadIdentity{
+				KRI: kri.Identifier{ResourceType: meshidentity_api.MeshIdentityType, Mesh: "default", Zone: "default", Name: "my-identity"},
+				IdentitySecretName: pointer.To("spiffe://my-identifier"),
+				CABundleSecretName: pointer.To("bundle"),
+			},
 		}),
 	)
 

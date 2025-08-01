@@ -4,20 +4,29 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/go-logr/logr"
+
 	"github.com/kumahq/kuma/pkg/core"
 	core_mesh "github.com/kumahq/kuma/pkg/core/resources/apis/mesh"
 	meshidentity_api "github.com/kumahq/kuma/pkg/core/resources/apis/meshidentity/api/v1alpha1"
+	"github.com/kumahq/kuma/pkg/core/resources/model"
+	"github.com/kumahq/kuma/pkg/events"
 )
 
 type IdentityProviderManager struct {
-	providers IdentityProviders
-	zone      string
+	logger      logr.Logger
+	eventWriter events.Emitter
+	providers   IdentityProviders
+	zone        string
 }
 
-func NewIdentityProviderManager(providers IdentityProviders, zone string) IdentityProviderManager {
+func NewIdentityProviderManager(providers IdentityProviders, eventWriter events.Emitter, zone string) IdentityProviderManager {
+	logger := core.Log.WithName("identity-provider")
 	return IdentityProviderManager{
-		providers: providers,
-		zone:      zone,
+		logger:      logger,
+		eventWriter: eventWriter,
+		providers:   providers,
+		zone:        zone,
 	}
 }
 
@@ -31,27 +40,38 @@ func (i *IdentityProviderManager) SelectedIdentity(dataplane *core_mesh.Dataplan
 
 func (i *IdentityProviderManager) GetWorkloadIdentity(ctx context.Context, dataplane *core_mesh.DataplaneResource, identity *meshidentity_api.MeshIdentityResource) (*WorkloadIdentity, error) {
 	if identity == nil {
-		return nil, nil
-	}
-	core.Log.Info("identity.Status.TrustDomain", "identity.Status.TrustDomain", identity)
-	if identity.Status.TrustDomain == "" {
-		// log to wait for trustDomain to be set
+		i.eventWriter.Send(events.WorkloadIdentityChangedEvent{
+			ResourceKey: model.MetaToResourceKey(dataplane.GetMeta()),
+			Operation:   events.Delete,
+		})
 		return nil, nil
 	}
 
+	if !identity.Status.IsInitialized() {
+		i.logger.V(1).Info("identity hasn't been initialized yet", "identity", identity.Meta.GetName())
+		return nil, nil
+	}
+	i.logger.V(1).Info("providing identity", "identity", identity.Meta.GetName(), "dataplane", dataplane.Meta.GetName())
 	provider, found := i.providers[string(identity.Spec.Provider.Type)]
 	if !found {
 		return nil, fmt.Errorf("identity provider %s not found", identity.Spec.Provider.Type)
 	}
 
-	pair, err := provider.GetCAKeyPair(ctx, identity, dataplane.Meta.GetMesh())
+	trustDomain, err := identity.Spec.GetTrustDomain(dataplane.GetMeta(), i.zone)
 	if err != nil {
 		return nil, err
 	}
-	// core.Log.Info("spiffeID", "spiffeID", spiffeID)
-	workloadIdentity, err := provider.CreateIdentity(pair, identity, dataplane.Meta)
+	workloadIdentity, err := provider.CreateIdentity(ctx, identity, dataplane.Meta, trustDomain)
 	if err != nil {
 		return nil, err
 	}
+	// TODO: should we send it after the config is reconciled?
+	i.eventWriter.Send(events.WorkloadIdentityChangedEvent{
+		ResourceKey:    model.MetaToResourceKey(dataplane.GetMeta()),
+		Operation:      events.Create,
+		GenerationTime: workloadIdentity.GenerationTime,
+		ExpirationTime: workloadIdentity.ExpirationTime,
+		Origin:         workloadIdentity.KRI,
+	})
 	return workloadIdentity, nil
 }

@@ -7,10 +7,9 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
-	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	kube_meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	common_api "github.com/kumahq/kuma/api/common/v1alpha1"
-	"github.com/kumahq/kuma/pkg/core"
 	"github.com/kumahq/kuma/pkg/core/kri"
 	meshidentity_api "github.com/kumahq/kuma/pkg/core/resources/apis/meshidentity/api/v1alpha1"
 	"github.com/kumahq/kuma/pkg/core/resources/apis/meshidentity/providers"
@@ -19,16 +18,19 @@ import (
 	"github.com/kumahq/kuma/pkg/core/resources/store"
 	"github.com/kumahq/kuma/pkg/core/runtime/component"
 	"github.com/kumahq/kuma/pkg/core/user"
-	"github.com/kumahq/kuma/pkg/events"
-	util_tls "github.com/kumahq/kuma/pkg/tls"
 	"github.com/kumahq/kuma/pkg/util/pointer"
 	mesh_cache "github.com/kumahq/kuma/pkg/xds/cache/mesh"
+)
+
+const (
+	ReadyType     string = "Ready"
+	ProviderType  string = "Provider"
+	MeshTrustType string = "MeshTrustCreated"
 )
 
 type IdentityProviderReconciler struct {
 	roResManager      manager.ReadOnlyResourceManager
 	resManager        manager.ResourceManager
-	eventFactory      events.ListenerFactory
 	logger            logr.Logger
 	reconcileInterval time.Duration
 	fullSyncInterval  time.Duration
@@ -65,117 +67,66 @@ func (i *IdentityProviderReconciler) Start(stop <-chan struct{}) error {
 	i.logger.Info("starting")
 	ticker := time.NewTicker(i.reconcileInterval)
 	ctx := user.Ctx(context.Background(), user.ControlPlane)
-	// listener := i.eventFactory.Subscribe(func(event events.Event) bool {
-	// 	switch ev := event.(type) {
-	// 	case events.ResourceChangedEvent:
-	// 		return ev.Type == meshidentity_api.MeshIdentityType && ev.Operation == events.Create
-	// 	}
-	// 	return false
-	// })
 	for {
 		select {
-		// full sync if we miss an event
 		case <-ticker.C:
 			mids := &meshidentity_api.MeshIdentityResourceList{}
-			err := i.roResManager.List(ctx, mids, store.ListOrdered())
-			if err != nil {
+			if err := i.roResManager.List(ctx, mids, store.ListOrdered()); err != nil {
 				i.logger.Error(err, "failed to list MeshIdentities")
+				continue
 			}
-
-			trustDomains := map[kri.Identifier]string{}
 			for _, mid := range mids.Items {
-				var conditions []common_api.Condition
+				conditions := []common_api.Condition{}
+				message := "Successfully initialized"
+				generationConditionStatus := kube_meta.ConditionTrue
+				reason := "Ready"
+				// resolve trustDomain
 				trustDomain, err := mid.Spec.GetTrustDomain(mid.GetMeta(), i.zone)
 				if err != nil {
 					conditions = append(conditions, common_api.Condition{
 						Type:    common_api.GeneratedCondition,
+						Status:  kube_meta.ConditionFalse,
 						Reason:  common_api.TemplateErrorReason,
 						Message: err.Error(),
 					})
-					core.Log.Error(err, "test err")
-				}
-				trustDomains[kri.From(mid, "")] = trustDomain
-
-				provider, found := i.providers[string(mid.Spec.Provider.Type)]
-				if len(conditions) == 0 && !found {
-					conditions = append(conditions, common_api.Condition{
-						Type:    common_api.GeneratedCondition,
-						Reason:  "ProviderNotFoundError",
-						Status: v1.ConditionFalse,
-						Message: fmt.Sprintf("provider: %s not found", mid.Spec.Provider.Type),
-					})
-				}
-				// initialize only when trust domain is different
-				if len(conditions) == 0 && mid.Status.TrustDomain == "" {
-					err := provider.Initialize(ctx, mid, trustDomain)
-					if err != nil {
-						conditions = append(conditions, common_api.Condition{
-							Type:    common_api.GeneratedCondition,
-							Reason:  "InitializationError",
-							Status: v1.ConditionFalse,
-							Message: err.Error(),
-						})
-						core.Log.Error(err, "test err")
+					message = "Cannot resolve trust domain template"
+					generationConditionStatus = kube_meta.ConditionFalse
+					reason = "Failure"
+					// progress with initialization only if can resolve trustDomain
+				} else {
+					initConditions := i.initialize(ctx, mid, trustDomain)
+					conditions = append(conditions, initConditions...)
+					for _, condition := range initConditions {
+						if condition.Status == kube_meta.ConditionFalse {
+							message = "One of initialization steps failed"
+							generationConditionStatus = kube_meta.ConditionFalse
+							reason = "Failure"
+						}
 					}
 				}
-				if err := provider.Validate(ctx, mid); len(conditions) == 0 && err != nil {
-					conditions = append(conditions, common_api.Condition{
-						Type:    common_api.GeneratedCondition,
-						Reason:  "ValidationError",
-						Status: v1.ConditionFalse,
-						Message: err.Error(),
-					})
-					core.Log.Error(err, "test err")
-				}
 
-				// TODO: validate trust domain conflict
+				conditions = append(conditions, common_api.Condition{
+					Type:    meshidentity_api.ReadyConditionType,
+					Status:  generationConditionStatus,
+					Reason:  reason,
+					Message: message,
+				})
 
-				if err := i.createOrUpdateMeshTrust(ctx, mid, trustDomain); len(conditions) == 0 && err != nil {
-					conditions = append(conditions, common_api.Condition{
-						Type:    common_api.GeneratedCondition,
-						Reason:  "TrustGenerationError",
-						Status: v1.ConditionFalse,
-						Message: err.Error(),
-					})
-					core.Log.Error(err, "test err")
-				}
-				if len(conditions) == 0 {
-					conditions = append(conditions, common_api.Condition{
-						Type:   common_api.GeneratedCondition,
-						Status: v1.ConditionTrue,
-						Reason: common_api.GeneratedReason,
-					})
-				}
 				if mid.Status == nil {
 					mid.Status = &meshidentity_api.MeshIdentityStatus{}
 				}
-				update := false
+				needsUpdate := false
 				if !reflect.DeepEqual(conditions, mid.Status.Conditions) {
-					update = true
 					mid.Status.Conditions = conditions
+					needsUpdate = true
 				}
-				if !reflect.DeepEqual(trustDomain, mid.Status.TrustDomain) {
-					update = true
-					mid.Status.TrustDomain = trustDomain
-				}
-				if update {
+				if needsUpdate {
 					if err := i.resManager.Update(ctx, mid); err != nil {
-						core.Log.Error(err, "test err")
+						i.logger.Error(err, "failed to update MeshIdentity status", "meshIdentity", mid.GetMeta().GetName())
 						continue
 					}
 				}
 			}
-
-		// we want to process create only here
-		// case event, ok := <-listener.Recv():
-		// 	if !ok {
-		// 		return errors.New("end of events channel")
-		// 	}
-		// 	if resourceChanged, ok := event.(events.ResourceChangedEvent); ok {
-		// 		if err := i.generateMeshTrust(ctx, resourceChanged); err != nil {
-		// 			i.logger.Error(err, "failed to generate a MeshTrust", "resourceKey", resourceChanged.Key)
-		// 		}
-		// 	}
 		case <-stop:
 			i.logger.Info("stopping")
 			return nil
@@ -183,69 +134,135 @@ func (i *IdentityProviderReconciler) Start(stop <-chan struct{}) error {
 	}
 }
 
-func (i *IdentityProviderReconciler) createOrUpdateMeshTrust(ctx context.Context, identity *meshidentity_api.MeshIdentityResource, trustDomain string) error {
-	mtrust := meshtrust_api.NewMeshTrustResource()
-	update := true
-	if err := i.roResManager.Get(ctx, mtrust, store.GetByKey(identity.Meta.GetName(), identity.Meta.GetMesh())); err != nil && store.IsNotFound(err) {
-		update = false
-	} else {
-		return err
+func (i *IdentityProviderReconciler) initialize(ctx context.Context, mid *meshidentity_api.MeshIdentityResource, trustDomain string) []common_api.Condition {
+	conditions := []common_api.Condition{}
+	provider, found := i.providers[string(mid.Spec.Provider.Type)]
+	if !found {
+		conditions = append(conditions, common_api.Condition{
+			Type:    meshidentity_api.ProviderConditionType,
+			Status:  kube_meta.ConditionFalse,
+			Reason:  "ProviderNotFoundError",
+			Message: fmt.Sprintf("provider: %s not found", mid.Spec.Provider.Type),
+		})
+		return conditions
 	}
-
-	mesh := identity.Meta.GetMesh()
-
-	ca, err := i.loadCA(ctx, identity, mesh)
-	if err != nil {
-		return nil
-	}
-	origin := kri.From(identity, "").String()
-	if update {
-		found := false
-		for _, bundle := range mtrust.Spec.CABundles {
-			if bundle.Pem.Value == string(ca.CertPEM) {
-				found = true
-			}
-		}
-		if !found {
-			mtrust.Spec.CABundles = append(mtrust.Spec.CABundles, meshtrust_api.CABundle{
-				Type: meshtrust_api.PemCABundleType,
-				Pem: &meshtrust_api.Pem{
-					Value: string(ca.CertPEM),
-				},
+	if !mid.Status.IsInitialized() {
+		if err := provider.Initialize(ctx, mid, trustDomain); err != nil {
+			conditions = append(conditions, common_api.Condition{
+				Type:    meshidentity_api.ProviderConditionType,
+				Status:  kube_meta.ConditionFalse,
+				Reason:  "ProviderInitializationError",
+				Message: err.Error(),
 			})
-			if err := i.resManager.Update(ctx, mtrust); err != nil {
-				return err
-			}
+			return conditions
 		}
+	}
+	if err := provider.Validate(ctx, mid); err != nil {
+		conditions = append(conditions, common_api.Condition{
+			Type:    meshidentity_api.ProviderConditionType,
+			Status:  kube_meta.ConditionFalse,
+			Reason:  "ProviderValidationError",
+			Message: err.Error(),
+		})
+		return conditions
 	} else {
-		mtrust.Spec = &meshtrust_api.MeshTrust{
-			Origin: &meshtrust_api.Origin{
-				KRI: pointer.To(origin),
-			},
-			TrustDomain: trustDomain,
-			CABundles: []meshtrust_api.CABundle{
-				{
-					Type: meshtrust_api.PemCABundleType,
-					Pem: &meshtrust_api.Pem{
-						Value: string(ca.CertPEM),
-					},
-				},
-			},
+		conditions = append(conditions, common_api.Condition{
+			Type:    meshidentity_api.ProviderConditionType,
+			Status:  kube_meta.ConditionTrue,
+			Reason:  "ProviderInitialized",
+			Message: "Provider successfully initialized",
+		})
+	}
+
+	if mid.Spec.Provider.Type == meshidentity_api.BundledType &&
+		pointer.DerefOr(mid.Spec.Provider.Bundled.MeshTrustCreation, meshidentity_api.MeshTrustCreationEnabled) == meshidentity_api.MeshTrustCreationEnabled {
+		if err := i.createOrUpdateMeshTrust(ctx, mid, trustDomain); err != nil {
+			conditions = append(conditions, common_api.Condition{
+				Type:    meshidentity_api.MeshTrustConditionType,
+				Status:  kube_meta.ConditionFalse,
+				Reason:  "MeshTrustCreationError",
+				Message: err.Error(),
+			})
+			return conditions
+		} else {
+			conditions = append(conditions, common_api.Condition{
+				Type:    meshidentity_api.MeshTrustConditionType,
+				Status:  kube_meta.ConditionTrue,
+				Reason:  "MeshTrustCreated",
+				Message: "MeshTrust has been successfully created",
+			})
 		}
-		if err := i.resManager.Create(ctx, mtrust, store.CreateByKey(identity.Meta.GetName(), mesh)); err != nil {
+	}
+
+	return conditions
+}
+
+func (i *IdentityProviderReconciler) createOrUpdateMeshTrust(ctx context.Context, identity *meshidentity_api.MeshIdentityResource, trustDomain string) error {
+	meshTrust := meshtrust_api.NewMeshTrustResource()
+	meshName := identity.Meta.GetMesh()
+	resourceName := identity.Meta.GetName()
+
+	// Check if the MeshTrust resource already exists
+	update := true
+	if err := i.roResManager.Get(ctx, meshTrust, store.GetByKey(resourceName, meshName)); err != nil {
+		if store.IsNotFound(err) {
+			update = false
+		} else {
 			return err
 		}
 	}
+	ca, err := i.loadCA(ctx, identity, meshName)
+	if err != nil {
+		return err
+	}
 
-	return nil
+	origin := kri.From(identity, "").String()
+	caPEM := string(ca)
+
+	if update {
+		// Check if the CA PEM is already present in the MeshTrust resource
+		for _, bundle := range meshTrust.Spec.CABundles {
+			if bundle.Pem.Value == caPEM {
+				// Already exists; no need to update
+				return nil
+			}
+		}
+
+		// Append the new CA PEM
+		meshTrust.Spec.CABundles = append(meshTrust.Spec.CABundles, meshtrust_api.CABundle{
+			Type: meshtrust_api.PemCABundleType,
+			Pem: &meshtrust_api.Pem{
+				Value: caPEM,
+			},
+		})
+
+		return i.resManager.Update(ctx, meshTrust)
+	}
+
+	// Resource doesn't exist, create a new one
+	meshTrust.Spec = &meshtrust_api.MeshTrust{
+		Origin: &meshtrust_api.Origin{
+			KRI: pointer.To(origin),
+		},
+		TrustDomain: trustDomain,
+		CABundles: []meshtrust_api.CABundle{
+			{
+				Type: meshtrust_api.PemCABundleType,
+				Pem: &meshtrust_api.Pem{
+					Value: caPEM,
+				},
+			},
+		},
+	}
+	return i.resManager.Create(ctx, meshTrust, store.CreateByKey(resourceName, meshName))
 }
 
-func (i *IdentityProviderReconciler) loadCA(ctx context.Context, identity *meshidentity_api.MeshIdentityResource, mesh string) (*util_tls.KeyPair, error) {
+func (i *IdentityProviderReconciler) loadCA(ctx context.Context, identity *meshidentity_api.MeshIdentityResource, mesh string) ([]byte, error) {
 	provider, found := i.providers[string(identity.Spec.Provider.Type)]
 	if !found {
 		return nil, fmt.Errorf("provider: %s not found", identity.Spec.Provider.Type)
 	}
-	return provider.GetCAKeyPair(ctx, identity, mesh)
+	return provider.GetRootCA(ctx, identity, mesh)
 }
 
 func (i *IdentityProviderReconciler) NeedLeaderElection() bool {

@@ -22,6 +22,7 @@ import (
 	core_plugins "github.com/kumahq/kuma/pkg/core/plugins"
 	core_mesh "github.com/kumahq/kuma/pkg/core/resources/apis/mesh"
 	meshexternalservice_api "github.com/kumahq/kuma/pkg/core/resources/apis/meshexternalservice/api/v1alpha1"
+	meshidentity_api "github.com/kumahq/kuma/pkg/core/resources/apis/meshidentity/api/v1alpha1"
 	meshmultizoneservice_api "github.com/kumahq/kuma/pkg/core/resources/apis/meshmultizoneservice/api/v1alpha1"
 	meshservice_api "github.com/kumahq/kuma/pkg/core/resources/apis/meshservice/api/v1alpha1"
 	core_manager "github.com/kumahq/kuma/pkg/core/resources/manager"
@@ -218,6 +219,10 @@ var _ = Describe("MeshHTTPRoute", func() {
 							Type:  meshservice_api.MeshServiceIdentityServiceTagType,
 							Value: "backend",
 						},
+						{
+							Type:  meshservice_api.MeshServiceIdentitySpiffeIDType,
+							Value: "spiffe://default.demo.mesh.local/ns/demo/sa/backend",
+						},
 					},
 				},
 				Status: &meshservice_api.MeshServiceStatus{
@@ -244,6 +249,14 @@ var _ = Describe("MeshHTTPRoute", func() {
 						WithAddress("192.168.0.2").
 						WithInboundOfTags(mesh_proto.ServiceTag, "web", mesh_proto.ProtocolTag, "http"),
 					).
+					WithWorkloadIdentity(&core_xds.WorkloadIdentity{
+						KRI: kri.Identifier{ResourceType: meshidentity_api.MeshIdentityType, Name: "identity", Namespace: "kuma-system"},
+						Type: string(meshidentity_api.BundledType),
+						Cert: []byte("123"),
+						PrivateKey: []byte("456"),
+						IdentitySecretName: pointer.To("my-identity"),
+						CABundleSecretName: pointer.To("bundle"),
+					}).
 					WithOutbounds(xds_types.Outbounds{
 						{LegacyOutbound: &mesh_proto.Dataplane_Networking_Outbound{
 							Port: builders.FirstOutboundPort,

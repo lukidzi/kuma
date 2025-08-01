@@ -80,7 +80,7 @@ func buildRuntime(appCtx context.Context, cfg kuma_cp.Config) (core_runtime.Runt
 	}
 	core_plugins.Init(cfg.CoreResources.Enabled, core_apis.NameToModule)
 	core_plugins.Init(cfg.Policies.Enabled, policies.NameToModule)
-	core_plugins.InitAll(meshidentity.NameToModule)
+	core_plugins.InitAllIf(cfg.CoreResources.Enabled, "meshidentities", meshidentity.NameToModule)
 	builder.WithMultitenancy(multitenant.SingleTenant)
 	builder.WithPgxConfigCustomizationFn(config.NoopPgxConfigCustomizationFn)
 	for _, plugin := range core_plugins.Plugins().BootstrapPlugins() {

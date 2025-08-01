@@ -1,4 +1,4 @@
-package generator
+package v1alpha1
 
 import (
 	"bytes"
@@ -7,7 +7,6 @@ import (
 	envoy_auth "github.com/envoyproxy/go-control-plane/envoy/extensions/transport_sockets/tls/v3"
 	"google.golang.org/protobuf/types/known/anypb"
 
-	"github.com/kumahq/kuma/pkg/core"
 	core_plugins "github.com/kumahq/kuma/pkg/core/plugins"
 	meshidentity_api "github.com/kumahq/kuma/pkg/core/resources/apis/meshidentity/api/v1alpha1"
 	core_xds "github.com/kumahq/kuma/pkg/core/xds"
@@ -18,7 +17,7 @@ import (
 	"github.com/kumahq/kuma/pkg/xds/generator/system_names"
 )
 
-const OriginWorkloadIdentity = "identity"
+const OriginWorkloadIdentity = "trust"
 
 var _ core_plugins.CoreResourcePlugin = &plugin{}
 
@@ -28,39 +27,26 @@ func NewPlugin() core_plugins.CoreResourcePlugin {
 	return &plugin{}
 }
 
-func (p *plugin) Apply(rs *core_xds.ResourceSet, xdsCtx xds_context.Context, proxy *core_xds.Proxy) error {
-	core.Log.Info("APPLY IN GENERATOR")
+func (p *plugin) Generate(rs *core_xds.ResourceSet, xdsCtx xds_context.Context, proxy *core_xds.Proxy) error {
 	if proxy.WorkloadIdentity == nil {
 		return nil
 	}
-	core.Log.Info("proxy", "proxy", proxy.WorkloadIdentity)
 	// add identity secret
 	switch proxy.WorkloadIdentity.Type {
-	// TODO: how we can do it more dynamic so we can easily add plugin code in parent project
 	case string(meshidentity_api.BundledType):
-		identitySecret, err := identitySecret(proxy)
-		if err != nil {
-			return err
+		// add validation context secret
+		if len(xdsCtx.Mesh.TrustsByTrustDomain) > 0 {
+			config, err := validationCtx(xdsCtx, proxy)
+			if err != nil {
+				return err
+			}
+			rs.Add(&core_xds.Resource{
+				Name:     config.Name,
+				Origin:   OriginWorkloadIdentity,
+				Resource: config,
+			})
 		}
-		rs.Add(&core_xds.Resource{
-			Name:     identitySecret.Name,
-			Origin:   OriginWorkloadIdentity,
-			Resource: identitySecret,
-		})
 	}
-	// add validation context secret
-	if len(xdsCtx.Mesh.TrustsByTrustDomain) > 0 {
-		config, err := validationCtx(xdsCtx, proxy)
-		if err != nil {
-			return err
-		}
-		rs.Add(&core_xds.Resource{
-			Name:     config.Name,
-			Origin:   OriginWorkloadIdentity,
-			Resource: config,
-		})
-	}
-
 	return nil
 }
 
@@ -107,21 +93,4 @@ func validationCtx(xdsCtx xds_context.Context, proxy *core_xds.Proxy) (*envoy_au
 		return nil, err
 	}
 	return ca, nil
-}
-
-func identitySecret(proxy *core_xds.Proxy) (*envoy_auth.Secret, error) {
-	identitySecret, err := bldrs_auth.NewSecret().
-		Configure(bldrs_auth.Name(pointer.DerefOr(proxy.WorkloadIdentity.IdentitySecretName, proxy.WorkloadIdentity.KRI.String()))).
-		Configure(bldrs_auth.TlsCertificate(
-			bldrs_auth.NewTlsCertificate().
-				Configure(bldrs_auth.CertificateChain(
-					bldrs_core.NewDataSource().
-						Configure(bldrs_core.InlineBytes(bytes.Join([][]byte{proxy.WorkloadIdentity.Cert}, []byte("\n")))))).
-				Configure(bldrs_auth.PrivateKey(
-					bldrs_core.NewDataSource().
-						Configure(bldrs_core.InlineBytes(proxy.WorkloadIdentity.PrivateKey)))))).Build()
-	if err != nil {
-		return nil, err
-	}
-	return identitySecret, nil
 }

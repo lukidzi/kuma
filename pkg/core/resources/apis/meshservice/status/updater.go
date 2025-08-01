@@ -10,7 +10,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 
 	mesh_proto "github.com/kumahq/kuma/api/mesh/v1alpha1"
-	"github.com/kumahq/kuma/pkg/core"
 	core_mesh "github.com/kumahq/kuma/pkg/core/resources/apis/mesh"
 	meshidentity_api "github.com/kumahq/kuma/pkg/core/resources/apis/meshidentity/api/v1alpha1"
 	"github.com/kumahq/kuma/pkg/core/resources/apis/meshservice"
@@ -139,7 +138,7 @@ func (s *StatusUpdater) updateStatus(ctx context.Context) error {
 		}
 
 		mesh := meshByKey[core_model.ResourceKey{Name: ms.Meta.GetMesh()}]
-		tls := buildTLS(ms.Status.TLS, dpps, insightsByKey, mesh, meshIdentities.Items, trustDomains)
+		tls := s.buildTLS(ms.Status.TLS, dpps, insightsByKey, mesh, meshIdentities.Items, trustDomains)
 		if !reflect.DeepEqual(ms.Status.TLS, tls) {
 			changeReasons = append(changeReasons, "tls status")
 			ms.Status.TLS = tls
@@ -204,7 +203,7 @@ func buildDataplaneProxies(
 	return result
 }
 
-func buildTLS(
+func (s *StatusUpdater) buildTLS(
 	existing meshservice_api.TLS,
 	dpps []*core_mesh.DataplaneResource,
 	insightsByName map[core_model.ResourceKey]*core_mesh.DataplaneInsightResource,
@@ -218,7 +217,7 @@ func buildTLS(
 		}
 	}
 	// TODO: to validate if it's correct assumption (problematic is single dataplane identity)
-	if (mesh.MTLSEnabled() || len(meshIdentities) > 0) && existing.Status == meshservice_api.TLSReady {
+	if mesh.MTLSEnabled() && existing.Status == meshservice_api.TLSReady {
 		// If mTLS is enabled, the status should go only one way.
 		// Every new instance always starts with mTLS, so we don't want to count issued backends.
 		// Otherwise, we could get into race when new Dataplane did not receive cert yet,
@@ -238,10 +237,14 @@ func buildTLS(
 			}
 		}
 		if identity, matches := meshidentity_api.Matched(dpp.Meta.GetLabels(), meshIdentities); matches {
-			core.Log.Info("test updater", "identity", identity)
-			if identity.Status.TrustDomain != "" {
-				core.Log.Info("test updater", "identity.Status.TrustDomain", identity.Status.TrustDomain, "trustDomains", trustDomains)
-				if _, exists := trustDomains[identity.Status.TrustDomain]; exists {
+			if identity.Status.IsInitialized() {
+				td, err := identity.Spec.GetTrustDomain(dpp.Meta, s.localZone)
+				if err != nil {
+					s.logger.Error(err, "cannot resolve trust domain")
+					allTrustDomainsSupported = false
+					continue
+				}
+				if _, exists := trustDomains[td]; exists {
 					dppsWithIdentities++
 				} else {
 					allTrustDomainsSupported = false
@@ -261,7 +264,6 @@ func buildTLS(
 			}
 		}
 	} else {
-		core.Log.Info("test updater", "dppsWithIdentities", dppsWithIdentities, "allTrustDomainsSupported", allTrustDomainsSupported)
 		if dppsWithIdentities == len(dpps) && allTrustDomainsSupported {
 			return meshservice_api.TLS{
 				Status: meshservice_api.TLSReady,
@@ -272,7 +274,6 @@ func buildTLS(
 			}
 		}
 	}
-
 }
 
 func (s *StatusUpdater) buildIdentities(dpps []*core_mesh.DataplaneResource, meshIdentities []*meshidentity_api.MeshIdentityResource) []meshservice_api.MeshServiceIdentity {
@@ -283,8 +284,13 @@ func (s *StatusUpdater) buildIdentities(dpps []*core_mesh.DataplaneResource, mes
 			serviceTagIdentities[service] = struct{}{}
 		}
 		if identity, matched := meshidentity_api.Matched(dpp.Meta.GetLabels(), meshIdentities); matched {
-			if identity.Status.TrustDomain != "" {
-				spiffeID, err := identity.Spec.GetSpiffeID(identity.Status.TrustDomain, dpp.GetMeta())
+			if identity.Status.IsInitialized() {
+				td, err := identity.Spec.GetTrustDomain(dpp.Meta, s.localZone)
+				if err != nil {
+					s.logger.Error(err, "cannot resolve trust domain")
+					continue
+				}
+				spiffeID, err := identity.Spec.GetSpiffeID(td, dpp.GetMeta())
 				if err != nil {
 					s.logger.Error(err, "cannot resolve spiffeID, skip", "dataplane", dpp)
 					continue

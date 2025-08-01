@@ -238,9 +238,5 @@ properties:
         x-kubernetes-list-map-keys:
           - type
         x-kubernetes-list-type: map
-      trustDomain:
-        type: string
-    required:
-      - trustDomain
     type: object
     readOnly: true

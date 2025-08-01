@@ -251,6 +251,13 @@ func SplitLabelsAndAnnotations(coreLabels map[string]string, currentAnnotations 
 		annotations[v1alpha1.DisplayName] = v
 		delete(labels, v1alpha1.DisplayName)
 	}
+	// ServiceAccount object names are constrained by the DNS subdomain name specification, with a maximum length of 253 characters.
+	// Since the source name can exceed this length, we are storing the full, original name as an annotation on the ServiceAccount object.
+	// https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/#use-multiple-service-accounts
+	if v, ok := labels[v1alpha1.KubeServiceAccount]; ok {
+		annotations[v1alpha1.KubeServiceAccount] = v
+		delete(labels, v1alpha1.KubeServiceAccount)
+	}
 	return labels, annotations
 }
 

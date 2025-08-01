@@ -18,15 +18,18 @@ resources:
             defaultValidationContext:
               matchTypedSubjectAltNames:
               - matcher:
-                  exact: spiffe://default/backend
+                  exact: backend
+                sanType: URI
+              - matcher:
+                  exact: spiffe://default.demo.mesh.local/ns/demo/sa/backend
                 sanType: URI
             validationContextSdsSecretConfig:
-              name: mesh_ca:secret:default
+              name: bundle
               sdsConfig:
                 ads: {}
                 resourceApiVersion: V3
           tlsCertificateSdsSecretConfigs:
-          - name: identity_cert:secret:default
+          - name: my-identity
             sdsConfig:
               ads: {}
               resourceApiVersion: V3

@@ -1,0 +1,8 @@
+ingress:
+  enabled: true
+  replicas: 3
+  service:
+    loadBalancerSourceRanges:
+    - "10.0.0.0/8" # Supernet
+    - "20.240.139.18/32" # azure prod sweden
+    - "20.251.202.109/32" # azure prod norway

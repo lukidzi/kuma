@@ -296,13 +296,13 @@ func configure(
 	if err != nil {
 		return nil, err
 	}
+
 	switch mode {
 	case api.ModeStrict:
 		listenerBuilder.
-			Configure(envoy_listeners.FilterChain(generator.FilterChainBuilder(true, protocol, proxy, localClusterName, xdsCtx, iface, service, &routes, conf.TlsVersion, pointer.Deref(conf.TlsCiphers)).Configure(
-				envoy_listeners.NetworkRBAC(listener.GetName(), isMTLSEnabled(mesh, proxy), proxy.Policies.TrafficPermissions[iface]),
-				envoy_listeners.DownstreamTlsContext(downstreamCtx),
-			)))
+			Configure(envoy_listeners.FilterChain(generator.FilterChainBuilder(true, protocol, proxy, localClusterName, xdsCtx, iface, service, &routes, conf.TlsVersion, pointer.Deref(conf.TlsCiphers)).
+				Configure(envoy_listeners.NetworkRBAC(listener.GetName(), isMTLSEnabled(mesh, proxy), proxy.Policies.TrafficPermissions[iface])).
+				ConfigureIf(downstreamCtx != nil, envoy_listeners.DownstreamTlsContext(downstreamCtx))))
 	case api.ModePermissive:
 		listenerBuilder.
 			Configure(envoy_listeners.TLSInspector()).
@@ -317,18 +317,22 @@ func configure(
 					envoy_listeners.MatchTransportProtocol("tls"))),
 			).
 			Configure(envoy_listeners.FilterChain(
-				generator.FilterChainBuilder(true, protocol, proxy, localClusterName, xdsCtx, iface, service, &routes, conf.TlsVersion, pointer.Deref(conf.TlsCiphers)).Configure(
-					envoy_listeners.MatchTransportProtocol("tls"),
-					envoy_listeners.MatchApplicationProtocols(xds_tls.KumaALPNProtocols...),
-					envoy_listeners.NetworkRBAC(listener.GetName(), isMTLSEnabled(mesh, proxy), proxy.Policies.TrafficPermissions[iface]),
-					envoy_listeners.DownstreamTlsContext(downstreamCtx),
-				)),
+				generator.FilterChainBuilder(true, protocol, proxy, localClusterName, xdsCtx, iface, service, &routes, conf.TlsVersion, pointer.Deref(conf.TlsCiphers)).
+					Configure(
+						envoy_listeners.MatchTransportProtocol("tls"),
+						envoy_listeners.MatchApplicationProtocols(xds_tls.KumaALPNProtocols...),
+						envoy_listeners.NetworkRBAC(listener.GetName(), isMTLSEnabled(mesh, proxy), proxy.Policies.TrafficPermissions[iface]),
+					).
+					ConfigureIf(downstreamCtx != nil, envoy_listeners.DownstreamTlsContext(downstreamCtx))),
 			)
 	}
 	return listenerBuilder.Build()
 }
 
 func downstreamTLSContext(xdsCtx xds_context.Context, proxy *core_xds.Proxy, conf api.Conf) (*envoy_tls.DownstreamTlsContext, error) {
+	if proxy.WorkloadIdentity == nil {
+		return nil, nil
+	}
 	sanMatchers := []*bldrs_common.Builder[envoy_tls.SubjectAltNameMatcher]{}
 	for trustDomain := range xdsCtx.Mesh.TrustsByTrustDomain {
 		id, err := spiffeid.TrustDomainFromString(trustDomain)

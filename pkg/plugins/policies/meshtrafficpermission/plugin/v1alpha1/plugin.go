@@ -61,7 +61,6 @@ func (p plugin) Apply(rs *core_xds.ResourceSet, ctx xds_context.Context, proxy *
 		if res.Origin != generator.OriginInbound {
 			continue
 		}
-
 		listener := res.Resource.(*envoy_listener.Listener)
 		dpAddress := listener.GetAddress().GetSocketAddress()
 

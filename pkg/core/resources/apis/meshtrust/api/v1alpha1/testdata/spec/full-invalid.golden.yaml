@@ -1,6 +1,4 @@
 violations:
-- field: spec.origin
-  message: cannot be provided by the user
 - field: spec.caBundles[0].pem.value
   message: provided certificate has incorrect format
 - field: spec.caBundles[1].pem

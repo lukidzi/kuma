@@ -13,13 +13,13 @@ import (
 )
 
 const (
-	KubeNamespaceTag = "k8s.kuma.io/namespace"
-	KubeServiceTag   = "k8s.kuma.io/service-name"
-	KubePortTag      = "k8s.kuma.io/service-port"
+	KubeNamespaceTag   = "k8s.kuma.io/namespace"
+	KubeServiceTag     = "k8s.kuma.io/service-name"
+	KubePortTag        = "k8s.kuma.io/service-port"
+	KubeServiceAccount = "k8s.kuma.io/service-account"
 	// KDSSyncLabel a label that controls properties of the KDS sync.
 	// currently only disabled/enabled is supported
-	KDSSyncLabel       = "kuma.io/kds-sync"
-	KubeServiceAccount = "k8s.kuma.io/service-account"
+	KDSSyncLabel = "kuma.io/kds-sync"
 )
 
 const (
