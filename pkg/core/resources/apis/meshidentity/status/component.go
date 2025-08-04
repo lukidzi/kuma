@@ -1,4 +1,4 @@
-package updater
+package status
 
 import (
 	"slices"
@@ -11,7 +11,7 @@ import (
 
 func Setup(rt runtime.Runtime) error {
 	// currently we support only k8s
-	if rt.GetMode() == config_core.Global { // || rt.Config().Environment != config_core.KubernetesEnvironment {
+	if rt.GetMode() == config_core.Global || rt.Config().Environment != config_core.KubernetesEnvironment {
 		return nil
 	}
 	logger := core.Log.WithName("meshidentity").WithName("generator")
@@ -21,11 +21,9 @@ func Setup(rt runtime.Runtime) error {
 	}
 	generator, err := New(
 		logger,
-		rt.Config().CoreResources.Generators.MeshIdentityInterval.Duration,
-		rt.Config().CoreResources.Generators.MeshIdentityFullSync.Duration,
+		rt.Config().CoreResources.Status.MeshIdentityInterval.Duration,
 		rt.ResourceManager(),
 		rt.ReadOnlyResourceManager(),
-		rt.MeshCache(),
 		rt.IdentityProviders(),
 		rt.Config().Multizone.Zone.Name,
 	)

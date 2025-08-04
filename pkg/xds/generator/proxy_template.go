@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	mesh_proto "github.com/kumahq/kuma/api/mesh/v1alpha1"
-	core_log "github.com/kumahq/kuma/pkg/core"
 	core_generator "github.com/kumahq/kuma/pkg/core/resources/apis/core/generator"
 	core_mesh "github.com/kumahq/kuma/pkg/core/resources/apis/mesh"
 	model "github.com/kumahq/kuma/pkg/core/xds"
@@ -26,7 +25,6 @@ type ProxyTemplateGenerator struct {
 func (g *ProxyTemplateGenerator) Generate(ctx context.Context, xdsCtx xds_context.Context, proxy *model.Proxy) (*model.ResourceSet, error) {
 	resources := model.NewResourceSet()
 	for i, name := range g.ProxyTemplate.GetConf().GetImports() {
-		core_log.Log.Info("PROFILE Name ", ".name", name)
 		generator := &ProxyTemplateProfileSource{ProfileName: name}
 		if rs, err := generator.Generate(ctx, resources, xdsCtx, proxy); err != nil {
 			return nil, fmt.Errorf("imports[%d]{name=%q}: %s", i, name, err)
@@ -76,7 +74,6 @@ func (s *ProxyTemplateProfileSource) Generate(ctx context.Context, rs *model.Res
 	if !ok {
 		return nil, fmt.Errorf("profile{name=%q}: unknown profile", s.ProfileName)
 	}
-	core_log.Log.Info("PROFILE Name ", ".ProfileName", s.ProfileName)
 	return g.Generate(ctx, rs, xdsCtx, proxy)
 }
 

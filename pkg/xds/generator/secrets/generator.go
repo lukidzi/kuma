@@ -96,10 +96,6 @@ func (g Generator) Generate(
 		log = log.WithValues("mesh", xdsCtx.Mesh.Resource.GetMeta().GetName())
 	}
 
-	if !xdsCtx.Mesh.Resource.MTLSEnabled() {
-		return nil, nil
-	}
-
 	usedIdentity := proxy.SecretsTracker.UsedIdentity()
 	usedCAs := proxy.SecretsTracker.UsedCas()
 	usedAllInOne := proxy.SecretsTracker.UsedAllInOne()

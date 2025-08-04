@@ -182,14 +182,7 @@ func fillRemoteMeshServices(
 ) {
 	ziInstances := map[string]struct{}{}
 
-	if !mesh.MTLSEnabled() {
-		// Ingress routes the request by TLS SNI, therefore for cross
-		// cluster communication MTLS is required.
-		// We ignore Ingress from endpoints if MTLS is disabled, otherwise
-		// we would fail anyway.
-		return
-	}
-
+	// introduction of MeshIdentity doesn't requires mTLS on mesh
 	zoneToEndpoints := map[string][]core_xds.Endpoint{}
 	for _, zi := range zoneIngress {
 		if !zi.IsRemoteIngress(localZone) {

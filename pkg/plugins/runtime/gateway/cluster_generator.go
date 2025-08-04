@@ -162,16 +162,23 @@ func (c *ClusterGenerator) generateRealBackendRefCluster(
 		Configure(
 			clusters.EdsCluster(),
 			clusters.LB(nil /* TODO(jpeach) uses default Round Robin*/),
-			clusters.ClientSideMultiIdentitiesMTLS(
-				proxy.SecretsTracker,
-				meshCtx.Resource,
-				true, // TODO we just assume this atm?...
-				meshroute.SniForBackendRef(backendRef, meshCtx, systemNamespace),
-				meshroute.ServiceTagIdentities(backendRef, meshCtx),
-			),
-			clusters.ConnectionBufferLimit(DefaultConnectionBuffer),
-		)
 
+			clusters.ConnectionBufferLimit(DefaultConnectionBuffer),
+		).
+		ConfigureIf(proxy.WorkloadIdentity == nil, clusters.ClientSideMultiIdentitiesMTLS(
+			proxy.SecretsTracker,
+			meshCtx.Resource,
+			true, // TODO we just assume this atm?...
+			meshroute.SniForBackendRef(backendRef, meshCtx, systemNamespace),
+			meshroute.Identities(backendRef, meshCtx, false),
+		))
+	if proxy.WorkloadIdentity != nil {
+		upstreamCtx, err := meshroute.UpstreamTLSContext(backendRef, meshCtx, systemNamespace, proxy)
+		if err != nil {
+			return nil, "", err
+		}
+		edsClusterBuilder.Configure(clusters.UpstreamTLSContext(upstreamCtx))
+	}
 	switch protocol {
 	case core_mesh.ProtocolHTTP2, core_mesh.ProtocolGRPC:
 		edsClusterBuilder.Configure(clusters.Http2FromEdge())

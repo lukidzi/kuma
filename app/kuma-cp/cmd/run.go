@@ -12,7 +12,7 @@ import (
 	kuma_cp "github.com/kumahq/kuma/pkg/config/app/kuma-cp"
 	config_core "github.com/kumahq/kuma/pkg/config/core"
 	"github.com/kumahq/kuma/pkg/core/bootstrap"
-	"github.com/kumahq/kuma/pkg/core/resources/apis/meshidentity/updater"
+	meshidentity_status "github.com/kumahq/kuma/pkg/core/resources/apis/meshidentity/status"
 	meshservice_generate "github.com/kumahq/kuma/pkg/core/resources/apis/meshservice/generate"
 	"github.com/kumahq/kuma/pkg/defaults"
 	"github.com/kumahq/kuma/pkg/diagnostics"
@@ -159,7 +159,7 @@ func newRunCmdWithOpts(opts kuma_cmd.RunCmdOpts) *cobra.Command {
 				return err
 			}
 
-			if err := updater.Setup(rt); err != nil {
+			if err := meshidentity_status.Setup(rt); err != nil {
 				runLog.Error(err, "unable to set up MeshIdentity component")
 				return err
 			}

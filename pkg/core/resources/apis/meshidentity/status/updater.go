@@ -1,4 +1,4 @@
-package updater
+package status
 
 import (
 	"context"
@@ -19,7 +19,6 @@ import (
 	"github.com/kumahq/kuma/pkg/core/runtime/component"
 	"github.com/kumahq/kuma/pkg/core/user"
 	"github.com/kumahq/kuma/pkg/util/pointer"
-	mesh_cache "github.com/kumahq/kuma/pkg/xds/cache/mesh"
 )
 
 const (
@@ -33,8 +32,6 @@ type IdentityProviderReconciler struct {
 	resManager        manager.ResourceManager
 	logger            logr.Logger
 	reconcileInterval time.Duration
-	fullSyncInterval  time.Duration
-	meshCache         *mesh_cache.Cache
 	providers         providers.IdentityProviders
 	zone              string
 }
@@ -44,20 +41,16 @@ var _ component.Component = &IdentityProviderReconciler{}
 func New(
 	logger logr.Logger,
 	reconcileInterval time.Duration,
-	fullSyncInterval time.Duration,
 	resManager manager.ResourceManager,
 	roResManager manager.ReadOnlyResourceManager,
-	meshCache *mesh_cache.Cache,
 	providers providers.IdentityProviders,
 	zone string,
 ) (*IdentityProviderReconciler, error) {
 	return &IdentityProviderReconciler{
 		logger:            logger,
 		reconcileInterval: reconcileInterval,
-		fullSyncInterval:  fullSyncInterval,
 		resManager:        resManager,
 		roResManager:      roResManager,
-		meshCache:         meshCache,
 		providers:         providers,
 		zone:              zone,
 	}, nil

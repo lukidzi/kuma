@@ -33,9 +33,9 @@ func PrivateKeyName(resourceName string) string {
 }
 
 func GenerateRootCA(trustDomain string) (*core_ca.KeyPair, error) {
-	privateKey, err := ecdsa.GenerateKey(elliptic.P384(), rand.Reader)
+	privateKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to generate Ed25519 key")
+		return nil, errors.Wrap(err, "failed to generate ecdsa key")
 	}
 	cert, err := newCACert(privateKey, trustDomain)
 	if err != nil {
@@ -54,14 +54,6 @@ func newCACert(signer crypto.Signer, trustDomain string) ([]byte, error) {
 	notBefore := now.Add(-DefaultAllowedClockSkew)
 	notAfter := now.Add(DefaultCACertValidityPeriod)
 
-	template, err := caTemplate(trustDomain, subject, signer.Public(), notBefore, notAfter, big.NewInt(0))
-	if err != nil {
-		return nil, err
-	}
-	return x509.CreateCertificate(rand.Reader, template, template, signer.Public(), signer)
-}
-
-func caTemplate(trustDomain string, subject pkix.Name, publicKey crypto.PublicKey, notBefore, notAfter time.Time, serialNumber *big.Int) (*x509.Certificate, error) {
 	domain, err := spiffeid.TrustDomainFromString(trustDomain)
 	if err != nil {
 		return nil, err
@@ -70,8 +62,8 @@ func caTemplate(trustDomain string, subject pkix.Name, publicKey crypto.PublicKe
 	if err != nil {
 		return nil, err
 	}
-	return &x509.Certificate{
-		SerialNumber: serialNumber,
+	tmpl := &x509.Certificate{
+		SerialNumber: big.NewInt(0),
 		Subject:      subject,
 		URIs:         []*url.URL{uri.URL()},
 		NotBefore:    notBefore,
@@ -80,6 +72,7 @@ func caTemplate(trustDomain string, subject pkix.Name, publicKey crypto.PublicKe
 			x509.KeyUsageCRLSign,
 		BasicConstraintsValid: true,
 		IsCA:                  true,
-		PublicKey:             publicKey,
-	}, nil
+		PublicKey:             signer.Public(),
+	}
+	return x509.CreateCertificate(rand.Reader, tmpl, tmpl, signer.Public(), signer)
 }

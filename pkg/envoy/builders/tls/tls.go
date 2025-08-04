@@ -113,6 +113,16 @@ func TlsMinVersion(version *common_tls.TlsVersion) Configurer[envoy_tls.CommonTl
 	}
 }
 
+func EcdhCurves(curves []string) Configurer[envoy_tls.CommonTlsContext] {
+	return func(c *envoy_tls.CommonTlsContext) error {
+		if c.TlsParams == nil {
+			c.TlsParams = &envoy_tls.TlsParameters{}
+		}
+		c.TlsParams.EcdhCurves = curves
+		return nil
+	}
+}
+
 func CombinedCertificateValidationContext(builder *Builder[envoy_tls.CommonTlsContext_CombinedCertificateValidationContext]) Configurer[envoy_tls.CommonTlsContext] {
 	return func(c *envoy_tls.CommonTlsContext) error {
 		config, err := builder.Build()

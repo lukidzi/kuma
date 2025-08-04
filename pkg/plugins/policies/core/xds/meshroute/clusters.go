@@ -119,42 +119,15 @@ func GenerateClusters(
 							}
 						}
 						// ClientSideMultiIdentitiesMTLS validate MTLS enabled on the mesh
-						edsClusterBuilder.Configure(envoy_clusters.ClientSideMultiIdentitiesMTLS(
+						edsClusterBuilder.ConfigureIf(proxy.WorkloadIdentity == nil, envoy_clusters.ClientSideMultiIdentitiesMTLS(
 							proxy.SecretsTracker,
 							meshCtx.Resource,
 							tlsReady,
 							SniForBackendRef(realResourceRef, meshCtx, systemNamespace),
-							ServiceTagIdentities(realResourceRef, meshCtx),
+							Identities(realResourceRef, meshCtx, false),
 						))
 						if proxy.WorkloadIdentity != nil {
-							sanMatchers := []*bldrs_common.Builder[envoy_tls.SubjectAltNameMatcher]{}
-							for _, san := range ServiceTagIdentities(realResourceRef, meshCtx) {
-								conf := bldrs_tls.NewSubjectAltNameMatcher().Configure(bldrs_tls.URI(bldrs_matcher.NewStringMatcher().Configure(bldrs_matcher.ExactMatcher(san))))
-								sanMatchers = append(sanMatchers, conf)
-							}
-							upstreamCtx, err := bldrs_tls.NewUpstreamTLSContext().
-								Configure(bldrs_tls.SNI(SniForBackendRef(realResourceRef, meshCtx, systemNamespace))).
-								Configure(bldrs_tls.UpstreamCommonTlsContext(
-									bldrs_tls.NewCommonTlsContext().
-										Configure(
-											bldrs_tls.CombinedCertificateValidationContext(
-												bldrs_tls.NewCombinedCertificateValidationContext().Configure(
-													bldrs_tls.ValidationContextSdsSecretConfig(
-														bldrs_tls.NewTlsCertificateSdsSecretConfigs().Configure(
-															bldrs_tls.SdsSecretConfigSource(pointer.DerefOr(proxy.WorkloadIdentity.CABundleSecretName, system_names.SystemResourceNameCABundle), bldrs_core.NewConfigSource().Configure(
-																bldrs_core.Sds()))))).Configure(
-													bldrs_tls.DefaultValidationContext(
-														bldrs_tls.NewDefaultValidationContext().Configure(
-															bldrs_tls.SANs(sanMatchers)))))).
-										Configure(
-											bldrs_tls.TlsCertificateSdsSecretConfigs([]*bldrs_common.Builder[envoy_tls.SdsSecretConfig]{
-												bldrs_tls.NewTlsCertificateSdsSecretConfigs().Configure(
-													bldrs_tls.SdsSecretConfigSource(
-														pointer.DerefOr(proxy.WorkloadIdentity.IdentitySecretName, proxy.WorkloadIdentity.KRI.String()),
-														bldrs_core.NewConfigSource().Configure(bldrs_core.Sds()),
-													)),
-											})).
-										Configure(bldrs_tls.KumaAlpnProtocol()))).Build()
+							upstreamCtx, err := UpstreamTLSContext(realResourceRef, meshCtx, systemNamespace, proxy)
 							if err != nil {
 								return nil, err
 							}
@@ -186,6 +159,42 @@ func GenerateClusters(
 	return resources, nil
 }
 
+func UpstreamTLSContext(realResourceRef *resolve.RealResourceBackendRef, meshCtx xds_context.MeshContext, systemNamespace string, proxy *core_xds.Proxy) (*envoy_tls.UpstreamTlsContext, error) {
+	sanMatchers := []*bldrs_common.Builder[envoy_tls.SubjectAltNameMatcher]{}
+	for _, san := range Identities(realResourceRef, meshCtx, true) {
+		conf := bldrs_tls.NewSubjectAltNameMatcher().Configure(bldrs_tls.URI(bldrs_matcher.NewStringMatcher().Configure(bldrs_matcher.ExactMatcher(san))))
+		sanMatchers = append(sanMatchers, conf)
+	}
+	upstreamCtx, err := bldrs_tls.NewUpstreamTLSContext().
+		Configure(bldrs_tls.SNI(SniForBackendRef(realResourceRef, meshCtx, systemNamespace))).
+		Configure(bldrs_tls.UpstreamCommonTlsContext(
+			bldrs_tls.NewCommonTlsContext().
+				Configure(bldrs_tls.EcdhCurves([]string{"P-256", "P-384"})).
+				Configure(
+					bldrs_tls.CombinedCertificateValidationContext(
+						bldrs_tls.NewCombinedCertificateValidationContext().Configure(
+							bldrs_tls.ValidationContextSdsSecretConfig(
+								bldrs_tls.NewTlsCertificateSdsSecretConfigs().Configure(
+									bldrs_tls.SdsSecretConfigSource(pointer.DerefOr(proxy.WorkloadIdentity.CABundleSecretName, system_names.SystemResourceNameCABundle), bldrs_core.NewConfigSource().Configure(
+										bldrs_core.Sds()))))).Configure(
+							bldrs_tls.DefaultValidationContext(
+								bldrs_tls.NewDefaultValidationContext().Configure(
+									bldrs_tls.SANs(sanMatchers)))))).
+				Configure(
+					bldrs_tls.TlsCertificateSdsSecretConfigs([]*bldrs_common.Builder[envoy_tls.SdsSecretConfig]{
+						bldrs_tls.NewTlsCertificateSdsSecretConfigs().Configure(
+							bldrs_tls.SdsSecretConfigSource(
+								pointer.DerefOr(proxy.WorkloadIdentity.IdentitySecretName, proxy.WorkloadIdentity.KRI.String()),
+								bldrs_core.NewConfigSource().Configure(bldrs_core.Sds()),
+							)),
+					})).
+				Configure(bldrs_tls.KumaAlpnProtocol()))).Build()
+	if err != nil {
+		return nil, err
+	}
+	return upstreamCtx, nil
+}
+
 func SniForBackendRef(
 	backendRef *resolve.RealResourceBackendRef,
 	meshCtx xds_context.MeshContext,
@@ -205,11 +214,22 @@ func SniForBackendRef(
 	return tls.SNIForResource(name, resource.GetMeta().GetMesh(), resource.Descriptor().Name, port, nil)
 }
 
-func ServiceTagIdentities(
+func Identities(
 	backendRef *resolve.RealResourceBackendRef,
 	meshCtx xds_context.MeshContext,
+	includeSpiffeID bool,
 ) []string {
 	var result []string
+	serviceTagTransformer := func(serviceTag string) string {
+		return serviceTag
+	}
+	// we don't use function which transform service tag to the spiffe id on cluster configuratio
+	// instead we want to set it here. It's not required for SpiffeID type, only ServiceTag
+	if includeSpiffeID {
+		serviceTagTransformer = func(serviceTag string) string {
+			return tls.ServiceSpiffeID(meshCtx.Resource.Meta.GetName(), serviceTag)
+		}
+	}
 	switch common_api.TargetRefKind(backendRef.Resource.ResourceType) {
 	case common_api.MeshService:
 		ms := meshCtx.GetServiceByKRI(pointer.Deref(backendRef.Resource))
@@ -218,9 +238,9 @@ func ServiceTagIdentities(
 		}
 		for _, identity := range pointer.Deref(ms.(*meshservice_api.MeshServiceResource).Spec.Identities) {
 			if identity.Type == meshservice_api.MeshServiceIdentityServiceTagType {
-				result = append(result, identity.Value)
+				result = append(result, serviceTagTransformer(identity.Value))
 			}
-			if identity.Type == meshservice_api.MeshServiceIdentitySpiffeIDType {
+			if includeSpiffeID && identity.Type == meshservice_api.MeshServiceIdentitySpiffeIDType {
 				result = append(result, identity.Value)
 			}
 		}
@@ -246,7 +266,7 @@ func ServiceTagIdentities(
 				if identity.Type == meshservice_api.MeshServiceIdentityServiceTagType {
 					identities[identity.Value] = struct{}{}
 				}
-				if identity.Type == meshservice_api.MeshServiceIdentitySpiffeIDType {
+				if includeSpiffeID && identity.Type == meshservice_api.MeshServiceIdentitySpiffeIDType {
 					identities[identity.Value] = struct{}{}
 				}
 			}

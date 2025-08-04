@@ -1,12 +1,13 @@
 resources:
-- name: default_backend___msvc_80
+- name: default_backend___msvc_80-01804e3659fbd290
   resource:
     '@type': type.googleapis.com/envoy.config.cluster.v3.Cluster
     edsClusterConfig:
       edsConfig:
         ads: {}
         resourceApiVersion: V3
-    name: default_backend___msvc_80
+    name: default_backend___msvc_80-01804e3659fbd290
+    perConnectionBufferLimitBytes: 32768
     transportSocket:
       name: envoy.transport_sockets.tls
       typedConfig:
@@ -18,18 +19,18 @@ resources:
             defaultValidationContext:
               matchTypedSubjectAltNames:
               - matcher:
-                  exact: spiffe://default/backend
+                  exact: spiffe://default/backend_svc_80
                 sanType: URI
               - matcher:
-                  exact: spiffe://default.demo.mesh.local/ns/demo/sa/backend
+                  exact: spiffe://default.demo.mesh.local/ns/kuma-demo/sa/gateway
                 sanType: URI
             validationContextSdsSecretConfig:
-              name: bundle
+              name: system_trust_bundle
               sdsConfig:
                 ads: {}
                 resourceApiVersion: V3
           tlsCertificateSdsSecretConfigs:
-          - name: my-identity
+          - name: kri_mid___kuma-system_identity_
             sdsConfig:
               ads: {}
               resourceApiVersion: V3
@@ -39,4 +40,4 @@ resources:
       envoy.extensions.upstreams.http.v3.HttpProtocolOptions:
         '@type': type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions
         explicitHttpConfig:
-          http2ProtocolOptions: {}
+          httpProtocolOptions: {}
