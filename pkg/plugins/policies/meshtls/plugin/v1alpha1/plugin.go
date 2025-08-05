@@ -355,7 +355,6 @@ func downstreamTLSContext(xdsCtx xds_context.Context, proxy *core_xds.Proxy, con
 					ConfigureIf(conf.TlsVersion != nil && conf.TlsVersion.Min != nil, func() bldrs_common.Configurer[envoy_tls.CommonTlsContext] {
 						return bldrs_tls.TlsMinVersion(conf.TlsVersion.Min)
 					}).
-					Configure(bldrs_tls.EcdhCurves([]string{"P-256", "P-384"})).
 					Configure(bldrs_tls.CombinedCertificateValidationContext(
 						bldrs_tls.NewCombinedCertificateValidationContext().Configure(
 							bldrs_tls.DefaultValidationContext(bldrs_tls.NewDefaultValidationContext().Configure(

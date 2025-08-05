@@ -254,7 +254,7 @@ func generateKey(caPrivateKey crypto.PrivateKey) (crypto.PublicKey, crypto.Priva
 		privateKey = priv
 
 	case *rsa.PrivateKey:
-		priv, err := rsa.GenerateKey(rand.Reader, 2048)
+		priv, err := rsa.GenerateKey(rand.Reader, DefaultKeySize)
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to generate rsa key: %w", err)
 		}

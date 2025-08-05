@@ -2,9 +2,8 @@ package bundled
 
 import (
 	"crypto"
-	"crypto/ecdsa"
-	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/rsa"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"fmt"
@@ -22,6 +21,7 @@ import (
 
 const (
 	DefaultCACertValidityPeriod = 10 * 365 * 24 * time.Hour
+	DefaultKeySize = 2048
 )
 
 func RootCAName(resourceName string) string {
@@ -33,7 +33,7 @@ func PrivateKeyName(resourceName string) string {
 }
 
 func GenerateRootCA(trustDomain string) (*core_ca.KeyPair, error) {
-	privateKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	privateKey, err := rsa.GenerateKey(rand.Reader, DefaultKeySize)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to generate ecdsa key")
 	}
