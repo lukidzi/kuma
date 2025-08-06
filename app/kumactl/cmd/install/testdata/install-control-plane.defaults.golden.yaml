@@ -7894,6 +7894,99 @@ spec:
                   - targetRef
                   type: object
                 type: array
+              rules:
+                description: Rules defines inbound permissions configuration
+                items:
+                  properties:
+                    default:
+                      properties:
+                        allow:
+                          description: Allow definees a list of matches for which
+                            access will be allowed
+                          items:
+                            properties:
+                              spiffeId:
+                                description: SpiffeId defines a matcher configuration
+                                  for SpiffeId matching
+                                properties:
+                                  type:
+                                    description: Type defines how to match incoming
+                                      traffic by SpiffeId. `Exact` or `Prefix` are
+                                      allowed.
+                                    enum:
+                                    - Exact
+                                    - Prefix
+                                    type: string
+                                  value:
+                                    description: Value is SpiffeId of a client that
+                                      needs to match for the configuration to be applied
+                                    type: string
+                                required:
+                                - type
+                                - value
+                                type: object
+                            type: object
+                          type: array
+                        allowWithShadowDeny:
+                          description: |-
+                            AllowWithShadowDeny defines a list of matches for which access will be allowed but emits logs as if
+                            requests are denied
+                          items:
+                            properties:
+                              spiffeId:
+                                description: SpiffeId defines a matcher configuration
+                                  for SpiffeId matching
+                                properties:
+                                  type:
+                                    description: Type defines how to match incoming
+                                      traffic by SpiffeId. `Exact` or `Prefix` are
+                                      allowed.
+                                    enum:
+                                    - Exact
+                                    - Prefix
+                                    type: string
+                                  value:
+                                    description: Value is SpiffeId of a client that
+                                      needs to match for the configuration to be applied
+                                    type: string
+                                required:
+                                - type
+                                - value
+                                type: object
+                            type: object
+                          type: array
+                        deny:
+                          description: Deny defines a list of matches for which access
+                            will be denied
+                          items:
+                            properties:
+                              spiffeId:
+                                description: SpiffeId defines a matcher configuration
+                                  for SpiffeId matching
+                                properties:
+                                  type:
+                                    description: Type defines how to match incoming
+                                      traffic by SpiffeId. `Exact` or `Prefix` are
+                                      allowed.
+                                    enum:
+                                    - Exact
+                                    - Prefix
+                                    type: string
+                                  value:
+                                    description: Value is SpiffeId of a client that
+                                      needs to match for the configuration to be applied
+                                    type: string
+                                required:
+                                - type
+                                - value
+                                type: object
+                            type: object
+                          type: array
+                      type: object
+                  required:
+                  - default
+                  type: object
+                type: array
               targetRef:
                 description: |-
                   TargetRef is a reference to the resource the policy takes an effect on.
@@ -8047,6 +8140,10 @@ spec:
               trustDomain:
                 description: TrustDomain is the trust domain associated with this
                   resource.
+<<<<<<< HEAD
+=======
+                maxLength: 253
+>>>>>>> master
                 type: string
             required:
             - caBundles
@@ -8411,6 +8508,59 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.18.0
+<<<<<<< HEAD
+=======
+  name: externalservices.kuma.io
+spec:
+  group: kuma.io
+  names:
+    categories:
+    - kuma
+    kind: ExternalService
+    listKind: ExternalServiceList
+    plural: externalservices
+    singular: externalservice
+  scope: Cluster
+  versions:
+  - name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          mesh:
+            description: |-
+              Mesh is the name of the Kuma mesh this resource belongs to.
+              It may be omitted for cluster-scoped resources.
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: Spec is the specification of the Kuma ExternalService resource.
+            x-kubernetes-preserve-unknown-fields: true
+        type: object
+    served: true
+    storage: true
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.18.0
+>>>>>>> master
   name: trafficpermissions.kuma.io
 spec:
   group: kuma.io
@@ -11315,7 +11465,11 @@ spec:
     metadata:
       annotations:
         checksum/config: fd9d1d8386f97f2bd49e50f476520816168a1c9f60bbc43dec1347a64d239155
+<<<<<<< HEAD
         checksum/tls-secrets: 33c77d33ab23ff4cf808bc85e7f86118779c14eaa9e70ff31028c773fc53a51c
+=======
+        checksum/tls-secrets: 2a2a35c58a4d4b18c7f7c1d0de3e6b9f79e2676d7f89217d9d38abf87c7f18ff
+>>>>>>> master
       labels: 
         app: kuma-control-plane
         app.kubernetes.io/name: kuma

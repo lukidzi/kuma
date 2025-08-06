@@ -56,7 +56,7 @@ func validationCtx(xdsCtx xds_context.Context) (*envoy_auth.Secret, error) {
 		allCAs := [][]byte{}
 		for _, trust := range trusts {
 			for _, ca := range trust.CABundles {
-				allCAs = append(allCAs, []byte(ca.Pem.Value))
+				allCAs = append(allCAs, []byte(ca.PEM.Value))
 			}
 		}
 		concatenatedCA := bytes.Join(allCAs, []byte("\n"))

@@ -161,7 +161,7 @@ func applyToOutbounds(
 			TrafficDirection:   envoy.TrafficDirectionOutbound,
 		}
 
-		conf := core_rules.ComputeConf[api.Conf](rules.Rules, subsetutils.MeshServiceElement(serviceName))
+		conf := core_rules.ComputeConf[api.Conf](rules.Rules, subsetutils.KumaServiceTagElement(serviceName))
 		if conf == nil {
 			continue
 		}
@@ -179,7 +179,7 @@ func applyToTransparentProxyListeners(
 	policies core_xds.TypedMatchingPolicies, ipv4 *envoy_listener.Listener, ipv6 *envoy_listener.Listener, dataplane *core_mesh.DataplaneResource,
 	backends *EndpointAccumulator, path string,
 ) error {
-	conf := core_rules.ComputeConf[api.Conf](policies.ToRules.Rules, subsetutils.MeshServiceElement(core_mesh.PassThroughService))
+	conf := core_rules.ComputeConf[api.Conf](policies.ToRules.Rules, subsetutils.KumaServiceTagElement(core_mesh.PassThroughService))
 	if conf == nil {
 		return nil
 	}
@@ -209,7 +209,7 @@ func applyToDirectAccess(
 	rules core_rules.ToRules, directAccess map[generator.Endpoint]*envoy_listener.Listener, dataplane *core_mesh.DataplaneResource,
 	backends *EndpointAccumulator, path string,
 ) error {
-	conf := core_rules.ComputeConf[api.Conf](rules.Rules, subsetutils.MeshServiceElement(core_mesh.PassThroughService))
+	conf := core_rules.ComputeConf[api.Conf](rules.Rules, subsetutils.KumaServiceTagElement(core_mesh.PassThroughService))
 	if conf == nil {
 		return nil
 	}
@@ -355,11 +355,10 @@ func applyToRealResource(
 
 	builderForSharedBackend := func(b api.Backend) *Builder[envoy_accesslog.AccessLog] {
 		return BaseAccessLogBuilder(b, defaultFormat, backendsAcc, kumaValues, accessLogSocketPath).
-			ConfigureIf(r.Protocol.IsHTTPBased(), func() Configurer[envoy_accesslog.AccessLog] {
-				return bldrs_accesslog.MetadataFilter(true, bldrs_matcher.NewMetadataBuilder().
-					Configure(bldrs_matcher.Key(namespace, routeMetadataKey)).
-					Configure(bldrs_matcher.NullValue()))
-			})
+			Configure(If(r.Protocol.IsHTTPBased(), bldrs_accesslog.MetadataFilter(true, bldrs_matcher.NewMetadataBuilder().
+				Configure(bldrs_matcher.Key(namespace, routeMetadataKey)).
+				Configure(bldrs_matcher.NullValue())),
+			))
 	}
 
 	builderForRouteBackend := func(routeID kri.Identifier) func(b api.Backend) *Builder[envoy_accesslog.AccessLog] {
@@ -388,9 +387,7 @@ func applyToRealResource(
 						builderForRouteBackend(id),
 					)
 				}))).
-		ConfigureIf(hasAtLeastOneBackend, func() Configurer[envoy_listener.Listener] {
-			return bldrs_listener.HCM(hcm.LuaFilterAddFirst(setFilterMetadataAsDynamicLuaFilter(namespace, routeMetadataKey)))
-		}).
+		Configure(If(hasAtLeastOneBackend, bldrs_listener.HCM(hcm.LuaFilterAddFirst(setFilterMetadataAsDynamicLuaFilter(namespace, routeMetadataKey))))).
 		Modify()
 }
 

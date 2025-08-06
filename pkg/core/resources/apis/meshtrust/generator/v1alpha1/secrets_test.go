@@ -76,13 +76,13 @@ var _ = Describe("MeshTrust Secret Generator", func() {
 						CABundles: []meshtrust_api.CABundle{
 							{
 								Type: meshtrust_api.PemCABundleType,
-								Pem: &meshtrust_api.Pem{
+								PEM: &meshtrust_api.PEM{
 									Value: "123",
 								},
 							},
 							{
 								Type: meshtrust_api.PemCABundleType,
-								Pem: &meshtrust_api.Pem{
+								PEM: &meshtrust_api.PEM{
 									Value: "456",
 								},
 							},
@@ -95,7 +95,7 @@ var _ = Describe("MeshTrust Secret Generator", func() {
 						CABundles: []meshtrust_api.CABundle{
 							{
 								Type: meshtrust_api.PemCABundleType,
-								Pem: &meshtrust_api.Pem{
+								PEM: &meshtrust_api.PEM{
 									Value: "789",
 								},
 							},
@@ -120,13 +120,13 @@ var _ = Describe("MeshTrust Secret Generator", func() {
 						CABundles: []meshtrust_api.CABundle{
 							{
 								Type: meshtrust_api.PemCABundleType,
-								Pem: &meshtrust_api.Pem{
+								PEM: &meshtrust_api.PEM{
 									Value: "123",
 								},
 							},
 							{
 								Type: meshtrust_api.PemCABundleType,
-								Pem: &meshtrust_api.Pem{
+								PEM: &meshtrust_api.PEM{
 									Value: "456",
 								},
 							},
@@ -139,7 +139,7 @@ var _ = Describe("MeshTrust Secret Generator", func() {
 						CABundles: []meshtrust_api.CABundle{
 							{
 								Type: meshtrust_api.PemCABundleType,
-								Pem: &meshtrust_api.Pem{
+								PEM: &meshtrust_api.PEM{
 									Value: "789",
 								},
 							},
@@ -167,13 +167,13 @@ var _ = Describe("MeshTrust Secret Generator", func() {
 						CABundles: []meshtrust_api.CABundle{
 							{
 								Type: meshtrust_api.PemCABundleType,
-								Pem: &meshtrust_api.Pem{
+								PEM: &meshtrust_api.PEM{
 									Value: "123",
 								},
 							},
 							{
 								Type: meshtrust_api.PemCABundleType,
-								Pem: &meshtrust_api.Pem{
+								PEM: &meshtrust_api.PEM{
 									Value: "456",
 								},
 							},
@@ -186,7 +186,7 @@ var _ = Describe("MeshTrust Secret Generator", func() {
 						CABundles: []meshtrust_api.CABundle{
 							{
 								Type: meshtrust_api.PemCABundleType,
-								Pem: &meshtrust_api.Pem{
+								PEM: &meshtrust_api.PEM{
 									Value: "789",
 								},
 							},

@@ -183,12 +183,12 @@ spec:
 `
 		trustZone1 := getMeshTrust(multizone.KubeZone1.Name())
 		Expect(NewClusterSetup().
-			Install(YamlK8s(fmt.Sprintf(trustTmpl, multizone.KubeZone1.Name(), meshName, multizone.KubeZone2.Name(), indent(trustZone1.CABundles[0].Pem.Value, 10), trustZone1.TrustDomain))).
+			Install(YamlK8s(fmt.Sprintf(trustTmpl, multizone.KubeZone1.Name(), meshName, multizone.KubeZone2.Name(), indent(trustZone1.CABundles[0].PEM.Value, 10), trustZone1.TrustDomain))).
 			Setup(multizone.KubeZone2)).To(Succeed())
 
 		trustZone2 := getMeshTrust(multizone.KubeZone2.Name())
 		Expect(NewClusterSetup().
-			Install(YamlK8s(fmt.Sprintf(trustTmpl, multizone.KubeZone2.Name(), meshName, multizone.KubeZone1.Name(), indent(trustZone2.CABundles[0].Pem.Value, 10), trustZone2.TrustDomain))).
+			Install(YamlK8s(fmt.Sprintf(trustTmpl, multizone.KubeZone2.Name(), meshName, multizone.KubeZone1.Name(), indent(trustZone2.CABundles[0].PEM.Value, 10), trustZone2.TrustDomain))).
 			Setup(multizone.KubeZone1)).To(Succeed())
 
 		// and Trust from zone 2 to zone 1

@@ -25,7 +25,7 @@ func MeshTrust() *MeshTrustBuilder {
 				CABundles: []meshtrust_api.CABundle{
 					{
 						Type: meshtrust_api.PemCABundleType,
-						Pem: &meshtrust_api.Pem{
+						PEM: &meshtrust_api.PEM{
 							Value: `-----BEGIN CERTIFICATE-----
 MIIB9jCCAZ2gAwIBAgIUJ1gLZ/fvZhGq51qWrJzL6z2XWoQwCgYIKoZIzj0EAwIw
 EjEQMA4GA1UEChMHVGVzdCBDQTAeFw0yNTA3MzAxMjAwMDBaFw0zNTA3MjcxMjAw

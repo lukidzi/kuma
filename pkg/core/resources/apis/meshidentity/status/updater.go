@@ -215,7 +215,7 @@ func (i *IdentityProviderReconciler) createOrUpdateMeshTrust(ctx context.Context
 	if update {
 		// Check if the CA PEM is already present in the MeshTrust resource
 		for _, bundle := range meshTrust.Spec.CABundles {
-			if bundle.Pem.Value == caPEM {
+			if bundle.PEM.Value == caPEM {
 				// Already exists; no need to update
 				return nil
 			}
@@ -224,7 +224,7 @@ func (i *IdentityProviderReconciler) createOrUpdateMeshTrust(ctx context.Context
 		// Append the new CA PEM
 		meshTrust.Spec.CABundles = append(meshTrust.Spec.CABundles, meshtrust_api.CABundle{
 			Type: meshtrust_api.PemCABundleType,
-			Pem: &meshtrust_api.Pem{
+			PEM: &meshtrust_api.PEM{
 				Value: caPEM,
 			},
 		})
@@ -241,7 +241,7 @@ func (i *IdentityProviderReconciler) createOrUpdateMeshTrust(ctx context.Context
 		CABundles: []meshtrust_api.CABundle{
 			{
 				Type: meshtrust_api.PemCABundleType,
-				Pem: &meshtrust_api.Pem{
+				PEM: &meshtrust_api.PEM{
 					Value: caPEM,
 				},
 			},

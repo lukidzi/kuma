@@ -81,6 +81,10 @@ spec:
               trustDomain:
                 description: TrustDomain is the trust domain associated with this
                   resource.
+<<<<<<< HEAD
+=======
+                maxLength: 253
+>>>>>>> master
                 type: string
             required:
             - caBundles

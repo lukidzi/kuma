@@ -37,3 +37,7 @@ const FeatureUnifiedResourceNaming string = "feature-unified-resource-naming"
 // SpireSupported indicates whether the sidecar has mounted a volume that includes the socket for the Spire agent to retrieve its identity.
 // Currently supported only on Kubernetes.
 const FeatureSpireSupported string = "feature-spire-supported"
+
+// FeatureReadinessUnixSocket indicates the readiness probe of kuma-sidecar is responded from the kuma-dp process via Unix socket.
+// TODO: remove in 2.15 or higher, see: https://github.com/kumahq/kuma/issues/14039
+const FeatureReadinessUnixSocket = "feature-readiness-unix-socket"
