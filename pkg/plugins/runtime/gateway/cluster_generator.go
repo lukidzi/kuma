@@ -157,7 +157,7 @@ func (c *ClusterGenerator) generateRealBackendRefCluster(
 		return nil, "", nil
 	}
 	protocol := route.InferServiceProtocol(destProtocol, routeProtocol)
-
+	sni := meshroute.SniForBackendRef(backendRef, meshCtx, systemNamespace)
 	edsClusterBuilder := clusters.NewClusterBuilder(proxy.APIVersion, service).
 		Configure(
 			clusters.EdsCluster(),
@@ -169,11 +169,11 @@ func (c *ClusterGenerator) generateRealBackendRefCluster(
 			proxy.SecretsTracker,
 			meshCtx.Resource,
 			true, // TODO we just assume this atm?...
-			meshroute.SniForBackendRef(backendRef, meshCtx, systemNamespace),
+			sni,
 			meshroute.Identities(backendRef, meshCtx, false),
 		))
 	if proxy.WorkloadIdentity != nil {
-		upstreamCtx, err := meshroute.UpstreamTLSContext(backendRef, meshCtx, systemNamespace, proxy)
+		upstreamCtx, err := meshroute.UpstreamTLSContext(backendRef, meshCtx, proxy, sni)
 		if err != nil {
 			return nil, "", err
 		}

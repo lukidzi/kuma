@@ -87,5 +87,5 @@ var (
 	_ = Describe("Producer Policy Flow", producer.ProducerPolicyFlow, Ordered)
 	_ = Describe("MeshServiceReachableBackends", reachablebackends.MeshServicesWithReachableBackendsOption, Ordered)
 	_ = Describe("MeshTLS", meshtls.MeshTLS, Ordered)
-	_ = FDescribe("MeshIdentity", meshidentity.Identity, Ordered)
+	_ = Describe("MeshIdentity", meshidentity.Identity, Ordered)
 )

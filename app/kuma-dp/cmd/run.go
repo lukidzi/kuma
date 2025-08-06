@@ -203,6 +203,10 @@ func newRunCmd(opts kuma_cmd.RunCmdOpts, rootCtx *RootContext) *cobra.Command {
 				rootCtx.Features = append(rootCtx.Features, xds_types.FeatureUnifiedResourceNaming)
 			}
 
+			if cfg.DataplaneRuntime.SpireSupported {
+				rootCtx.Features = append(rootCtx.Features, xds_types.FeatureSpireSupported)
+			}
+
 			return nil
 		},
 		PostRunE: func(cmd *cobra.Command, _ []string) error {

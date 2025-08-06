@@ -20,6 +20,7 @@ import (
 	"github.com/kumahq/kuma/pkg/core/secrets/cipher"
 	secret_manager "github.com/kumahq/kuma/pkg/core/secrets/manager"
 	"github.com/kumahq/kuma/pkg/core/secrets/store"
+	"github.com/kumahq/kuma/pkg/core/xds"
 	"github.com/kumahq/kuma/pkg/events"
 	core_metrics "github.com/kumahq/kuma/pkg/metrics"
 	"github.com/kumahq/kuma/pkg/plugins/resources/memory"
@@ -170,15 +171,16 @@ var _ = Describe("MeshIdentity providers", func() {
 		Expect(bundledProvider.Initialize(context.Background(), meshIdentity, mesh.Meta.GetName())).ToNot(HaveOccurred())
 
 		// when
-		identity, err := idenManager.GetWorkloadIdentity(context.Background(), dpp, meshIdentity)
+		identity, err := idenManager.GetWorkloadIdentity(context.Background(), &xds.Proxy{
+			Dataplane: dpp,
+			Metadata:  &xds.DataplaneMetadata{},
+		}, meshIdentity)
 
 		// then
 		Expect(err).ToNot(HaveOccurred())
 		Expect(identity).ToNot(BeNil())
 
 		Expect(identity.KRI).To(Equal(kri.From(meshIdentity, "")))
-		Expect(identity.KeyPEM).ToNot(BeEmpty())
-		Expect(identity.CertPEM).ToNot(BeEmpty())
 		Expect(identity.ExpirationTime).To(Equal(identity.GenerationTime.Add(99 * time.Minute)))
 
 		Eventually(createIdentityListener.Recv(), 5*time.Second).Should(Receive(Equal(events.WorkloadIdentityChangedEvent{
@@ -209,7 +211,10 @@ var _ = Describe("MeshIdentity providers", func() {
 		}).AddInboundHttpOfService("test-app").Build()
 
 		// when
-		identity, err := idenManager.GetWorkloadIdentity(context.Background(), dpp, nil)
+		identity, err := idenManager.GetWorkloadIdentity(context.Background(), &xds.Proxy{
+			Dataplane: dpp,
+			Metadata:  &xds.DataplaneMetadata{},
+		}, nil)
 
 		// then
 		Expect(err).ToNot(HaveOccurred())

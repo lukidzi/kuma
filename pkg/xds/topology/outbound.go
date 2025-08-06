@@ -85,10 +85,11 @@ func BuildIngressEndpointMap(
 	gateways []*core_mesh.MeshGatewayResource,
 	zoneEgresses []*core_mesh.ZoneEgressResource,
 	loader datasource.Loader,
+	mtlsEnabled bool,
 ) core_xds.EndpointMap {
 	// Build EDS endpoint map just like for regular DPP, but without list of Ingress.
 	// This way we only keep local endpoints.
-	outbound := BuildEdsEndpointMap(ctx, mesh, localZone, meshServices, meshMultiZoneServices, meshExternalServices, dataplanes, nil, zoneEgresses, externalServices, loader)
+	outbound := BuildEdsEndpointMap(ctx, mesh, localZone, meshServices, meshMultiZoneServices, meshExternalServices, dataplanes, nil, zoneEgresses, externalServices, loader, mtlsEnabled)
 	fillLocalCrossMeshOutbounds(outbound, mesh, dataplanes, gateways, 1, localZone)
 	return outbound
 }
@@ -105,6 +106,7 @@ func BuildEdsEndpointMap(
 	zoneEgresses []*core_mesh.ZoneEgressResource,
 	externalServices []*core_mesh.ExternalServiceResource,
 	loader datasource.Loader,
+	mtlsEnabled bool,
 ) core_xds.EndpointMap {
 	outbound := core_xds.EndpointMap{}
 
@@ -129,7 +131,7 @@ func BuildEdsEndpointMap(
 
 	fillDataplaneOutbounds(outbound, dataplanes, mesh, endpointWeight, localZone, meshServiceDestinations)
 
-	fillRemoteMeshServices(outbound, meshServices, zoneIngresses, mesh, localZone)
+	fillRemoteMeshServices(outbound, meshServices, zoneIngresses, mesh, localZone, mtlsEnabled)
 
 	fillExternalServicesOutboundsThroughEgress(ctx, outbound, externalServices, meshExternalServices, zoneEgresses, mesh, localZone, loader)
 
@@ -179,7 +181,12 @@ func fillRemoteMeshServices(
 	zoneIngress []*core_mesh.ZoneIngressResource,
 	mesh *core_mesh.MeshResource,
 	localZone string,
+	mtlsEnabled bool,
 ) {
+	if !mtlsEnabled {
+		return
+	}
+
 	ziInstances := map[string]struct{}{}
 
 	// introduction of MeshIdentity doesn't requires mTLS on mesh

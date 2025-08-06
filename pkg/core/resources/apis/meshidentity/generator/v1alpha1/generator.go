@@ -18,6 +18,6 @@ func (p *plugin) Generate(rs *core_xds.ResourceSet, xdsCtx xds_context.Context, 
 	if proxy.WorkloadIdentity == nil {
 		return nil
 	}
-	rs.Add(proxy.WorkloadIdentity.AdditionalResources...)
+	rs.AddSet(proxy.WorkloadIdentity.AdditionalResources)
 	return nil
 }

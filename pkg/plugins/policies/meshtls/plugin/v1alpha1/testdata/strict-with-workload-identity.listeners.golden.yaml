@@ -29,12 +29,12 @@ resources:
             combinedValidationContext:
               defaultValidationContext: {}
               validationContextSdsSecretConfig:
-                name: system_trust_bundle
+                name: ca-bundle
                 sdsConfig:
                   ads: {}
                   resourceApiVersion: V3
             tlsCertificateSdsSecretConfigs:
-            - name: kri_mid_default_default__my-identity_
+            - name: my-secret-name
               sdsConfig:
                 ads: {}
                 resourceApiVersion: V3
@@ -75,12 +75,12 @@ resources:
             combinedValidationContext:
               defaultValidationContext: {}
               validationContextSdsSecretConfig:
-                name: system_trust_bundle
+                name: ca-bundle
                 sdsConfig:
                   ads: {}
                   resourceApiVersion: V3
             tlsCertificateSdsSecretConfigs:
-            - name: kri_mid_default_default__my-identity_
+            - name: my-secret-name
               sdsConfig:
                 ads: {}
                 resourceApiVersion: V3

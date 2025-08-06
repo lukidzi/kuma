@@ -1,4 +1,4 @@
-package bundled
+package spire
 
 import (
 	"github.com/kumahq/kuma/pkg/config/core"
@@ -17,7 +17,10 @@ func InitProvider() {
 
 func (p plugin) NewIdentityProvider(context core_plugins.PluginContext, config core_plugins.PluginConfig) (providers.IdentityProvider, error) {
 	if context.Config().Environment == core.KubernetesEnvironment && context.Config().Runtime.Kubernetes.Injector.Spire.Enabled {
-		return NewSpireIdentityProvider(context.Config().Runtime.Kubernetes.Injector.Spire.MountPath), nil
+		return NewSpireIdentityProvider(
+			context.Config().Runtime.Kubernetes.Injector.Spire.MountPath,
+			context.Config().Runtime.Kubernetes.Injector.Spire.SocketFileName,
+		), nil
 	}
 	return nil, nil
 }

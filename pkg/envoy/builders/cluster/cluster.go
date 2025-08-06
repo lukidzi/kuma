@@ -4,8 +4,10 @@ import (
 	"time"
 
 	envoy_cluster "github.com/envoyproxy/go-control-plane/envoy/config/cluster/v3"
-	corev3 "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
+	envoy_core "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	envoy_endpoint "github.com/envoyproxy/go-control-plane/envoy/config/endpoint/v3"
+	envoy_upstream_http "github.com/envoyproxy/go-control-plane/envoy/extensions/upstreams/http/v3"
+	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
@@ -37,30 +39,49 @@ func Endpoints(clusterName string, endpoints []*envoy_endpoint.LocalityLbEndpoin
 		if s.LoadAssignment == nil {
 			s.LoadAssignment = &envoy_endpoint.ClusterLoadAssignment{}
 		}
-		
 		s.LoadAssignment.ClusterName = clusterName
 		s.LoadAssignment.Endpoints = endpoints
 		return nil
 	}
 }
 
-// func Http2() Configurer[envoy_cluster.Cluster] {
-// 	return func(s *envoy_cluster.Cluster) error {
-// 		if s.UpstreamConfig == nil {
-// 			s.UpstreamConfig = &envoy_core.TypedExtensionConfig{
-// 				Name: ,
-// 			}
-// 			options.UpstreamProtocolOptions = &envoy_upstream_http.HttpProtocolOptions_ExplicitHttpConfig_{
-// 				ExplicitHttpConfig: &envoy_upstream_http.HttpProtocolOptions_ExplicitHttpConfig{
-// 					ProtocolConfig: &envoy_upstream_http.HttpProtocolOptions_ExplicitHttpConfig_Http2ProtocolOptions{
-// 						Http2ProtocolOptions: opts,
-// 					},
-// 				},
-// 			}
-// 		}
-// 		return nil
-// 	}
-// }
+func Http2() Configurer[envoy_cluster.Cluster] {
+	return func(s *envoy_cluster.Cluster) error {
+		if s.TypedExtensionProtocolOptions == nil {
+			s.TypedExtensionProtocolOptions = map[string]*anypb.Any{}
+		}
+		options := &envoy_upstream_http.HttpProtocolOptions{}
+		if any := s.TypedExtensionProtocolOptions["envoy.extensions.upstreams.http.v3.HttpProtocolOptions"]; any != nil {
+			if err := util_proto.UnmarshalAnyTo(any, options); err != nil {
+				return err
+			}
+			options.UpstreamProtocolOptions = &envoy_upstream_http.HttpProtocolOptions_ExplicitHttpConfig_{
+				ExplicitHttpConfig: &envoy_upstream_http.HttpProtocolOptions_ExplicitHttpConfig{
+					ProtocolConfig: &envoy_upstream_http.HttpProtocolOptions_ExplicitHttpConfig_Http2ProtocolOptions{
+						Http2ProtocolOptions: &envoy_core.Http2ProtocolOptions{},
+					},
+				},
+			}
+		} else {
+			options = &envoy_upstream_http.HttpProtocolOptions{
+				UpstreamProtocolOptions: &envoy_upstream_http.HttpProtocolOptions_ExplicitHttpConfig_{
+					ExplicitHttpConfig: &envoy_upstream_http.HttpProtocolOptions_ExplicitHttpConfig{
+						ProtocolConfig: &envoy_upstream_http.HttpProtocolOptions_ExplicitHttpConfig_Http2ProtocolOptions{
+							Http2ProtocolOptions: &envoy_core.Http2ProtocolOptions{},
+						},
+					},
+				},
+			}
+		}
+
+		pbst, err := util_proto.MarshalAnyDeterministic(options)
+		if err != nil {
+			return err
+		}
+		s.TypedExtensionProtocolOptions["envoy.extensions.upstreams.http.v3.HttpProtocolOptions"] = pbst
+		return nil
+	}
+}
 
 func LocalityWeightedLbConfigurer() Configurer[envoy_cluster.Cluster] {
 	return func(cluster *envoy_cluster.Cluster) error {
@@ -109,7 +130,7 @@ func ActiveRequestBias(arb intstr.IntOrString) Configurer[envoy_cluster.Cluster_
 		if err != nil {
 			return err
 		}
-		c.ActiveRequestBias = &corev3.RuntimeDouble{
+		c.ActiveRequestBias = &envoy_core.RuntimeDouble{
 			DefaultValue: decimal.InexactFloat64(),
 		}
 		return nil

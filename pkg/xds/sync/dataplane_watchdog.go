@@ -13,7 +13,6 @@ import (
 	"github.com/kumahq/kuma/pkg/core"
 	core_mesh "github.com/kumahq/kuma/pkg/core/resources/apis/mesh"
 	meshidentity_api "github.com/kumahq/kuma/pkg/core/resources/apis/meshidentity/api/v1alpha1"
-	"github.com/kumahq/kuma/pkg/core/resources/apis/meshidentity/providers"
 	core_manager "github.com/kumahq/kuma/pkg/core/resources/manager"
 	core_model "github.com/kumahq/kuma/pkg/core/resources/model"
 	core_xds "github.com/kumahq/kuma/pkg/core/xds"
@@ -61,7 +60,7 @@ type DataplaneWatchdog struct {
 	dpAddress        string
 	xdsMeta          *core_xds.DataplaneMetadata
 	// used by MeshIdentity
-	workloadIdentity *providers.WorkloadIdentity
+	workloadIdentity *core_xds.WorkloadIdentity
 	lastIdentityHash string // last Hash of MeshIdentities
 }
 
@@ -143,7 +142,7 @@ func (d *DataplaneWatchdog) syncDataplane(ctx context.Context) (SyncResult, erro
 	syncForConfig := meshCtx.Hash != d.lastHash               // check if we need to regenerate config because Kuma policies has changed.
 	identity := d.EnvoyCpCtx.IdentityManager.SelectedIdentity(dpp, meshCtx.Resources.MeshIdentities().Items)
 	identityHash := base64.StdEncoding.EncodeToString(hashMeshIdentity(identity))
-	syncIdentity := identityHash != d.lastIdentityHash || (d.workloadIdentity != nil && d.workloadIdentity.ExpiringSoon())
+	syncIdentity := identityHash != d.lastIdentityHash || (d.workloadIdentity != nil && d.workloadIdentity.ManageType == core_xds.KumaManagedType && d.workloadIdentity.ExpiringSoon())
 	if !syncForCert && !syncForConfig && !syncIdentity {
 		result.Status = SkipStatus
 		return result, nil
@@ -173,21 +172,14 @@ func (d *DataplaneWatchdog) syncDataplane(ctx context.Context) (SyncResult, erro
 		return SyncResult{}, errors.Wrap(err, "could not build dataplane proxy")
 	}
 	if syncIdentity {
-		identity, err := d.EnvoyCpCtx.IdentityManager.GetWorkloadIdentity(ctx, dpp, identity)
+		identity, err := d.EnvoyCpCtx.IdentityManager.GetWorkloadIdentity(ctx, proxy, identity)
 		if err != nil {
 			return SyncResult{}, errors.Wrap(err, "could not get identity")
 		}
 		d.workloadIdentity = identity
 	}
 	if d.workloadIdentity != nil {
-		proxy.WorkloadIdentity = &core_xds.WorkloadIdentity{
-			KRI:                d.workloadIdentity.KRI,
-			Type:               string(d.workloadIdentity.Type),
-			Cert:               d.workloadIdentity.CertPEM,
-			PrivateKey:         d.workloadIdentity.KeyPEM,
-			IdentitySecretName: d.workloadIdentity.IdentitySecretName,
-			CABundleSecretName: d.workloadIdentity.CABundleSecretName,
-		}
+		proxy.WorkloadIdentity = d.workloadIdentity
 	}
 	networking := proxy.Dataplane.Spec.Networking
 	envoyAdminMTLS, err := d.getEnvoyAdminMTLS(ctx, networking.Address, networking.AdvertisedAddress)

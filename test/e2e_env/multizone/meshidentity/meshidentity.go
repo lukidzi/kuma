@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"strings"
 
-	mesh_proto "github.com/kumahq/kuma/api/mesh/v1alpha1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"golang.org/x/sync/errgroup"
 
+	mesh_proto "github.com/kumahq/kuma/api/mesh/v1alpha1"
 	meshtrust_api "github.com/kumahq/kuma/pkg/core/resources/apis/meshtrust/api/v1alpha1"
 	"github.com/kumahq/kuma/pkg/core/resources/model/rest"
 	"github.com/kumahq/kuma/pkg/kds/hash"
@@ -211,6 +211,5 @@ spec:
 			g.Expect(err).ToNot(HaveOccurred())
 			g.Expect(resp.Instance).To(Equal("kube-test-server-zone-1"))
 		}, "30s", "1s").MustPassRepeatedly(5).Should(Succeed())
-
 	})
 }

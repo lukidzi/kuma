@@ -21,7 +21,7 @@ import (
 
 const (
 	DefaultCACertValidityPeriod = 10 * 365 * 24 * time.Hour
-	DefaultKeySize = 2048
+	DefaultKeySize              = 2048
 )
 
 func RootCAName(resourceName string) string {

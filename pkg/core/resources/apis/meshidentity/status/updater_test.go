@@ -239,5 +239,4 @@ var _ = Describe("Updater", func() {
 		Expect(resManager.Get(context.Background(), trust, store.GetByKey("identity", "default"))).To(Succeed())
 		Expect(trust.Spec.CABundles).To(HaveLen(2))
 	})
-
 })

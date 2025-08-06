@@ -32,17 +32,14 @@ func NewIdentityProviderManager(providers IdentityProviders, eventWriter events.
 }
 
 func (i *IdentityProviderManager) SelectedIdentity(dataplane *core_mesh.DataplaneResource, identities []*meshidentity_api.MeshIdentityResource) *meshidentity_api.MeshIdentityResource {
-	identity, found := meshidentity_api.Matched(dataplane.Meta.GetLabels(), identities)
-	if !found {
-		return nil
-	}
+	identity, _ := meshidentity_api.Matched(dataplane.Meta.GetLabels(), identities)
 	return identity
 }
 
-func (i *IdentityProviderManager) GetWorkloadIdentity(ctx context.Context, dataplane *core_mesh.DataplaneResource, identity *meshidentity_api.MeshIdentityResource) (*xds.WorkloadIdentity, error) {
+func (i *IdentityProviderManager) GetWorkloadIdentity(ctx context.Context, proxy *xds.Proxy, identity *meshidentity_api.MeshIdentityResource) (*xds.WorkloadIdentity, error) {
 	if identity == nil {
 		i.eventWriter.Send(events.WorkloadIdentityChangedEvent{
-			ResourceKey: model.MetaToResourceKey(dataplane.GetMeta()),
+			ResourceKey: model.MetaToResourceKey(proxy.Dataplane.GetMeta()),
 			Operation:   events.Delete,
 		})
 		return nil, nil
@@ -52,23 +49,23 @@ func (i *IdentityProviderManager) GetWorkloadIdentity(ctx context.Context, datap
 		i.logger.V(1).Info("identity hasn't been initialized yet", "identity", identity.Meta.GetName())
 		return nil, nil
 	}
-	i.logger.V(1).Info("providing identity", "identity", identity.Meta.GetName(), "dataplane", dataplane.Meta.GetName())
+	i.logger.V(1).Info("providing identity", "identity", identity.Meta.GetName(), "dataplane", proxy.Dataplane.Meta.GetName())
 	provider, found := i.providers[string(identity.Spec.Provider.Type)]
 	if !found {
 		return nil, fmt.Errorf("identity provider %s not found", identity.Spec.Provider.Type)
 	}
 
-	trustDomain, err := identity.Spec.GetTrustDomain(dataplane.GetMeta(), i.zone)
+	trustDomain, err := identity.Spec.GetTrustDomain(proxy.Dataplane.GetMeta(), i.zone)
 	if err != nil {
 		return nil, err
 	}
-	workloadIdentity, err := provider.CreateIdentity(ctx, identity, dataplane.Meta, trustDomain)
+	workloadIdentity, err := provider.CreateIdentity(ctx, identity, proxy, trustDomain)
 	if err != nil {
 		return nil, err
 	}
 	// TODO: should we send it after the config is reconciled?
 	i.eventWriter.Send(events.WorkloadIdentityChangedEvent{
-		ResourceKey:    model.MetaToResourceKey(dataplane.GetMeta()),
+		ResourceKey:    model.MetaToResourceKey(proxy.Dataplane.GetMeta()),
 		Operation:      events.Create,
 		GenerationTime: workloadIdentity.GenerationTime,
 		ExpirationTime: workloadIdentity.ExpirationTime,

@@ -7,8 +7,8 @@ import (
 	envoy_auth "github.com/envoyproxy/go-control-plane/envoy/extensions/transport_sockets/tls/v3"
 	"google.golang.org/protobuf/types/known/anypb"
 
+	"github.com/kumahq/kuma/pkg/core"
 	core_plugins "github.com/kumahq/kuma/pkg/core/plugins"
-	meshidentity_api "github.com/kumahq/kuma/pkg/core/resources/apis/meshidentity/api/v1alpha1"
 	core_xds "github.com/kumahq/kuma/pkg/core/xds"
 	bldrs_auth "github.com/kumahq/kuma/pkg/envoy/builders/auth"
 	bldrs_core "github.com/kumahq/kuma/pkg/envoy/builders/core"
@@ -16,7 +16,7 @@ import (
 	"github.com/kumahq/kuma/pkg/xds/generator/system_names"
 )
 
-const OriginWorkloadIdentity = "trust"
+const OriginTrust = "trust"
 
 var _ core_plugins.CoreResourcePlugin = &plugin{}
 
@@ -30,29 +30,26 @@ func (p *plugin) Generate(rs *core_xds.ResourceSet, xdsCtx xds_context.Context, 
 	if proxy.WorkloadIdentity == nil {
 		return nil
 	}
-	// add identity secret
-	switch proxy.WorkloadIdentity.Type {
-	case string(meshidentity_api.BundledType):
+	switch proxy.WorkloadIdentity.ManageType {
+	case core_xds.KumaManagedType:
 		// add validation context secret
 		if len(xdsCtx.Mesh.TrustsByTrustDomain) > 0 {
-			config, err := validationCtx(xdsCtx, proxy)
+			config, err := validationCtx(xdsCtx)
 			if err != nil {
 				return err
 			}
+			core.Log.Info("create trust", "config", config)
 			rs.Add(&core_xds.Resource{
 				Name:     config.Name,
-				Origin:   OriginWorkloadIdentity,
+				Origin:   OriginTrust,
 				Resource: config,
 			})
 		}
-	// Spire configures everything by SDS so we cannot add here anything
-	case string(meshidentity_api.SpireType):
-		return nil
 	}
 	return nil
 }
 
-func validationCtx(xdsCtx xds_context.Context, proxy *core_xds.Proxy) (*envoy_auth.Secret, error) {
+func validationCtx(xdsCtx xds_context.Context) (*envoy_auth.Secret, error) {
 	validatorsPerTrustDomain := []*envoy_auth.SPIFFECertValidatorConfig_TrustDomain{}
 	for domain, trusts := range xdsCtx.Mesh.TrustsByTrustDomain {
 		// concatenate multiple CAs

@@ -131,13 +131,13 @@ func (s *StatusUpdater) updateStatus(ctx context.Context) error {
 		}
 		log := s.logger.WithValues("meshservice", ms.GetMeta().GetName(), "mesh", ms.GetMeta().GetMesh())
 		var changeReasons []string
-		identities := s.buildIdentities(dpps, meshIdentities.Items)
+		mesh := meshByKey[core_model.ResourceKey{Name: ms.Meta.GetMesh()}]
+		identities := s.buildIdentities(dpps, meshIdentities.Items, mesh)
 		if !reflect.DeepEqual(pointer.Deref(ms.Spec.Identities), identities) {
 			changeReasons = append(changeReasons, "identities")
 			ms.Spec.Identities = &identities
 		}
 
-		mesh := meshByKey[core_model.ResourceKey{Name: ms.Meta.GetMesh()}]
 		tls := s.buildTLS(ms.Status.TLS, dpps, insightsByKey, mesh, meshIdentities.Items, trustDomains)
 		if !reflect.DeepEqual(ms.Status.TLS, tls) {
 			changeReasons = append(changeReasons, "tls status")
@@ -276,12 +276,15 @@ func (s *StatusUpdater) buildTLS(
 	}
 }
 
-func (s *StatusUpdater) buildIdentities(dpps []*core_mesh.DataplaneResource, meshIdentities []*meshidentity_api.MeshIdentityResource) []meshservice_api.MeshServiceIdentity {
+func (s *StatusUpdater) buildIdentities(dpps []*core_mesh.DataplaneResource, meshIdentities []*meshidentity_api.MeshIdentityResource, mesh *core_mesh.MeshResource) []meshservice_api.MeshServiceIdentity {
 	serviceTagIdentities := map[string]struct{}{}
 	spiffeIDs := map[string]struct{}{}
 	for _, dpp := range dpps {
-		for service := range dpp.Spec.TagSet()[mesh_proto.ServiceTag] {
-			serviceTagIdentities[service] = struct{}{}
+		// we don't need to build old identities if we don't have mTLS on Mesh resource
+		if mesh.MTLSEnabled() {
+			for service := range dpp.Spec.TagSet()[mesh_proto.ServiceTag] {
+				serviceTagIdentities[service] = struct{}{}
+			}
 		}
 		if identity, matched := meshidentity_api.Matched(dpp.Meta.GetLabels(), meshIdentities); matched {
 			if identity.Status.IsInitialized() {

@@ -121,6 +121,7 @@ func New(
 			controlPlaneURL, caCert, envoyAdminPort, cfg.SidecarContainer.DataplaneContainer,
 			cfg.BuiltinDNS, cfg.SidecarContainer.WaitForDataplaneReady, sidecarContainersEnabled,
 			cfg.VirtualProbesEnabled, cfg.ApplicationProbeProxyPort, cfg.UnifiedResourceNamingEnabled,
+			cfg.Spire.Enabled,
 		),
 		systemNamespace: systemNamespace,
 	}, nil
@@ -165,6 +166,18 @@ func (i *KumaInjector) InjectKuma(ctx context.Context, pod *kube_core.Pod) error
 	}
 
 	pod.Spec.Volumes = append(pod.Spec.Volumes, volumeInitTmp, volumeSidecarTmp)
+
+	if i.cfg.Spire.Enabled {
+		pod.Spec.Volumes = append(pod.Spec.Volumes, kube_core.Volume{
+			Name: "kuma-spire-agent-socket",
+			VolumeSource: kube_core.VolumeSource{
+				CSI: &kube_core.CSIVolumeSource{
+					Driver:   "csi.spiffe.io",
+					ReadOnly: pointer.To(true),
+				},
+			},
+		})
+	}
 
 	patchedContainer, err := i.applyCustomPatches(logger, container, sidecarPatches)
 	if err != nil {
@@ -544,6 +557,10 @@ func (i *KumaInjector) NewVolumeMounts(pod *kube_core.Pod) ([]kube_core.VolumeMo
 		}
 
 		return nil, errors.Errorf("volume (%s) specified for %s but volume does not exist in pod spec", volumeName, metadata.KumaSidecarTokenVolumeAnnotation)
+	}
+
+	if i.cfg.Spire.Enabled {
+		out = append(out, kube_core.VolumeMount{Name: "kuma-spire-agent-socket", MountPath: i.cfg.Spire.MountPath, ReadOnly: true})
 	}
 
 	// If not specified with the above annotation, instead query each container in the pod to find a

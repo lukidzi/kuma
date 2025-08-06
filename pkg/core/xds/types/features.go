@@ -33,3 +33,7 @@ const FeatureBindOutbounds string = "feature-bind-outbounds"
 // proxy passthrough, and system format for internal Kuma resources that users typically
 // don't need to care about unless debugging Kuma.
 const FeatureUnifiedResourceNaming string = "feature-unified-resource-naming"
+
+// SpireSupported indicates whether the sidecar has mounted a volume that includes the socket for the Spire agent to retrieve its identity.
+// Currently supported only on Kubernetes.
+const FeatureSpireSupported string = "feature-spire-supported"

@@ -6,6 +6,7 @@ import (
 	"os"
 	"path"
 
+	envoy_tls "github.com/envoyproxy/go-control-plane/envoy/extensions/transport_sockets/tls/v3"
 	envoy_resource "github.com/envoyproxy/go-control-plane/pkg/resource/v3"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -20,6 +21,9 @@ import (
 	core_model "github.com/kumahq/kuma/pkg/core/resources/model"
 	core_xds "github.com/kumahq/kuma/pkg/core/xds"
 	xds_types "github.com/kumahq/kuma/pkg/core/xds/types"
+	bldrs_common "github.com/kumahq/kuma/pkg/envoy/builders/common"
+	bldrs_core "github.com/kumahq/kuma/pkg/envoy/builders/core"
+	bldrs_tls "github.com/kumahq/kuma/pkg/envoy/builders/tls"
 	core_rules "github.com/kumahq/kuma/pkg/plugins/policies/core/rules"
 	"github.com/kumahq/kuma/pkg/plugins/policies/core/rules/inbound"
 	"github.com/kumahq/kuma/pkg/plugins/policies/core/rules/subsetutils"
@@ -57,9 +61,9 @@ func getResource(
 
 var _ = Describe("MeshTLS", func() {
 	type testCase struct {
-		caseName    string
-		meshBuilder *builders.MeshBuilder
-		meshService bool
+		caseName         string
+		meshBuilder      *builders.MeshBuilder
+		meshService      bool
 		workloadIdentity *core_xds.WorkloadIdentity
 	}
 	DescribeTable("should generate proper Envoy config",
@@ -155,16 +159,38 @@ var _ = Describe("MeshTLS", func() {
 			meshService: true,
 			workloadIdentity: &core_xds.WorkloadIdentity{
 				KRI: kri.Identifier{ResourceType: meshidentity_api.MeshIdentityType, Mesh: "default", Zone: "default", Name: "my-identity"},
+				IdentitySourceConfigurer: func() bldrs_common.Configurer[envoy_tls.SdsSecretConfig] {
+					return bldrs_tls.SdsSecretConfigSource(
+						"my-secret-name",
+						bldrs_core.NewConfigSource().Configure(bldrs_core.Sds()),
+					)
+				},
+				ValidationSourceConfigurer: func() bldrs_common.Configurer[envoy_tls.SdsSecretConfig] {
+					return bldrs_tls.SdsSecretConfigSource(
+						"ca-bundle",
+						bldrs_core.NewConfigSource().Configure(bldrs_core.Sds()),
+					)
+				},
 			},
 		}),
-		Entry("permissive based on workload identity and custom secret names", testCase{
-			caseName:    "permissive-with-workload-identity-custom-secrets",
+		Entry("permissive based on workload identity and custom functions", testCase{
+			caseName:    "permissive-with-workload-identity-custom-functions",
 			meshBuilder: samples.MeshMTLSBuilder(),
 			meshService: true,
 			workloadIdentity: &core_xds.WorkloadIdentity{
 				KRI: kri.Identifier{ResourceType: meshidentity_api.MeshIdentityType, Mesh: "default", Zone: "default", Name: "my-identity"},
-				IdentitySecretName: pointer.To("spiffe://my-identifier"),
-				CABundleSecretName: pointer.To("bundle"),
+				IdentitySourceConfigurer: func() bldrs_common.Configurer[envoy_tls.SdsSecretConfig] {
+					return bldrs_tls.SdsSecretConfigSource(
+						"my-secret-name",
+						bldrs_core.NewConfigSource().Configure(bldrs_core.Sds()),
+					)
+				},
+				ValidationSourceConfigurer: func() bldrs_common.Configurer[envoy_tls.SdsSecretConfig] {
+					return bldrs_tls.SdsSecretConfigSource(
+						"ca-bundle",
+						bldrs_core.NewConfigSource().Configure(bldrs_core.Sds()),
+					)
+				},
 			},
 		}),
 	)

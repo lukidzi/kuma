@@ -18,9 +18,13 @@ import (
 	"time"
 
 	envoy_tls "github.com/envoyproxy/go-control-plane/envoy/extensions/transport_sockets/tls/v3"
-	bldrs_auth "github.com/kumahq/kuma/pkg/envoy/builders/auth"
+	"github.com/go-logr/logr"
+	"github.com/pkg/errors"
+	"github.com/spiffe/go-spiffe/v2/spiffeid"
+	k8s "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	system_proto "github.com/kumahq/kuma/api/system/v1alpha1"
+	"github.com/kumahq/kuma/pkg/core"
 	"github.com/kumahq/kuma/pkg/core/kri"
 	meshidentity_api "github.com/kumahq/kuma/pkg/core/resources/apis/meshidentity/api/v1alpha1"
 	"github.com/kumahq/kuma/pkg/core/resources/apis/meshidentity/providers"
@@ -29,6 +33,7 @@ import (
 	"github.com/kumahq/kuma/pkg/core/resources/model"
 	core_store "github.com/kumahq/kuma/pkg/core/resources/store"
 	"github.com/kumahq/kuma/pkg/core/xds"
+	bldrs_auth "github.com/kumahq/kuma/pkg/envoy/builders/auth"
 	bldrs_common "github.com/kumahq/kuma/pkg/envoy/builders/common"
 	bldrs_core "github.com/kumahq/kuma/pkg/envoy/builders/core"
 	bldrs_tls "github.com/kumahq/kuma/pkg/envoy/builders/tls"
@@ -38,9 +43,6 @@ import (
 	util_proto "github.com/kumahq/kuma/pkg/util/proto"
 	"github.com/kumahq/kuma/pkg/xds/cache/once"
 	"github.com/kumahq/kuma/pkg/xds/generator/system_names"
-	"github.com/pkg/errors"
-	"github.com/spiffe/go-spiffe/v2/spiffeid"
-	k8s "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 const (
@@ -55,6 +57,7 @@ var DefaultWorkloadCertValidityPeriod = k8s.Duration{Duration: 24 * time.Hour}
 var _ providers.IdentityProvider = &bundledIdentityProvider{}
 
 type bundledIdentityProvider struct {
+	logger          logr.Logger
 	roSecretManager manager.ReadOnlyResourceManager
 	secretManager   manager.ResourceManager
 	cache           *once.Cache
@@ -65,7 +68,9 @@ func NewBundledIdentityProvider(roSecretManager manager.ReadOnlyResourceManager,
 	if err != nil {
 		return nil, err
 	}
+	logger := core.Log.WithName("identity-provider").WithName("bundled")
 	return &bundledIdentityProvider{
+		logger:          logger,
 		roSecretManager: roSecretManager,
 		secretManager:   secretManager,
 		cache:           c,
@@ -89,11 +94,13 @@ func (b *bundledIdentityProvider) Validate(ctx context.Context, identity *meshid
 			return errors.Errorf("self-signed certificates are not allowed")
 		}
 	}
+	b.logger.V(1).Info("identity is valid", "identity", model.MetaToResourceKey(identity.GetMeta()))
 	return nil
 }
 
 func (b *bundledIdentityProvider) Initialize(ctx context.Context, identity *meshidentity_api.MeshIdentityResource, trustDomain string) error {
 	if pointer.DerefOr(identity.Spec.Provider.Bundled.Autogenerate.Enabled, false) {
+		b.logger.V(1).Info("initializing provider", "identity", model.MetaToResourceKey(identity.GetMeta()), "trustDomain", trustDomain)
 		keyPair, err := GenerateRootCA(trustDomain)
 		if err != nil {
 			return err
@@ -119,6 +126,7 @@ func (b *bundledIdentityProvider) Initialize(ctx context.Context, identity *mesh
 				return err
 			}
 		}
+		b.logger.V(1).Info("initialized", "identity", model.MetaToResourceKey(identity.GetMeta()), "trustDomain", trustDomain)
 	}
 	return nil
 }
@@ -185,8 +193,8 @@ func (b *bundledIdentityProvider) getCAKeyPair(ctx context.Context, identity *me
 	return ca.(*util_tls.KeyPair), nil
 }
 
-func (b *bundledIdentityProvider) CreateIdentity(ctx context.Context, identity *meshidentity_api.MeshIdentityResource, meta model.ResourceMeta, trustDomain string) (*xds.WorkloadIdentity, error) {
-	pair, err := b.getCAKeyPair(ctx, identity, meta.GetMesh())
+func (b *bundledIdentityProvider) CreateIdentity(ctx context.Context, identity *meshidentity_api.MeshIdentityResource, proxy *xds.Proxy, trustDomain string) (*xds.WorkloadIdentity, error) {
+	pair, err := b.getCAKeyPair(ctx, identity, proxy.Dataplane.Meta.GetMesh())
 	if err != nil {
 		return nil, err
 	}
@@ -204,7 +212,7 @@ func (b *bundledIdentityProvider) CreateIdentity(ctx context.Context, identity *
 		return nil, err
 	}
 
-	spiffeID, err := identity.Spec.GetSpiffeID(trustDomain, meta)
+	spiffeID, err := identity.Spec.GetSpiffeID(trustDomain, proxy.Dataplane.GetMeta())
 	if err != nil {
 		return nil, err
 	}
@@ -213,6 +221,7 @@ func (b *bundledIdentityProvider) CreateIdentity(ctx context.Context, identity *
 		return nil, err
 	}
 	certValidity := pointer.DerefOr(identity.Spec.Provider.Bundled.CertificateParameters.Expiry, DefaultWorkloadCertValidityPeriod)
+	b.logger.V(1).Info("creating an identity", "dpp", model.MetaToResourceKey(proxy.Dataplane.GetMeta()), "spiffeId", spiffeID, "identity", model.MetaToResourceKey(identity.GetMeta()))
 
 	template := &x509.Certificate{
 		SerialNumber: serialNumber,
@@ -242,21 +251,21 @@ func (b *bundledIdentityProvider) CreateIdentity(ctx context.Context, identity *
 	if err != nil {
 		return nil, err
 	}
+	b.logger.V(1).Info("identity created", "dpp", model.MetaToResourceKey(proxy.Dataplane.GetMeta()), "spiffeId", spiffeID, "identity", model.MetaToResourceKey(identity.GetMeta()))
 
 	return &xds.WorkloadIdentity{
 		KRI:                        identifier,
-		Type:                       string(meshidentity_api.BundledType),
+		ManageType:                 xds.KumaManagedType,
 		ExpirationTime:             template.NotAfter,
 		GenerationTime:             now,
-		KeyPair:                    *identityPair,
 		IdentitySourceConfigurer:   sourceConfigurer(identifier.String()),
 		ValidationSourceConfigurer: sourceConfigurer(system_names.SystemResourceNameCABundle),
 		AdditionalResources:        resources,
 	}, nil
 }
 
-func additionalResources(secretName string, keyPair *util_tls.KeyPair) ([]*xds.Resource, error) {
-	resources := []*xds.Resource{}
+func additionalResources(secretName string, keyPair *util_tls.KeyPair) (*xds.ResourceSet, error) {
+	resources := xds.NewResourceSet()
 	identitySecret, err := bldrs_auth.NewSecret().
 		Configure(bldrs_auth.Name(secretName)).
 		Configure(bldrs_auth.TlsCertificate(
@@ -270,7 +279,8 @@ func additionalResources(secretName string, keyPair *util_tls.KeyPair) ([]*xds.R
 	if err != nil {
 		return nil, err
 	}
-	resources = append(resources, &xds.Resource{
+	core.Log.Info("TEST", "identitySecret", identitySecret)
+	resources.Add(&xds.Resource{
 		Name:     secretName,
 		Origin:   OriginIdentityBundled,
 		Resource: identitySecret,

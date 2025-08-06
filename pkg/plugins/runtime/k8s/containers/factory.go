@@ -37,6 +37,7 @@ type DataplaneProxyFactory struct {
 	virtualProbesEnabled         bool
 	applicationProbeProxyPort    uint32
 	unifiedResourceNamingEnabled bool
+	spireEnabled                 bool
 }
 
 func NewDataplaneProxyFactory(
@@ -50,6 +51,7 @@ func NewDataplaneProxyFactory(
 	virtualProbesEnabled bool,
 	applicationProbeProxyPort uint32,
 	unifiedResourceNamingEnabled bool,
+	spireEnabled bool,
 ) *DataplaneProxyFactory {
 	return &DataplaneProxyFactory{
 		ControlPlaneURL:              controlPlaneURL,
@@ -62,6 +64,7 @@ func NewDataplaneProxyFactory(
 		virtualProbesEnabled:         virtualProbesEnabled,
 		applicationProbeProxyPort:    applicationProbeProxyPort,
 		unifiedResourceNamingEnabled: unifiedResourceNamingEnabled,
+		spireEnabled:                 spireEnabled,
 	}
 }
 
@@ -335,6 +338,12 @@ func (i *DataplaneProxyFactory) sidecarEnvVars(mesh string, podAnnotations map[s
 	if i.unifiedResourceNamingEnabled {
 		envVars["KUMA_DATAPLANE_RUNTIME_UNIFIED_RESOURCE_NAMING_ENABLED"] = kube_core.EnvVar{
 			Name:  "KUMA_DATAPLANE_RUNTIME_UNIFIED_RESOURCE_NAMING_ENABLED",
+			Value: "true",
+		}
+	}
+	if i.spireEnabled {
+		envVars["KUMA_DATAPLANE_RUNTIME_SPIRE_ENABLED"] = kube_core.EnvVar{
+			Name:  "KUMA_DATAPLANE_RUNTIME_SPIRE_ENABLED",
 			Value: "true",
 		}
 	}

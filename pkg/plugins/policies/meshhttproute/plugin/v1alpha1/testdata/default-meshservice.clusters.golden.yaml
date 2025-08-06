@@ -24,12 +24,12 @@ resources:
                   exact: spiffe://default.demo.mesh.local/ns/demo/sa/backend
                 sanType: URI
             validationContextSdsSecretConfig:
-              name: bundle
+              name: ca-bundle
               sdsConfig:
                 ads: {}
                 resourceApiVersion: V3
           tlsCertificateSdsSecretConfigs:
-          - name: my-identity
+          - name: my-secret-name
             sdsConfig:
               ads: {}
               resourceApiVersion: V3

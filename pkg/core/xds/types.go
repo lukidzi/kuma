@@ -9,17 +9,17 @@ import (
 
 	envoy_config_core "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	tlsv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/transport_sockets/tls/v3"
-	"github.com/kumahq/kuma/pkg/core"
-	bldrs_common "github.com/kumahq/kuma/pkg/envoy/builders/common"
 	"github.com/pkg/errors"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	mesh_proto "github.com/kumahq/kuma/api/mesh/v1alpha1"
+	"github.com/kumahq/kuma/pkg/core"
 	"github.com/kumahq/kuma/pkg/core/kri"
 	core_mesh "github.com/kumahq/kuma/pkg/core/resources/apis/mesh"
 	core_model "github.com/kumahq/kuma/pkg/core/resources/model"
 	"github.com/kumahq/kuma/pkg/core/resources/registry"
 	xds_types "github.com/kumahq/kuma/pkg/core/xds/types"
+	bldrs_common "github.com/kumahq/kuma/pkg/envoy/builders/common"
 	util_tls "github.com/kumahq/kuma/pkg/tls"
 	tproxy_dp "github.com/kumahq/kuma/pkg/transparentproxy/config/dataplane"
 )
@@ -203,21 +203,26 @@ type Proxy struct {
 	InternalAddresses []InternalAddress
 }
 
+type ManageType string
+
+const (
+	KumaManagedType     ManageType = "kuma"
+	ExternalManagedType ManageType = "external"
+)
+
 type WorkloadIdentity struct {
-	KRI                        kri.Identifier
+	KRI kri.Identifier
 	// or creator function?
-	Type                       string
+	ManageType ManageType
 	// Expiration
-	ExpirationTime             time.Time
-	GenerationTime             time.Time
-	// Cert and Private Key
-	util_tls.KeyPair
-	//CommonTlsContext configurer
+	ExpirationTime time.Time
+	GenerationTime time.Time
+	// CommonTlsContext configurer
 	IdentitySourceConfigurer   func() bldrs_common.Configurer[tlsv3.SdsSecretConfig]
 	ValidationSourceConfigurer func() bldrs_common.Configurer[tlsv3.SdsSecretConfig]
 
 	// Additionalresources
-	AdditionalResources []*Resource
+	AdditionalResources *ResourceSet
 }
 
 func (c *WorkloadIdentity) CertLifetime() time.Duration {

@@ -15,7 +15,6 @@ import (
 	meshidentity_api "github.com/kumahq/kuma/pkg/core/resources/apis/meshidentity/api/v1alpha1"
 	"github.com/kumahq/kuma/pkg/core/resources/apis/meshidentity/providers"
 	"github.com/kumahq/kuma/pkg/core/resources/manager"
-	"github.com/kumahq/kuma/pkg/core/resources/model"
 	core_model "github.com/kumahq/kuma/pkg/core/resources/model"
 	core_xds "github.com/kumahq/kuma/pkg/core/xds"
 	"github.com/kumahq/kuma/pkg/dns/vips"
@@ -46,7 +45,7 @@ func (s *staticSnapshotReconciler) Clear(proxyId *core_xds.ProxyId) error {
 }
 
 type staticIdentityProvider struct {
-	proxy *core_xds.Proxy
+	_ *core_xds.Proxy
 }
 
 func (s *staticIdentityProvider) Validate(_ context.Context, _ *meshidentity_api.MeshIdentityResource) error {
@@ -57,7 +56,7 @@ func (s *staticIdentityProvider) Initialize(_ context.Context, _ *meshidentity_a
 	return nil
 }
 
-func (s *staticIdentityProvider) CreateIdentity(_ context.Context, _ *meshidentity_api.MeshIdentityResource, _ model.ResourceMeta, _ string) (*providers.WorkloadIdentity, error) {
+func (s *staticIdentityProvider) CreateIdentity(_ context.Context, _ *meshidentity_api.MeshIdentityResource, _ *core_xds.Proxy, _ string) (*core_xds.WorkloadIdentity, error) {
 	return nil, nil
 }
 

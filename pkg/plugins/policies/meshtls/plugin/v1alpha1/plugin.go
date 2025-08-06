@@ -332,14 +332,20 @@ func downstreamTLSContext(xdsCtx xds_context.Context, proxy *core_xds.Proxy, con
 		return nil, nil
 	}
 	sanMatchers := []*bldrs_common.Builder[envoy_tls.SubjectAltNameMatcher]{}
-	for trustDomain := range xdsCtx.Mesh.TrustsByTrustDomain {
-		id, err := spiffeid.TrustDomainFromString(trustDomain)
-		if err != nil {
-			return nil, err
+	// Spire delivers SANs validator and we don't support MeshTrust with spire
+	// TODO: do we need this validator since we have a better validator of CA matched with TrustDomain
+	// check: pkg/core/resources/apis/meshtrust/generator/v1alpha1/secrets.go
+	if proxy.WorkloadIdentity.ManageType == core_xds.KumaManagedType {
+		for trustDomain := range xdsCtx.Mesh.TrustsByTrustDomain {
+			id, err := spiffeid.TrustDomainFromString(trustDomain)
+			if err != nil {
+				return nil, err
+			}
+			conf := bldrs_tls.NewSubjectAltNameMatcher().Configure(bldrs_tls.URI(bldrs_matcher.NewStringMatcher().Configure(bldrs_matcher.PrefixMatcher(id.IDString()))))
+			sanMatchers = append(sanMatchers, conf)
 		}
-		conf := bldrs_tls.NewSubjectAltNameMatcher().Configure(bldrs_tls.URI(bldrs_matcher.NewStringMatcher().Configure(bldrs_matcher.PrefixMatcher(id.IDString()))))
-		sanMatchers = append(sanMatchers, conf)
 	}
+
 	downstreamCtx, err := bldrs_tls.NewDownstreamTLSContext().
 		Configure(
 			bldrs_tls.DownstreamCommonTlsContext(
@@ -360,7 +366,7 @@ func downstreamTLSContext(xdsCtx xds_context.Context, proxy *core_xds.Proxy, con
 							)),
 						).Configure(bldrs_tls.ValidationContextSdsSecretConfig(
 							bldrs_tls.NewTlsCertificateSdsSecretConfigs().Configure(
-								proxy.WorkloadIdentity.IdentitySourceConfigurer())),
+								proxy.WorkloadIdentity.ValidationSourceConfigurer())),
 						))).
 					Configure(bldrs_tls.TlsCertificateSdsSecretConfigs([]*bldrs_common.Builder[envoy_tls.SdsSecretConfig]{
 						bldrs_tls.NewTlsCertificateSdsSecretConfigs().Configure(

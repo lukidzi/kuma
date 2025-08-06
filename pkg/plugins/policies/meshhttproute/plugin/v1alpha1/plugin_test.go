@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	envoy_tls "github.com/envoyproxy/go-control-plane/envoy/extensions/transport_sockets/tls/v3"
 	envoy_resource "github.com/envoyproxy/go-control-plane/pkg/resource/v3"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -34,6 +35,9 @@ import (
 	core_xds "github.com/kumahq/kuma/pkg/core/xds"
 	xds_types "github.com/kumahq/kuma/pkg/core/xds/types"
 	"github.com/kumahq/kuma/pkg/dns/vips"
+	bldrs_common "github.com/kumahq/kuma/pkg/envoy/builders/common"
+	bldrs_core "github.com/kumahq/kuma/pkg/envoy/builders/core"
+	bldrs_tls "github.com/kumahq/kuma/pkg/envoy/builders/tls"
 	"github.com/kumahq/kuma/pkg/metrics"
 	core_rules "github.com/kumahq/kuma/pkg/plugins/policies/core/rules"
 	"github.com/kumahq/kuma/pkg/plugins/policies/core/rules/outbound"
@@ -250,12 +254,20 @@ var _ = Describe("MeshHTTPRoute", func() {
 						WithInboundOfTags(mesh_proto.ServiceTag, "web", mesh_proto.ProtocolTag, "http"),
 					).
 					WithWorkloadIdentity(&core_xds.WorkloadIdentity{
-						KRI: kri.Identifier{ResourceType: meshidentity_api.MeshIdentityType, Name: "identity", Namespace: "kuma-system"},
-						Type: string(meshidentity_api.BundledType),
-						Cert: []byte("123"),
-						PrivateKey: []byte("456"),
-						IdentitySecretName: pointer.To("my-identity"),
-						CABundleSecretName: pointer.To("bundle"),
+						KRI:        kri.Identifier{ResourceType: meshidentity_api.MeshIdentityType, Name: "identity", Namespace: "kuma-system"},
+						ManageType: core_xds.KumaManagedType,
+						IdentitySourceConfigurer: func() bldrs_common.Configurer[envoy_tls.SdsSecretConfig] {
+							return bldrs_tls.SdsSecretConfigSource(
+								"my-secret-name",
+								bldrs_core.NewConfigSource().Configure(bldrs_core.Sds()),
+							)
+						},
+						ValidationSourceConfigurer: func() bldrs_common.Configurer[envoy_tls.SdsSecretConfig] {
+							return bldrs_tls.SdsSecretConfigSource(
+								"ca-bundle",
+								bldrs_core.NewConfigSource().Configure(bldrs_core.Sds()),
+							)
+						},
 					}).
 					WithOutbounds(xds_types.Outbounds{
 						{LegacyOutbound: &mesh_proto.Dataplane_Networking_Outbound{
@@ -2147,10 +2159,20 @@ var _ = Describe("MeshHTTPRoute", func() {
 					WithDataplane(samples.GatewayDataplaneBuilder()).
 					WithRouting(xds_builders.Routing().WithOutboundTargets(outboundTargets)).
 					WithWorkloadIdentity(&core_xds.WorkloadIdentity{
-						KRI: kri.Identifier{ResourceType: meshidentity_api.MeshIdentityType, Namespace: "kuma-system", Name: "identity"},
-						Cert: []byte("123"),
-						PrivateKey: []byte("123"),
-						Type: string(meshidentity_api.BundledType),
+						KRI:        kri.Identifier{ResourceType: meshidentity_api.MeshIdentityType, Namespace: "kuma-system", Name: "identity"},
+						ManageType: core_xds.KumaManagedType,
+						IdentitySourceConfigurer: func() bldrs_common.Configurer[envoy_tls.SdsSecretConfig] {
+							return bldrs_tls.SdsSecretConfigSource(
+								"my-secret-name",
+								bldrs_core.NewConfigSource().Configure(bldrs_core.Sds()),
+							)
+						},
+						ValidationSourceConfigurer: func() bldrs_common.Configurer[envoy_tls.SdsSecretConfig] {
+							return bldrs_tls.SdsSecretConfigSource(
+								"ca-bundle",
+								bldrs_core.NewConfigSource().Configure(bldrs_core.Sds()),
+							)
+						},
 					}).
 					WithPolicies(
 						xds_builders.MatchedPolicies().

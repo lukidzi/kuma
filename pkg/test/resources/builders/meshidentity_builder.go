@@ -4,14 +4,14 @@ import (
 	"context"
 	"time"
 
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
 	common_api "github.com/kumahq/kuma/api/common/v1alpha1"
 	meshidentity_api "github.com/kumahq/kuma/pkg/core/resources/apis/meshidentity/api/v1alpha1"
-	"github.com/kumahq/kuma/pkg/core/resources/model"
 	core_model "github.com/kumahq/kuma/pkg/core/resources/model"
 	"github.com/kumahq/kuma/pkg/core/resources/store"
 	test_model "github.com/kumahq/kuma/pkg/test/resources/model"
 	"github.com/kumahq/kuma/pkg/util/pointer"
-	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 type MeshIdentityBuilder struct {
@@ -39,7 +39,7 @@ func (mi *MeshIdentityBuilder) Build() *meshidentity_api.MeshIdentityResource {
 }
 
 func (mi *MeshIdentityBuilder) Create(s store.ResourceStore) error {
-	return s.Create(context.Background(), mi.Build(), store.CreateBy(model.MetaToResourceKey(mi.res.GetMeta())))
+	return s.Create(context.Background(), mi.Build(), store.CreateBy(core_model.MetaToResourceKey(mi.res.GetMeta())))
 }
 
 func (mi *MeshIdentityBuilder) Key() core_model.ResourceKey {

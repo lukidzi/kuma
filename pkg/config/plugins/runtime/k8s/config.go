@@ -105,7 +105,6 @@ func DefaultKubernetesRuntimeConfig() *KubernetesRuntimeConfig {
 			UnifiedResourceNamingEnabled: false,
 			Spire: Spire{
 				Enabled:   false,
-				Path:      "/run/spire/sockets",
 				MountPath: "/run/spire/sockets",
 			},
 		},
@@ -667,8 +666,8 @@ func (c *BuiltinDNS) Validate() error {
 type Spire struct {
 	// If true, enables mounting of SPIRE-related resources.
 	Enabled bool `json:"enabled" envconfig:"kuma_runtime_kubernetes_injector_spire_enabled"`
-	// Path to the SPIRE agent socket on the host.
-	Path string `json:"path" envconfig:"kuma_runtime_kubernetes_injector_spire_path"`
 	// MountPath is the location inside the container where the SPIRE agent socket will be mounted.
 	MountPath string `json:"mountPath" envconfig:"kuma_runtime_kubernetes_injector_spire_mount_path"`
+	// SocketFileName is the name of the socket on the host
+	SocketFileName string `json:"socketFileName" envconfig:"kuma_runtime_kubernetes_injector_spire_socket_file_name"`
 }

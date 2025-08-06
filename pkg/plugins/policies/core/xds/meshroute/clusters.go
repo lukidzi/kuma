@@ -166,7 +166,7 @@ func UpstreamTLSContext(realResourceRef *resolve.RealResourceBackendRef, meshCtx
 	}
 	validationSds := bldrs_tls.ValidationContextSdsSecretConfig(
 		bldrs_tls.NewTlsCertificateSdsSecretConfigs().Configure(
-			proxy.WorkloadIdentity.IdentitySourceConfigurer(),
+			proxy.WorkloadIdentity.ValidationSourceConfigurer(),
 		),
 	)
 	defaultValidation := bldrs_tls.DefaultValidationContext(
@@ -183,7 +183,7 @@ func UpstreamTLSContext(realResourceRef *resolve.RealResourceBackendRef, meshCtx
 		Configure(combinedValidation).
 		Configure(bldrs_tls.TlsCertificateSdsSecretConfigs([]*bldrs_common.Builder[envoy_tls.SdsSecretConfig]{
 			bldrs_tls.NewTlsCertificateSdsSecretConfigs().Configure(
-				proxy.WorkloadIdentity.ValidationSourceConfigurer(),
+				proxy.WorkloadIdentity.IdentitySourceConfigurer(),
 			),
 		})).
 		Configure(bldrs_tls.KumaAlpnProtocol())
