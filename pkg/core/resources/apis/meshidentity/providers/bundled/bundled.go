@@ -135,8 +135,8 @@ func (b *bundledIdentityProvider) GetRootCA(ctx context.Context, identity *meshi
 	bundled := pointer.Deref(identity.Spec.Provider.Bundled)
 	var err error
 	var cert []byte
-	if bundled.Autogenerate == nil || !pointer.Deref(bundled.Autogenerate.Enabled) {
-		cert, err = bundled.Certificate.ReadByControlPlane(ctx, b.secretManager, mesh)
+	if bundled.Autogenerate == nil || !pointer.Deref(bundled.Autogenerate.Enabled) && bundled.CA != nil {
+		cert, err = bundled.CA.Certificate.ReadByControlPlane(ctx, b.secretManager, mesh)
 		if err != nil {
 			return nil, err
 		}
@@ -159,12 +159,12 @@ func (b *bundledIdentityProvider) getCAKeyPair(ctx context.Context, identity *me
 		bundled := pointer.Deref(identity.Spec.Provider.Bundled)
 		var err error
 		var cert, key []byte
-		if bundled.Autogenerate == nil || !pointer.Deref(bundled.Autogenerate.Enabled) {
-			cert, err = bundled.Certificate.ReadByControlPlane(ctx, b.secretManager, mesh)
+		if (bundled.Autogenerate == nil || !pointer.Deref(bundled.Autogenerate.Enabled)) && bundled.CA != nil {
+			cert, err = bundled.CA.Certificate.ReadByControlPlane(ctx, b.secretManager, mesh)
 			if err != nil {
 				return nil, err
 			}
-			key, err = bundled.PrivateKey.ReadByControlPlane(ctx, b.secretManager, mesh)
+			key, err = bundled.CA.PrivateKey.ReadByControlPlane(ctx, b.secretManager, mesh)
 			if err != nil {
 				return nil, err
 			}

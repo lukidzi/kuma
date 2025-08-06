@@ -104,8 +104,9 @@ func DefaultKubernetesRuntimeConfig() *KubernetesRuntimeConfig {
 			NodeLabelsToCopy:             []string{"topology.kubernetes.io/zone", "topology.kubernetes.io/region", "kubernetes.io/hostname"},
 			UnifiedResourceNamingEnabled: false,
 			Spire: Spire{
-				Enabled:   false,
-				MountPath: "/run/spire/sockets",
+				Enabled:        false,
+				MountPath:      "/run/spire/sockets",
+				SocketFileName: "socket",
 			},
 		},
 		MarshalingCacheExpirationTime: config_types.Duration{Duration: 5 * time.Minute},

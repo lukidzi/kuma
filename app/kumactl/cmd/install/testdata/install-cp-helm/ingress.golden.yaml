@@ -459,7 +459,10 @@ metadata:
   annotations:
 spec:
   type: LoadBalancer
-  loadBalancerSourceRanges: [10.0.0.0/8 20.240.139.18/32 20.251.202.109/32]
+  loadBalancerSourceRanges:
+    - 10.0.0.0/8
+    - 20.240.139.18/32
+    - 20.251.202.109/32
   ports:
     - port: 10001
       protocol: TCP
