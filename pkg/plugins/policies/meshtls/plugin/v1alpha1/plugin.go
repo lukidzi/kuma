@@ -17,7 +17,6 @@ import (
 	core_xds "github.com/kumahq/kuma/pkg/core/xds"
 	xds_types "github.com/kumahq/kuma/pkg/core/xds/types"
 	bldrs_common "github.com/kumahq/kuma/pkg/envoy/builders/common"
-	bldrs_core "github.com/kumahq/kuma/pkg/envoy/builders/core"
 	bldrs_matcher "github.com/kumahq/kuma/pkg/envoy/builders/matcher"
 	bldrs_tls "github.com/kumahq/kuma/pkg/envoy/builders/tls"
 	"github.com/kumahq/kuma/pkg/plugins/policies/core/matchers"
@@ -33,7 +32,6 @@ import (
 	envoy_names "github.com/kumahq/kuma/pkg/xds/envoy/names"
 	xds_tls "github.com/kumahq/kuma/pkg/xds/envoy/tls"
 	"github.com/kumahq/kuma/pkg/xds/generator"
-	"github.com/kumahq/kuma/pkg/xds/generator/system_names"
 )
 
 var (
@@ -362,16 +360,11 @@ func downstreamTLSContext(xdsCtx xds_context.Context, proxy *core_xds.Proxy, con
 							)),
 						).Configure(bldrs_tls.ValidationContextSdsSecretConfig(
 							bldrs_tls.NewTlsCertificateSdsSecretConfigs().Configure(
-								bldrs_tls.SdsSecretConfigSource(
-									pointer.DerefOr(proxy.WorkloadIdentity.CABundleSecretName, system_names.SystemResourceNameCABundle),
-									bldrs_core.NewConfigSource().Configure(bldrs_core.Sds())))),
+								proxy.WorkloadIdentity.IdentitySourceConfigurer())),
 						))).
 					Configure(bldrs_tls.TlsCertificateSdsSecretConfigs([]*bldrs_common.Builder[envoy_tls.SdsSecretConfig]{
 						bldrs_tls.NewTlsCertificateSdsSecretConfigs().Configure(
-							bldrs_tls.SdsSecretConfigSource(
-								pointer.DerefOr(proxy.WorkloadIdentity.IdentitySecretName, proxy.WorkloadIdentity.KRI.String()),
-								bldrs_core.NewConfigSource().Configure(bldrs_core.Sds()),
-							)),
+							proxy.WorkloadIdentity.IdentitySourceConfigurer()),
 					})))).
 		Configure(bldrs_tls.RequireClientCertificate(true)).Build()
 	if err != nil {

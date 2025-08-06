@@ -10,6 +10,7 @@ import (
 	core_mesh "github.com/kumahq/kuma/pkg/core/resources/apis/mesh"
 	meshidentity_api "github.com/kumahq/kuma/pkg/core/resources/apis/meshidentity/api/v1alpha1"
 	"github.com/kumahq/kuma/pkg/core/resources/model"
+	"github.com/kumahq/kuma/pkg/core/xds"
 	"github.com/kumahq/kuma/pkg/events"
 )
 
@@ -38,7 +39,7 @@ func (i *IdentityProviderManager) SelectedIdentity(dataplane *core_mesh.Dataplan
 	return identity
 }
 
-func (i *IdentityProviderManager) GetWorkloadIdentity(ctx context.Context, dataplane *core_mesh.DataplaneResource, identity *meshidentity_api.MeshIdentityResource) (*WorkloadIdentity, error) {
+func (i *IdentityProviderManager) GetWorkloadIdentity(ctx context.Context, dataplane *core_mesh.DataplaneResource, identity *meshidentity_api.MeshIdentityResource) (*xds.WorkloadIdentity, error) {
 	if identity == nil {
 		i.eventWriter.Send(events.WorkloadIdentityChangedEvent{
 			ResourceKey: model.MetaToResourceKey(dataplane.GetMeta()),

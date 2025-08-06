@@ -1,6 +1,7 @@
 package bundled
 
 import (
+	"bytes"
 	"context"
 	"crypto"
 	"crypto/ecdsa"
@@ -16,9 +17,8 @@ import (
 	"reflect"
 	"time"
 
-	"github.com/pkg/errors"
-	"github.com/spiffe/go-spiffe/v2/spiffeid"
-	k8s "k8s.io/apimachinery/pkg/apis/meta/v1"
+	envoy_tls "github.com/envoyproxy/go-control-plane/envoy/extensions/transport_sockets/tls/v3"
+	bldrs_auth "github.com/kumahq/kuma/pkg/envoy/builders/auth"
 
 	system_proto "github.com/kumahq/kuma/api/system/v1alpha1"
 	"github.com/kumahq/kuma/pkg/core/kri"
@@ -28,17 +28,26 @@ import (
 	"github.com/kumahq/kuma/pkg/core/resources/manager"
 	"github.com/kumahq/kuma/pkg/core/resources/model"
 	core_store "github.com/kumahq/kuma/pkg/core/resources/store"
+	"github.com/kumahq/kuma/pkg/core/xds"
+	bldrs_common "github.com/kumahq/kuma/pkg/envoy/builders/common"
+	bldrs_core "github.com/kumahq/kuma/pkg/envoy/builders/core"
+	bldrs_tls "github.com/kumahq/kuma/pkg/envoy/builders/tls"
 	"github.com/kumahq/kuma/pkg/metrics"
 	util_tls "github.com/kumahq/kuma/pkg/tls"
 	"github.com/kumahq/kuma/pkg/util/pointer"
 	util_proto "github.com/kumahq/kuma/pkg/util/proto"
 	"github.com/kumahq/kuma/pkg/xds/cache/once"
+	"github.com/kumahq/kuma/pkg/xds/generator/system_names"
+	"github.com/pkg/errors"
+	"github.com/spiffe/go-spiffe/v2/spiffeid"
+	k8s "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 const (
 	DefaultAllowedClockSkew = 10 * time.Second
 	cacheExpirationTime     = 5 * time.Second
 	caCacheEntryKey         = "ca_pair"
+	OriginIdentityBundled   = "IdentityBundled"
 )
 
 var DefaultWorkloadCertValidityPeriod = k8s.Duration{Duration: 24 * time.Hour}
@@ -176,7 +185,7 @@ func (b *bundledIdentityProvider) getCAKeyPair(ctx context.Context, identity *me
 	return ca.(*util_tls.KeyPair), nil
 }
 
-func (b *bundledIdentityProvider) CreateIdentity(ctx context.Context, identity *meshidentity_api.MeshIdentityResource, meta model.ResourceMeta, trustDomain string) (*providers.WorkloadIdentity, error) {
+func (b *bundledIdentityProvider) CreateIdentity(ctx context.Context, identity *meshidentity_api.MeshIdentityResource, meta model.ResourceMeta, trustDomain string) (*xds.WorkloadIdentity, error) {
 	pair, err := b.getCAKeyPair(ctx, identity, meta.GetMesh())
 	if err != nil {
 		return nil, err
@@ -228,13 +237,54 @@ func (b *bundledIdentityProvider) CreateIdentity(ctx context.Context, identity *
 	if err != nil {
 		return nil, err
 	}
-	return &providers.WorkloadIdentity{
-		KRI:            kri.From(identity, ""),
-		Type:           meshidentity_api.BundledType,
-		ExpirationTime: template.NotAfter,
-		GenerationTime: now,
-		KeyPair:        identityPair,
+	identifier := kri.From(identity, "")
+	resources, err := additionalResources(identifier.String(), identityPair)
+	if err != nil {
+		return nil, err
+	}
+
+	return &xds.WorkloadIdentity{
+		KRI:                        identifier,
+		Type:                       string(meshidentity_api.BundledType),
+		ExpirationTime:             template.NotAfter,
+		GenerationTime:             now,
+		KeyPair:                    *identityPair,
+		IdentitySourceConfigurer:   sourceConfigurer(identifier.String()),
+		ValidationSourceConfigurer: sourceConfigurer(system_names.SystemResourceNameCABundle),
+		AdditionalResources:        resources,
 	}, nil
+}
+
+func additionalResources(secretName string, keyPair *util_tls.KeyPair) ([]*xds.Resource, error) {
+	resources := []*xds.Resource{}
+	identitySecret, err := bldrs_auth.NewSecret().
+		Configure(bldrs_auth.Name(secretName)).
+		Configure(bldrs_auth.TlsCertificate(
+			bldrs_auth.NewTlsCertificate().
+				Configure(bldrs_auth.CertificateChain(
+					bldrs_core.NewDataSource().
+						Configure(bldrs_core.InlineBytes(bytes.Join([][]byte{keyPair.CertPEM}, []byte("\n")))))).
+				Configure(bldrs_auth.PrivateKey(
+					bldrs_core.NewDataSource().
+						Configure(bldrs_core.InlineBytes(keyPair.KeyPEM)))))).Build()
+	if err != nil {
+		return nil, err
+	}
+	resources = append(resources, &xds.Resource{
+		Name:     secretName,
+		Origin:   OriginIdentityBundled,
+		Resource: identitySecret,
+	})
+	return resources, nil
+}
+
+func sourceConfigurer(secretName string) func() bldrs_common.Configurer[envoy_tls.SdsSecretConfig] {
+	return func() bldrs_common.Configurer[envoy_tls.SdsSecretConfig] {
+		return bldrs_tls.SdsSecretConfigSource(
+			secretName,
+			bldrs_core.NewConfigSource().Configure(bldrs_core.Sds()),
+		)
+	}
 }
 
 func generateKey(caPrivateKey crypto.PrivateKey) (crypto.PublicKey, crypto.PrivateKey, error) {

@@ -5,9 +5,12 @@ import (
 	"net"
 	"slices"
 	"strings"
+	"time"
 
 	envoy_config_core "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	tlsv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/transport_sockets/tls/v3"
+	"github.com/kumahq/kuma/pkg/core"
+	bldrs_common "github.com/kumahq/kuma/pkg/envoy/builders/common"
 	"github.com/pkg/errors"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
@@ -200,15 +203,29 @@ type Proxy struct {
 	InternalAddresses []InternalAddress
 }
 
-type ProviderType string
-
 type WorkloadIdentity struct {
-	KRI                kri.Identifier
-	Type               string
-	Cert               []byte
-	PrivateKey         []byte
-	IdentitySecretName *string
-	CABundleSecretName *string
+	KRI                        kri.Identifier
+	// or creator function?
+	Type                       string
+	// Expiration
+	ExpirationTime             time.Time
+	GenerationTime             time.Time
+	// Cert and Private Key
+	util_tls.KeyPair
+	//CommonTlsContext configurer
+	IdentitySourceConfigurer   func() bldrs_common.Configurer[tlsv3.SdsSecretConfig]
+	ValidationSourceConfigurer func() bldrs_common.Configurer[tlsv3.SdsSecretConfig]
+
+	// Additionalresources
+	AdditionalResources []*Resource
+}
+
+func (c *WorkloadIdentity) CertLifetime() time.Duration {
+	return c.ExpirationTime.Sub(c.GenerationTime)
+}
+
+func (i *WorkloadIdentity) ExpiringSoon() bool {
+	return core.Now().After(i.GenerationTime.Add(i.CertLifetime() / 5 * 4))
 }
 
 func (p *Proxy) GetTransparentProxy() *tproxy_dp.DataplaneConfig {

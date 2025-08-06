@@ -13,7 +13,6 @@ import (
 	core_model "github.com/kumahq/kuma/pkg/core/resources/model"
 	core_xds "github.com/kumahq/kuma/pkg/core/xds"
 	bldrs_common "github.com/kumahq/kuma/pkg/envoy/builders/common"
-	bldrs_core "github.com/kumahq/kuma/pkg/envoy/builders/core"
 	bldrs_matcher "github.com/kumahq/kuma/pkg/envoy/builders/matcher"
 	bldrs_tls "github.com/kumahq/kuma/pkg/envoy/builders/tls"
 	"github.com/kumahq/kuma/pkg/plugins/policies/core/rules/resolve"
@@ -25,7 +24,6 @@ import (
 	envoy_tags "github.com/kumahq/kuma/pkg/xds/envoy/tags"
 	"github.com/kumahq/kuma/pkg/xds/envoy/tls"
 	"github.com/kumahq/kuma/pkg/xds/generator"
-	"github.com/kumahq/kuma/pkg/xds/generator/system_names"
 )
 
 func GenerateClusters(
@@ -118,16 +116,17 @@ func GenerateClusters(
 								}
 							}
 						}
+						sni := SniForBackendRef(realResourceRef, meshCtx, systemNamespace)
 						// ClientSideMultiIdentitiesMTLS validate MTLS enabled on the mesh
 						edsClusterBuilder.ConfigureIf(proxy.WorkloadIdentity == nil, envoy_clusters.ClientSideMultiIdentitiesMTLS(
 							proxy.SecretsTracker,
 							meshCtx.Resource,
 							tlsReady,
-							SniForBackendRef(realResourceRef, meshCtx, systemNamespace),
+							sni,
 							Identities(realResourceRef, meshCtx, false),
 						))
 						if proxy.WorkloadIdentity != nil {
-							upstreamCtx, err := UpstreamTLSContext(realResourceRef, meshCtx, systemNamespace, proxy)
+							upstreamCtx, err := UpstreamTLSContext(realResourceRef, meshCtx, proxy, sni)
 							if err != nil {
 								return nil, err
 							}
@@ -159,36 +158,40 @@ func GenerateClusters(
 	return resources, nil
 }
 
-func UpstreamTLSContext(realResourceRef *resolve.RealResourceBackendRef, meshCtx xds_context.MeshContext, systemNamespace string, proxy *core_xds.Proxy) (*envoy_tls.UpstreamTlsContext, error) {
+func UpstreamTLSContext(realResourceRef *resolve.RealResourceBackendRef, meshCtx xds_context.MeshContext, proxy *core_xds.Proxy, sni string) (*envoy_tls.UpstreamTlsContext, error) {
 	sanMatchers := []*bldrs_common.Builder[envoy_tls.SubjectAltNameMatcher]{}
 	for _, san := range Identities(realResourceRef, meshCtx, true) {
 		conf := bldrs_tls.NewSubjectAltNameMatcher().Configure(bldrs_tls.URI(bldrs_matcher.NewStringMatcher().Configure(bldrs_matcher.ExactMatcher(san))))
 		sanMatchers = append(sanMatchers, conf)
 	}
+	validationSds := bldrs_tls.ValidationContextSdsSecretConfig(
+		bldrs_tls.NewTlsCertificateSdsSecretConfigs().Configure(
+			proxy.WorkloadIdentity.IdentitySourceConfigurer(),
+		),
+	)
+	defaultValidation := bldrs_tls.DefaultValidationContext(
+		bldrs_tls.NewDefaultValidationContext().Configure(
+			bldrs_tls.SANs(sanMatchers),
+		),
+	)
+	combinedValidation := bldrs_tls.CombinedCertificateValidationContext(
+		bldrs_tls.NewCombinedCertificateValidationContext().
+			Configure(validationSds).
+			Configure(defaultValidation),
+	)
+	commonTlsContext := bldrs_tls.NewCommonTlsContext().
+		Configure(combinedValidation).
+		Configure(bldrs_tls.TlsCertificateSdsSecretConfigs([]*bldrs_common.Builder[envoy_tls.SdsSecretConfig]{
+			bldrs_tls.NewTlsCertificateSdsSecretConfigs().Configure(
+				proxy.WorkloadIdentity.ValidationSourceConfigurer(),
+			),
+		})).
+		Configure(bldrs_tls.KumaAlpnProtocol())
+
 	upstreamCtx, err := bldrs_tls.NewUpstreamTLSContext().
-		Configure(bldrs_tls.SNI(SniForBackendRef(realResourceRef, meshCtx, systemNamespace))).
-		Configure(bldrs_tls.UpstreamCommonTlsContext(
-			bldrs_tls.NewCommonTlsContext().
-				Configure(bldrs_tls.EcdhCurves([]string{"P-256", "P-384"})).
-				Configure(
-					bldrs_tls.CombinedCertificateValidationContext(
-						bldrs_tls.NewCombinedCertificateValidationContext().Configure(
-							bldrs_tls.ValidationContextSdsSecretConfig(
-								bldrs_tls.NewTlsCertificateSdsSecretConfigs().Configure(
-									bldrs_tls.SdsSecretConfigSource(pointer.DerefOr(proxy.WorkloadIdentity.CABundleSecretName, system_names.SystemResourceNameCABundle), bldrs_core.NewConfigSource().Configure(
-										bldrs_core.Sds()))))).Configure(
-							bldrs_tls.DefaultValidationContext(
-								bldrs_tls.NewDefaultValidationContext().Configure(
-									bldrs_tls.SANs(sanMatchers)))))).
-				Configure(
-					bldrs_tls.TlsCertificateSdsSecretConfigs([]*bldrs_common.Builder[envoy_tls.SdsSecretConfig]{
-						bldrs_tls.NewTlsCertificateSdsSecretConfigs().Configure(
-							bldrs_tls.SdsSecretConfigSource(
-								pointer.DerefOr(proxy.WorkloadIdentity.IdentitySecretName, proxy.WorkloadIdentity.KRI.String()),
-								bldrs_core.NewConfigSource().Configure(bldrs_core.Sds()),
-							)),
-					})).
-				Configure(bldrs_tls.KumaAlpnProtocol()))).Build()
+		Configure(bldrs_tls.SNI(sni)).
+		Configure(bldrs_tls.UpstreamCommonTlsContext(commonTlsContext)).
+		Build()
 	if err != nil {
 		return nil, err
 	}

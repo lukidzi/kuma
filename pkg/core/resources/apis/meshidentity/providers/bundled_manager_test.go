@@ -177,8 +177,6 @@ var _ = Describe("MeshIdentity providers", func() {
 		Expect(identity).ToNot(BeNil())
 
 		Expect(identity.KRI).To(Equal(kri.From(meshIdentity, "")))
-		Expect(identity.CABundleSecretName).To(BeNil())
-		Expect(identity.IdentitySecretName).To(BeNil())
 		Expect(identity.KeyPEM).ToNot(BeEmpty())
 		Expect(identity.CertPEM).ToNot(BeEmpty())
 		Expect(identity.ExpirationTime).To(Equal(identity.GenerationTime.Add(99 * time.Minute)))

@@ -12,7 +12,6 @@ import (
 	core_xds "github.com/kumahq/kuma/pkg/core/xds"
 	bldrs_auth "github.com/kumahq/kuma/pkg/envoy/builders/auth"
 	bldrs_core "github.com/kumahq/kuma/pkg/envoy/builders/core"
-	"github.com/kumahq/kuma/pkg/util/pointer"
 	xds_context "github.com/kumahq/kuma/pkg/xds/context"
 	"github.com/kumahq/kuma/pkg/xds/generator/system_names"
 )
@@ -46,6 +45,9 @@ func (p *plugin) Generate(rs *core_xds.ResourceSet, xdsCtx xds_context.Context, 
 				Resource: config,
 			})
 		}
+	// Spire configures everything by SDS so we cannot add here anything
+	case string(meshidentity_api.SpireType):
+		return nil
 	}
 	return nil
 }
@@ -82,7 +84,7 @@ func validationCtx(xdsCtx xds_context.Context, proxy *core_xds.Proxy) (*envoy_au
 		return nil, err
 	}
 	ca, err := bldrs_auth.NewSecret().
-		Configure(bldrs_auth.Name(pointer.DerefOr(proxy.WorkloadIdentity.CABundleSecretName, system_names.SystemResourceNameCABundle))).
+		Configure(bldrs_auth.Name(system_names.SystemResourceNameCABundle)).
 		Configure(bldrs_auth.ValidationContext(
 			bldrs_auth.NewValidationContext().
 				Configure(
