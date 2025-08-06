@@ -167,7 +167,9 @@ func (i *KumaInjector) InjectKuma(ctx context.Context, pod *kube_core.Pod) error
 
 	pod.Spec.Volumes = append(pod.Spec.Volumes, volumeInitTmp, volumeSidecarTmp)
 
-	if i.cfg.Spire.Enabled {
+	if enabled, _, err := metadata.Annotations(pod.Annotations).GetEnabledWithDefault(i.cfg.Spire.Enabled, metadata.KumaSpireSupport); err != nil {
+		return errors.Wrapf(err, "getting %s annotation failed", metadata.KumaSpireSupport)
+	} else if enabled {
 		pod.Spec.Volumes = append(pod.Spec.Volumes, kube_core.Volume{
 			Name: "kuma-spire-agent-socket",
 			VolumeSource: kube_core.VolumeSource{
@@ -559,7 +561,9 @@ func (i *KumaInjector) NewVolumeMounts(pod *kube_core.Pod) ([]kube_core.VolumeMo
 		return nil, errors.Errorf("volume (%s) specified for %s but volume does not exist in pod spec", volumeName, metadata.KumaSidecarTokenVolumeAnnotation)
 	}
 
-	if i.cfg.Spire.Enabled {
+	if enabled, _, err := metadata.Annotations(pod.Annotations).GetEnabledWithDefault(i.cfg.Spire.Enabled, metadata.KumaSpireSupport); err != nil {
+		return nil, errors.Wrapf(err, "getting %s annotation failed", metadata.KumaSpireSupport)
+	} else if enabled {
 		out = append(out, kube_core.VolumeMount{Name: "kuma-spire-agent-socket", MountPath: i.cfg.Spire.MountPath, ReadOnly: true})
 	}
 
