@@ -20,22 +20,6 @@ const (
 	TLSVersion13   TlsVersion = "TLS13"
 )
 
-type SignatureAlgorithm string
-
-const (
-	SignatureAlgorithmRsaPkcs1Sha256       SignatureAlgorithm = "rsa_pkcs1_sha256"
-	SignatureAlgorithmRsaPkcs1Sha512       SignatureAlgorithm = "rsa_pkcs1_sha512"
-	SignatureAlgorithmEcdsaSecp256r1Sha256 SignatureAlgorithm = "ecdsa_secp256r1_sha256"
-	SignatureAlgorithmEcdsaSecp384r1Sha384 SignatureAlgorithm = "ecdsa_secp384r1_sha384"
-	SignatureAlgorithmEcdsaSecp521r1Sha512 SignatureAlgorithm = "ecdsa_secp521r1_sha512"
-	SignatureAlgorithmRsaPssRsaeSha256     SignatureAlgorithm = "rsa_pss_rsae_sha256"
-	SignatureAlgorithmRsaPssRsaeSha384     SignatureAlgorithm = "rsa_pss_rsae_sha384"
-	SignatureAlgorithmRsaPssRsaeSha512     SignatureAlgorithm = "rsa_pss_rsae_sha512"
-	SignatureAlgorithmEd25519              SignatureAlgorithm = "ed25519"
-	SignatureAlgorithmRsaPkcs1Sha1         SignatureAlgorithm = "rsa_pkcs1_sha1"
-	SignatureAlgorithmEcdsaSha1            SignatureAlgorithm = "ecdsa_sha1"
-)
-
 var TlsVersionOrder = map[TlsVersion]int{
 	TLSVersion10: 0,
 	TLSVersion11: 1,

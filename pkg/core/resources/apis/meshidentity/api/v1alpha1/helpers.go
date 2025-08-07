@@ -11,6 +11,7 @@ import (
 
 	mesh_proto "github.com/kumahq/kuma/api/mesh/v1alpha1"
 	"github.com/kumahq/kuma/pkg/core/resources/model"
+	"github.com/kumahq/kuma/pkg/plugins/runtime/k8s/metadata"
 	"github.com/kumahq/kuma/pkg/util/pointer"
 )
 
@@ -109,7 +110,7 @@ func (i *MeshIdentity) GetSpiffeID(trustDomain string, meta model.ResourceMeta) 
 	}{
 		TrustDomain:    trustDomain,
 		Namespace:      meta.GetLabels()[mesh_proto.KubeNamespaceTag],
-		ServiceAccount: meta.GetLabels()[mesh_proto.KubeServiceAccount],
+		ServiceAccount: meta.GetLabels()[metadata.KumaServiceAccount],
 	}
 
 	return renderTemplate(spiffeIDTemplate, meta, data)

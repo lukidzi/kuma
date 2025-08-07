@@ -46,14 +46,3 @@ func IfNotNil[R, P any](ptr *P, fn func(P) Configurer[R]) Configurer[R] {
 		return nil
 	}
 }
-
-func AsBuilder[R any](fn func() (*R, error)) *Builder[R] {
-	return &Builder[R]{configurers: []Configurer[R]{func(r *R) error {
-		ptr, err := fn()
-		if err != nil {
-			return err
-		}
-		*r = *ptr
-		return nil
-	}}}
-}
