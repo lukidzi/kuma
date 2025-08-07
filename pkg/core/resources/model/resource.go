@@ -673,7 +673,7 @@ func ComputeLabels(
 
 	if labelsOpts.IsK8s {
 		if labelsOpts.ServiceAccount != "" {
-			set(mesh_proto.KubeServiceAccount, labelsOpts.ServiceAccount)
+			set(metadata.KumaServiceAccount, labelsOpts.ServiceAccount)
 		}
 	}
 

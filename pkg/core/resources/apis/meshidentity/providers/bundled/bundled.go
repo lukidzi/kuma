@@ -246,7 +246,7 @@ func (b *bundledIdentityProvider) CreateIdentity(ctx context.Context, identity *
 	if err != nil {
 		return nil, err
 	}
-	identifier := kri.From(identity, "")
+	identifier := kri.From(identity)
 	resources, err := additionalResources(identifier.String(), identityPair)
 	if err != nil {
 		return nil, err

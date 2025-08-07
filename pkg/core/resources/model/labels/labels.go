@@ -15,5 +15,5 @@ var AllComputedLabels = map[string]struct{}{
 	mesh_proto.KubeNamespaceTag:    {},
 	mesh_proto.PolicyRoleLabel:     {},
 	mesh_proto.ProxyTypeLabel:      {},
-	mesh_proto.KubeServiceAccount:  {},
+	metadata.KumaServiceAccount:    {},
 }

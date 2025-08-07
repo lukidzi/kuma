@@ -25,6 +25,7 @@ func MakeTCPSplit(
 	servicesAcc envoy_common.ServicesAccumulator,
 	refs []resolve.ResolvedBackendRef,
 	meshCtx xds_context.MeshContext,
+	unifiedNaming bool,
 ) []envoy_common.Split {
 	return makeSplits(
 		map[core_mesh.Protocol]struct{}{
@@ -39,6 +40,7 @@ func MakeTCPSplit(
 		servicesAcc,
 		refs,
 		meshCtx,
+		unifiedNaming,
 	)
 }
 
@@ -47,6 +49,7 @@ func MakeHTTPSplit(
 	servicesAcc envoy_common.ServicesAccumulator,
 	refs []resolve.ResolvedBackendRef,
 	meshCtx xds_context.MeshContext,
+	unifiedNaming bool,
 ) []envoy_common.Split {
 	return makeSplits(
 		map[core_mesh.Protocol]struct{}{
@@ -58,6 +61,7 @@ func MakeHTTPSplit(
 		servicesAcc,
 		refs,
 		meshCtx,
+		unifiedNaming,
 	)
 }
 
@@ -83,7 +87,7 @@ func (ds *DestinationService) ConditionallyResolveKRIWithFallback(condition bool
 func (ds *DestinationService) DefaultBackendRef() *resolve.ResolvedBackendRef {
 	if r, ok := ds.Outbound.AssociatedServiceResource(); ok {
 		return resolve.NewResolvedBackendRef(&resolve.RealResourceBackendRef{
-			Resource: &r,
+			Resource: r,
 			Weight:   100,
 		})
 	} else {
@@ -141,7 +145,7 @@ func CollectServices(proxy *core_xds.Proxy, meshCtx xds_context.MeshContext) []D
 		// TODO: Add a clear way to pass warnings up when needed. Right now
 		//  we skip logging to avoid too much noise, and there’s no system
 		//  for handling warnings yet
-		if svc = meshCtx.GetServiceByKRI(pointer.Deref(outbound.Resource)); svc == nil {
+		if svc = meshCtx.GetServiceByKRI(outbound.Resource); svc == nil {
 			continue
 		}
 
@@ -176,7 +180,7 @@ func DestinationPortFromRef(
 	var port core.Port
 	var ok bool
 
-	if dest = meshCtx.GetServiceByKRI(pointer.Deref(ref.Resource)); dest == nil {
+	if dest = meshCtx.GetServiceByKRI(ref.Resource); dest == nil {
 		return dest, port, false
 	}
 
@@ -193,12 +197,13 @@ func makeSplits(
 	servicesAcc envoy_common.ServicesAccumulator,
 	refs []resolve.ResolvedBackendRef,
 	meshCtx xds_context.MeshContext,
+	unifiedNaming bool,
 ) []envoy_common.Split {
 	var result []envoy_common.Split
 
 	splitFromRef := func(ref resolve.ResolvedBackendRef) envoy_common.Split {
 		if ref.ReferencesRealResource() {
-			return handleRealResources(protocols, clusterCache, servicesAcc, ref.RealResourceBackendRef(), meshCtx)
+			return handleRealResources(protocols, clusterCache, servicesAcc, ref.RealResourceBackendRef(), meshCtx, unifiedNaming)
 		}
 
 		return handleLegacyBackendRef(protocols, clusterCache, servicesAcc, ref.LegacyBackendRef(), meshCtx)
@@ -223,6 +228,7 @@ func handleRealResources(
 	servicesAcc envoy_common.ServicesAccumulator,
 	ref *resolve.RealResourceBackendRef,
 	meshCtx xds_context.MeshContext,
+	unifiedNaming bool,
 ) envoy_common.Split {
 	if ref.Weight == 0 {
 		return nil
@@ -238,7 +244,11 @@ func handleRealResources(
 	}
 
 	service := destinationname.MustResolve(false, dest, port)
+
 	clusterName := service
+	if unifiedNaming {
+		clusterName = ref.Resource.String()
+	}
 
 	isExternalService := ref.Resource.ResourceType == meshexternalservice_api.MeshExternalServiceType
 

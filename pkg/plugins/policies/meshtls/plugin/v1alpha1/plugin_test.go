@@ -347,10 +347,10 @@ func getMeshServiceResources(secretsTracker core_xds.SecretsTracker, mesh *build
 			Name:   "outbound",
 			Origin: generator.OriginOutbound,
 			Resource: clusters.NewClusterBuilder(envoy_common.APIV3, "outgoing").
-				Configure(clusters.ClientSideMTLS(secretsTracker, mesh.Build(), "outgoing", true, nil)).
+				Configure(clusters.ClientSideMTLS(secretsTracker, false, mesh.Build(), "outgoing", true, nil)).
 				MustBuild(),
 			Protocol: core_mesh.ProtocolHTTP,
-			ResourceOrigin: &kri.Identifier{
+			ResourceOrigin: kri.Identifier{
 				ResourceType: "MeshService",
 				Mesh:         "default",
 				Zone:         "zone-1",
@@ -397,7 +397,7 @@ func getResources(secretsTracker core_xds.SecretsTracker, mesh *builders.MeshBui
 			Name:   "outgoing",
 			Origin: generator.OriginOutbound,
 			Resource: clusters.NewClusterBuilder(envoy_common.APIV3, "outgoing").
-				Configure(clusters.ClientSideMTLS(secretsTracker, mesh.Build(), "outgoing", true, nil)).
+				Configure(clusters.ClientSideMTLS(secretsTracker, false, mesh.Build(), "outgoing", true, nil)).
 				MustBuild(),
 		},
 	}

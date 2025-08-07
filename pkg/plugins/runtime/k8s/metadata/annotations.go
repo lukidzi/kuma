@@ -143,7 +143,7 @@ const (
 	KumaServiceAccount = "k8s.kuma.io/service-account"
 
 	// KumaSpireSupport allows injecting Spire-related volumes into a single Pod.
-	KumaSpireSupport  = "k8s.kuma.io/spire-support"
+	KumaSpireSupport = "k8s.kuma.io/spire-support"
 )
 
 var PodAnnotationDeprecations = []Deprecation{

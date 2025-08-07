@@ -450,8 +450,8 @@ func (r *resourceEndpoints) createResource(
 		res.GetMeta().GetLabels(),
 		meshName,
 		core_model.WithNamespace(core_model.GetNamespace(res.GetMeta(), r.systemNamespace)),
-		core_model.WithK8s(r.isK8s),
 		core_model.WithMode(r.mode),
+		core_model.WithK8s(r.isK8s),
 		core_model.WithZone(r.zoneName),
 	)
 	if err != nil {
@@ -496,8 +496,8 @@ func (r *resourceEndpoints) updateResource(
 		newResRest.GetMeta().GetLabels(),
 		meshName,
 		core_model.WithNamespace(core_model.GetNamespace(newResRest.GetMeta(), r.systemNamespace)),
-		core_model.WithK8s(r.isK8s),
 		core_model.WithMode(r.mode),
+		core_model.WithK8s(r.isK8s),
 		core_model.WithZone(r.zoneName),
 	)
 	if err != nil {
@@ -1026,6 +1026,7 @@ func matchedPoliciesToInboundConfig(matchedPolicies []core_xds.TypedMatchingPoli
 		var policyRules []api_common.PolicyRule
 		for _, rule := range rules {
 			policyRules = append(policyRules, api_common.PolicyRule{
+				Kri:  pointer.To(originToKRI(rule.Origin.Resource, matched.Type).Kri),
 				Conf: rule.Conf.GetDefault(),
 			})
 		}
@@ -1121,7 +1122,7 @@ func policyOriginsToKRIOrigins(policyType core_model.ResourceType, origins []cor
 }
 
 func originToKRI(origin core_model.ResourceMeta, policyType core_model.ResourceType) api_common.PolicyOrigin {
-	return api_common.PolicyOrigin{Kri: kri.FromResourceMeta(origin, policyType, "").String()}
+	return api_common.PolicyOrigin{Kri: kri.FromResourceMeta(origin, policyType).String()}
 }
 
 func (r *resourceEndpoints) rulesForResource() restful.RouteFunction {

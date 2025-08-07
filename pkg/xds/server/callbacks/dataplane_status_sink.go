@@ -228,7 +228,7 @@ func (s *dataplaneInsightSink) listMeshTrustBackends(ctx context.Context, mesh s
 
 	var backends []string
 	for _, trust := range meshTrusts.Items {
-		backends = append(backends, kri.From(trust, "").String())
+		backends = append(backends, kri.From(trust).String())
 	}
 	return backends
 }

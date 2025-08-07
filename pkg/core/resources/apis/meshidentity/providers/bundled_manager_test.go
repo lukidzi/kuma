@@ -180,7 +180,7 @@ var _ = Describe("MeshIdentity providers", func() {
 		Expect(err).ToNot(HaveOccurred())
 		Expect(identity).ToNot(BeNil())
 
-		Expect(identity.KRI).To(Equal(kri.From(meshIdentity, "")))
+		Expect(identity.KRI).To(Equal(kri.From(meshIdentity)))
 		Expect(identity.ExpirationTime).To(Equal(identity.GenerationTime.Add(99 * time.Minute)))
 
 		Eventually(createIdentityListener.Recv(), 5*time.Second).Should(Receive(Equal(events.WorkloadIdentityChangedEvent{

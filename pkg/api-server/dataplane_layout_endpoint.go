@@ -78,7 +78,7 @@ func (dle *dataplaneLayoutEndpoint) getLayout(request *restful.Request, response
 
 	inbounds := util_slices.Map(dataplane.Spec.GetNetworking().GetInbound(), func(inbound *v1alpha1.Dataplane_Networking_Inbound) api_common.DataplaneInbound {
 		return api_common.DataplaneInbound{
-			Kri:      kri.From(dataplane, inbound.GetSectionName()).String(),
+			Kri:      kri.WithSectionName(kri.From(dataplane), inbound.GetSectionName()).String(),
 			Port:     int32(inbound.GetPort()),
 			Protocol: inbound.GetProtocol(),
 		}
@@ -88,9 +88,10 @@ func (dle *dataplaneLayoutEndpoint) getLayout(request *restful.Request, response
 	reachableOutbounds, _ := baseMeshContext.DestinationIndex.GetReachableBackends(dataplane)
 	for outboundKri, port := range reachableOutbounds {
 		outbounds = append(outbounds, api_common.DataplaneOutbound{
-			Kri:      outboundKri.String(),
-			Port:     port.GetValue(),
-			Protocol: string(port.GetProtocol()),
+			Kri:               outboundKri.String(),
+			Port:              port.GetValue(),
+			Protocol:          string(port.GetProtocol()),
+			ProxyResourceName: outboundKri.String(),
 		})
 	}
 
@@ -100,7 +101,7 @@ func (dle *dataplaneLayoutEndpoint) getLayout(request *restful.Request, response
 
 	networkingLayout := types.DataplaneNetworkingLayout{
 		Inbounds:  inbounds,
-		Kri:       kri.From(dataplane, "").String(),
+		Kri:       kri.From(dataplane).String(),
 		Labels:    dataplane.GetMeta().GetLabels(),
 		Outbounds: outbounds,
 	}

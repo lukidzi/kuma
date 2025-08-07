@@ -60,7 +60,7 @@ spec:
       value: 31s
     - name: KUMA_DATAPLANE_MESH
       value: default
-    - name: KUMA_DATAPLANE_RUNTIME_SPIRE_ENABLED
+    - name: KUMA_DATAPLANE_RUNTIME_SPIRE_SUPPORTED
       value: "true"
     - name: KUMA_DATAPLANE_RUNTIME_TOKEN_PATH
       value: /var/run/secrets/kubernetes.io/serviceaccount/token
