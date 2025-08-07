@@ -19,6 +19,7 @@ import (
 	"github.com/kumahq/kuma/pkg/core/resources/store"
 	core_xds "github.com/kumahq/kuma/pkg/core/xds"
 	"github.com/kumahq/kuma/pkg/events"
+	"github.com/kumahq/kuma/pkg/util/pointer"
 	"github.com/kumahq/kuma/pkg/xds/secrets"
 )
 
@@ -136,10 +137,12 @@ func (s *dataplaneInsightSink) Start(stop <-chan struct{}) {
 		case event != nil:
 			usesIdentity = true
 			secretsInfo = &secrets.Info{
-				Expiration:        event.ExpirationTime,
-				Generation:        event.GenerationTime,
 				IssuedBackend:     event.Origin.String(),
 				SupportedBackends: s.listMeshTrustBackends(ctx, dataplaneID.Mesh),
+			}
+			if !event.ExternallyManaged {
+				secretsInfo.Expiration = pointer.Deref(event.ExpirationTime)
+				secretsInfo.Generation = pointer.Deref(event.GenerationTime)
 			}
 		case usesIdentity:
 			secretsInfo = lastStoredSecretsInfo

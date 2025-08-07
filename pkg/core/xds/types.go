@@ -22,6 +22,7 @@ import (
 	bldrs_common "github.com/kumahq/kuma/pkg/envoy/builders/common"
 	util_tls "github.com/kumahq/kuma/pkg/tls"
 	tproxy_dp "github.com/kumahq/kuma/pkg/transparentproxy/config/dataplane"
+	"github.com/kumahq/kuma/pkg/util/pointer"
 )
 
 type APIVersion string
@@ -215,8 +216,8 @@ type WorkloadIdentity struct {
 	// or creator function?
 	ManageType ManageType
 	// Expiration
-	ExpirationTime time.Time
-	GenerationTime time.Time
+	ExpirationTime *time.Time
+	GenerationTime *time.Time
 	// CommonTlsContext configurer
 	IdentitySourceConfigurer   func() bldrs_common.Configurer[tlsv3.SdsSecretConfig]
 	ValidationSourceConfigurer func() bldrs_common.Configurer[tlsv3.SdsSecretConfig]
@@ -226,11 +227,11 @@ type WorkloadIdentity struct {
 }
 
 func (c *WorkloadIdentity) CertLifetime() time.Duration {
-	return c.ExpirationTime.Sub(c.GenerationTime)
+	return c.ExpirationTime.Sub(pointer.Deref(c.GenerationTime))
 }
 
 func (i *WorkloadIdentity) ExpiringSoon() bool {
-	return core.Now().After(i.GenerationTime.Add(i.CertLifetime() / 5 * 4))
+	return core.Now().After(pointer.Deref(i.GenerationTime).Add(i.CertLifetime() / 5 * 4))
 }
 
 func (p *Proxy) GetTransparentProxy() *tproxy_dp.DataplaneConfig {

@@ -16,7 +16,7 @@ func InitProvider() {
 }
 
 func (p plugin) NewIdentityProvider(context core_plugins.PluginContext, config core_plugins.PluginConfig) (providers.IdentityProvider, error) {
-	if context.Config().Environment == core.KubernetesEnvironment && context.Config().Runtime.Kubernetes.Injector.Spire.Enabled {
+	if context.Config().Environment == core.KubernetesEnvironment {
 		return NewSpireIdentityProvider(
 			context.Config().Runtime.Kubernetes.Injector.Spire.MountPath,
 			context.Config().Runtime.Kubernetes.Injector.Spire.SocketFileName,

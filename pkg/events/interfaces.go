@@ -38,9 +38,10 @@ type TriggerKDSResyncEvent struct {
 type WorkloadIdentityChangedEvent struct {
 	ResourceKey    model.ResourceKey
 	Operation      Op
-	GenerationTime time.Time
-	ExpirationTime time.Time
+	GenerationTime *time.Time
+	ExpirationTime *time.Time
 	Origin         kri.Identifier
+	ExternallyManaged bool
 }
 
 var ListenerStoppedErr = errors.New("listener closed")
