@@ -9,9 +9,10 @@ import (
 )
 
 type k8sDeployment struct {
-	namespace   string
-	name        string
-	trustDomain string
+	namespace      string
+	name           string
+	trustDomain    string
+	kubectlVersion string
 }
 
 var _ Deployment = &k8sDeployment{}
@@ -44,6 +45,7 @@ func (t *k8sDeployment) Deploy(cluster framework.Cluster) error {
 		"--namespace", t.namespace,
 		"--repo", "https://spiffe.github.io/helm-charts-hardened/",
 		"--set", "global.spire.trustDomain="+t.trustDomain,
+		"--set", "global.spire.tools.kubectl.tag="+t.kubectlVersion,
 		"spire",
 	)
 

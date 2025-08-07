@@ -109,6 +109,7 @@ func (s *dataplaneInsightSink) Start(stop <-chan struct{}) {
 
 	var lastStoredState *mesh_proto.DiscoverySubscription
 	var lastStoredSecretsInfo *secrets.Info
+	var lastEvent *events.WorkloadIdentityChangedEvent
 	var usesIdentity bool
 	var generation uint32
 
@@ -130,27 +131,30 @@ func (s *dataplaneInsightSink) Start(stop <-chan struct{}) {
 		ctx := context.TODO()
 		dataplaneID, currentState := s.accessor.GetStatus()
 		var secretsInfo *secrets.Info
+		core.Log.Info("flush", "lastStoredSecretsInfo", lastStoredSecretsInfo)
 		switch {
 		case event != nil && event.Operation == events.Delete:
 			usesIdentity = false
 			secretsInfo = nil
+			core.Log.Info("delete event", "event", event, "dataplaneID", dataplaneID)
 		case event != nil:
 			usesIdentity = true
 			secretsInfo = &secrets.Info{
 				IssuedBackend:     event.Origin.String(),
 				SupportedBackends: s.listMeshTrustBackends(ctx, dataplaneID.Mesh),
+				Expiration: pointer.Deref(event.ExpirationTime),
+				Generation: pointer.Deref(event.GenerationTime),
 			}
-			if !event.ExternallyManaged {
-				secretsInfo.Expiration = pointer.Deref(event.ExpirationTime)
-				secretsInfo.Generation = pointer.Deref(event.GenerationTime)
-			}
+			core.Log.Info("event", "event", event, "dataplaneID", dataplaneID)
 		case usesIdentity:
 			secretsInfo = lastStoredSecretsInfo
 			if secretsInfo != nil {
 				secretsInfo.SupportedBackends = s.listMeshTrustBackends(ctx, dataplaneID.Mesh)
 			}
+			core.Log.Info("usesIdentity", "secretsInfo", secretsInfo, "dataplaneID", dataplaneID)
 		default:
 			secretsInfo = s.secrets.Info(proxyType, dataplaneID)
+			core.Log.Info("DEFAULT", "secretsInfo", secretsInfo, "dataplaneID", dataplaneID)
 		}
 		select {
 		case <-generationTicker.C:
@@ -158,6 +162,7 @@ func (s *dataplaneInsightSink) Start(stop <-chan struct{}) {
 		default:
 		}
 		currentState.Generation = generation
+		lastEvent = event
 
 		if proto.Equal(currentState, lastStoredState) && secretsInfo == lastStoredSecretsInfo {
 			return
@@ -186,6 +191,7 @@ func (s *dataplaneInsightSink) Start(stop <-chan struct{}) {
 			sinkLog.V(1).Info("DataplaneInsight saved", "dataplaneID", dataplaneID, "subscription", currentState)
 			lastStoredState = currentState
 			lastStoredSecretsInfo = secretsInfo
+			core.Log.Info("storing last secret", "lastStoredSecretsInfo", lastStoredSecretsInfo)
 		}
 	}
 
@@ -197,16 +203,15 @@ func (s *dataplaneInsightSink) Start(stop <-chan struct{}) {
 	for {
 		select {
 		case <-flushTicker.C:
-			flush(false, nil)
+			flush(false, lastEvent)
 			// On Kubernetes, because of the cache subsequent Get, Update requests can fail, because the cache is not strongly consistent.
 			// We handle the Resource Conflict logging on V1, but we can try to avoid the situation with backoff
 			time.Sleep(s.flushBackoff)
 		case e := <-listener.Recv():
 			workloadIdentity := e.(events.WorkloadIdentityChangedEvent)
 			flush(false, &workloadIdentity)
-			time.Sleep(s.flushBackoff)
 		case <-stop:
-			flush(true, nil)
+			flush(true, lastEvent)
 			return
 		}
 	}
@@ -269,7 +274,7 @@ func (s *dataplaneInsightStore) Upsert(
 			}
 
 			insight.Spec.Metadata = xdsMetadata
-
+			core.Log.Info("TEST", "insight.Spec.MTLS", insight.Spec.MTLS, "secrets", secretsInfo)
 			if secretsInfo == nil { // it means mTLS was disabled, we need to clear stats
 				insight.Spec.MTLS = nil
 			} else if insight.Spec.MTLS == nil ||
@@ -280,6 +285,7 @@ func (s *dataplaneInsightStore) Upsert(
 					return err
 				}
 			}
+			core.Log.Info("SET", "insight", insight)
 			return nil
 		})
 	default:

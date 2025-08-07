@@ -15,7 +15,6 @@ import (
 )
 
 const (
-	trustDomainTemplate        = "{{ .TrustDomain }}"
 	defaultTrustDomainTemplate = "{{ .Mesh }}.{{ .Zone }}.mesh.local"
 	defaultPathTemplate        = "/ns/{{ .Namespace }}/sa/{{ .ServiceAccount }}"
 )

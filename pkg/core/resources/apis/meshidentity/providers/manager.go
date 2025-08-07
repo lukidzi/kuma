@@ -63,14 +63,18 @@ func (i *IdentityProviderManager) GetWorkloadIdentity(ctx context.Context, proxy
 	if err != nil {
 		return nil, err
 	}
-	// TODO: should we send it after the config is reconciled?
-	i.eventWriter.Send(events.WorkloadIdentityChangedEvent{
+	if workloadIdentity == nil {
+		return nil, nil
+	}
+	event := events.WorkloadIdentityChangedEvent{
 		ResourceKey:       model.MetaToResourceKey(proxy.Dataplane.GetMeta()),
 		Operation:         events.Create,
-		GenerationTime:    workloadIdentity.GenerationTime,
-		ExpirationTime:    workloadIdentity.ExpirationTime,
 		Origin:            workloadIdentity.KRI,
-		ExternallyManaged: workloadIdentity.ManageType == xds.ExternalManagedType,
-	})
+	}
+	if workloadIdentity.ManageType == xds.KumaManagedType {
+		event.ExpirationTime = workloadIdentity.ExpirationTime
+		event.GenerationTime = workloadIdentity.GenerationTime
+	}
+	i.eventWriter.Send(event)
 	return workloadIdentity, nil
 }

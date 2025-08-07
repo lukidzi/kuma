@@ -2,7 +2,6 @@ package meshidentity
 
 import (
 	"fmt"
-	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -15,14 +14,18 @@ import (
 	"github.com/kumahq/kuma/test/framework/deployments/democlient"
 	"github.com/kumahq/kuma/test/framework/deployments/spire"
 	"github.com/kumahq/kuma/test/framework/deployments/testserver"
+	"github.com/kumahq/kuma/test/framework/envoy_admin/stats"
+	"github.com/kumahq/kuma/test/framework/envoy_admin/tunnel"
 	"github.com/kumahq/kuma/test/framework/envs/kubernetes"
+
+	meshidentity_api "github.com/kumahq/kuma/pkg/core/resources/apis/meshidentity/api/v1alpha1"
 )
 
 func Spire() {
 	meshName := "meshidentity-spire"
 	namespace := "meshidentity-spire"
 	spireNamespace := "spire-system"
-	trustDomain := "default.local-zone.mesh.local"
+	trustDomain := fmt.Sprintf("%s.local-zone.mesh.local", meshName)
 
 	workflowRegistration := fmt.Sprintf(`
 apiVersion: spire.spiffe.io/v1alpha1
@@ -48,12 +51,11 @@ spec:
 				spire.WithName("spire"),
 				spire.WithNamespace(spireNamespace),
 				spire.WithTrustDomain(trustDomain),
+				// default spire helm uses 1.27.16 which fails since there is no image
+				spire.WithKubectlVersion("v1.31.11"),
 			)).
 			Install(YamlK8s(workflowRegistration)).
 			Setup(kubernetes.Cluster)
-
-			// create cluster registration
-			// deploy service with an annotation
 		Expect(err).ToNot(HaveOccurred())
 	})
 
@@ -62,10 +64,12 @@ spec:
 	})
 
 	E2EAfterEach(func() {
+		Expect(DeleteMeshResources(kubernetes.Cluster, meshName, meshidentity_api.MeshIdentityResourceTypeDescriptor)).To(Succeed())
 	})
 
 	E2EAfterAll(func() {
 		Expect(kubernetes.Cluster.TriggerDeleteNamespace(namespace)).To(Succeed())
+		Expect(kubernetes.Cluster.TriggerDeleteNamespace(spireNamespace)).To(Succeed())
 		Expect(kubernetes.Cluster.DeleteMesh(meshName)).To(Succeed())
 	})
 
@@ -96,7 +100,7 @@ spec:
 				testserver.WithName("test-server"),
 				testserver.WithMesh(meshName),
 				testserver.WithNamespace(namespace),
-				testserver.WithEchoArgs("echo", "instance", "test-server-spire"),
+				testserver.WithEchoArgs("echo", "--instance", "test-server-spire"),
 				testserver.WithPodAnnotations(map[string]string{
 					metadata.KumaSpireSupport: "true",
 				}),
@@ -109,13 +113,24 @@ spec:
 				}),
 			)).
 			Setup(kubernetes.Cluster)).To(Succeed())
-				time.Sleep(1*time.Hour)
+
+		// then
+		// traffic works
 		Eventually(func(g Gomega) {
-			resp, err := client.CollectEchoResponse(kubernetes.Cluster, "demo-client", fmt.Sprintf("test-server.%s", namespace), client.FromKubernetesPod(namespace, "demo-client"))
+			resp, err := client.CollectEchoResponse(kubernetes.Cluster, "demo-client", fmt.Sprintf("test-server.%s:80", namespace), client.FromKubernetesPod(namespace, "demo-client"))
 			g.Expect(err).ToNot(HaveOccurred())
 			g.Expect(resp.Instance).To(Equal("test-server-spire"))
-		}, "30s", "1s").Should(Succeed())
+		}, "30s", "1s", MustPassRepeatedly(5)).Should(Succeed())
 
+		Expect(kubernetes.Cluster.PortForwardService("test-server", namespace, 9901)).To(Succeed())
+		portFwd := kubernetes.Cluster.GetPortForward("test-server")
+		admin := tunnel.NewK8sEnvoyAdminTunnel(kubernetes.Cluster.GetTesting(), portFwd.ApiServerEndpoint)
+
+		// and it's a tls traffic
+		Eventually(func(g Gomega) {
+			s, err := admin.GetStats("listener.*_80.ssl.handshake")
+			Expect(err).ToNot(HaveOccurred())
+			Expect(s).To(stats.BeGreaterThanZero())
+		}, "5s", "1s").Should(Succeed())
 	})
-
 }

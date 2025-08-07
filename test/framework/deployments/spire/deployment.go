@@ -16,6 +16,7 @@ type deployOptions struct {
 	namespace   string
 	name        string
 	trustDomain string
+	kubectlVersion string
 }
 
 type deployOptionsFunc func(*deployOptions)
@@ -39,8 +40,10 @@ func Install(fs ...deployOptionsFunc) framework.InstallFunc {
 		switch cluster.(type) {
 		case *framework.K8sCluster:
 			deployment = &k8sDeployment{
-				namespace: opts.namespace,
-				name:      opts.name,
+				namespace:   opts.namespace,
+				name:        opts.name,
+				trustDomain: opts.trustDomain,
+				kubectlVersion: opts.kubectlVersion
 			}
 		default:
 			return errors.New("invalid cluster")
@@ -64,5 +67,11 @@ func WithName(name string) deployOptionsFunc {
 func WithTrustDomain(td string) deployOptionsFunc {
 	return func(o *deployOptions) {
 		o.trustDomain = td
+	}
+}
+
+func WithKubectlVersion(version string) deployOptionsFunc {
+	return func(o *deployOptions) {
+		o.kubectlVersion = version
 	}
 }

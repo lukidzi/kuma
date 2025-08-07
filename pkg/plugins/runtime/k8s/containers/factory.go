@@ -345,8 +345,8 @@ func (i *DataplaneProxyFactory) sidecarEnvVars(mesh string, podAnnotations map[s
 	if enabled, _, err := metadata.Annotations(podAnnotations).GetEnabledWithDefault(i.spireEnabled, metadata.KumaSpireSupport); err != nil {
 		return nil, errors.Wrapf(err, "getting %s annotation failed", metadata.KumaSpireSupport)
 	} else if enabled {
-		envVars["KUMA_DATAPLANE_RUNTIME_SPIRE_ENABLED"] = kube_core.EnvVar{
-			Name:  "KUMA_DATAPLANE_RUNTIME_SPIRE_ENABLED",
+		envVars["KUMA_DATAPLANE_RUNTIME_SPIRE_SUPPORTED"] = kube_core.EnvVar{
+			Name:  "KUMA_DATAPLANE_RUNTIME_SPIRE_SUPPORTED",
 			Value: "true",
 		}
 	}
