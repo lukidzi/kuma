@@ -37,7 +37,7 @@ var _ = Describe("Updater", func() {
 		metrics = m
 		resManager = manager.NewResourceManager(memory.NewStore())
 
-		bundledProvider, err := bundled.NewBundledIdentityProvider(resManager, resManager, metrics)
+		bundledProvider, err := bundled.NewBundledIdentityProvider(resManager, resManager, metrics, "zone")
 		Expect(err).ToNot(HaveOccurred())
 
 		updater, err := New(logr.Discard(), 50*time.Millisecond, resManager, resManager, providers.IdentityProviders{
@@ -102,7 +102,7 @@ var _ = Describe("Updater", func() {
 		// meshtrust should be created
 		meshTrust := meshtrust_api.NewMeshTrustResource()
 		Expect(resManager.Get(context.Background(), meshTrust, store.GetByKey(identity.Meta.GetName(), "default"))).ToNot(HaveOccurred())
-		Expect(meshTrust.Spec.Origin.KRI).To(Equal(pointer.To(kri.From(identity, "").String())))
+		Expect(meshTrust.Spec.Origin.KRI).To(Equal(pointer.To(kri.From(identity).String())))
 		Expect(meshTrust.Spec.CABundles).To(HaveLen(1))
 	})
 

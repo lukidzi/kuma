@@ -166,7 +166,14 @@ func (c *ClusterGenerator) generateRealBackendRefCluster(
 		Configure(
 			clusters.EdsCluster(),
 			clusters.LB(nil /* TODO(jpeach) uses default Round Robin*/),
-
+			clusters.ClientSideMultiIdentitiesMTLS(
+				proxy.SecretsTracker,
+				false,
+				meshCtx.Resource,
+				true, // TODO we just assume this atm?...
+				meshroute.SniForBackendRef(backendRef, meshCtx, systemNamespace),
+				meshroute.ServiceTagIdentities(backendRef, meshCtx),
+			),
 			clusters.ConnectionBufferLimit(DefaultConnectionBuffer),
 		).
 		ConfigureIf(proxy.WorkloadIdentity == nil, clusters.ClientSideMultiIdentitiesMTLS(

@@ -7,6 +7,7 @@ import (
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	common_api "github.com/kumahq/kuma/api/common/v1alpha1"
+	"github.com/kumahq/kuma/api/common/v1alpha1/datasource"
 	meshidentity_api "github.com/kumahq/kuma/pkg/core/resources/apis/meshidentity/api/v1alpha1"
 	core_model "github.com/kumahq/kuma/pkg/core/resources/model"
 	"github.com/kumahq/kuma/pkg/core/resources/store"
@@ -83,6 +84,45 @@ func (mi *MeshIdentityBuilder) WithInitializedStatus() *MeshIdentityBuilder {
 				Status:  v1.ConditionTrue,
 				Reason:  "Ready",
 				Message: "Successfully initialized",
+			},
+		}}
+	return mi
+}
+func (mi *MeshIdentityBuilder) NotSelfSigned() *MeshIdentityBuilder {
+	if mi.res.Spec.Provider.Bundled == nil {
+		mi.res.Spec.Provider.Bundled = &meshidentity_api.Bundled{}
+	}
+	mi.res.Spec.Provider.Bundled.InsecureAllowSelfSigned = pointer.To(false)
+	return mi
+}
+
+func (mi *MeshIdentityBuilder) WithBundled() *MeshIdentityBuilder {
+	mi.res.Spec.Provider = meshidentity_api.Provider{
+		Type: meshidentity_api.BundledType,
+		Bundled: &meshidentity_api.Bundled{
+			MeshTrustCreation: pointer.To(meshidentity_api.MeshTrustCreationEnabled),
+			Autogenerate: &meshidentity_api.Autogenerate{
+				Enabled: pointer.To(false),
+			},
+			InsecureAllowSelfSigned: pointer.To(true),
+			CertificateParameters: &meshidentity_api.CertificateParameters{
+				Expiry: &v1.Duration{
+					Duration: 99 * time.Minute,
+				},
+			},
+			CA: &meshidentity_api.CA{
+				Certificate: &datasource.SecureDataSource{
+					Type: datasource.SecureDataSourceInline,
+					InsecureInline: &datasource.Inline{
+						Value: "123",
+					},
+				},
+				PrivateKey: &datasource.SecureDataSource{
+					Type: datasource.SecureDataSourceInline,
+					InsecureInline: &datasource.Inline{
+						Value: "456",
+					},
+				},
 			},
 		},
 	}

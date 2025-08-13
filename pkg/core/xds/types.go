@@ -189,7 +189,7 @@ type Proxy struct {
 	// we can be sure to include only those secrets later on.
 	SecretsTracker SecretsTracker
 
-	// Identity of the proxy
+	// WorkloadIdentity stores information about identity of the proxy.
 	WorkloadIdentity *WorkloadIdentity
 
 	// ZoneEgressProxy is available only when XDS is generated for ZoneEgress data plane proxy.
@@ -204,25 +204,34 @@ type Proxy struct {
 	InternalAddresses []InternalAddress
 }
 
-type ManageType string
+func (p *Proxy) GetTransparentProxy() *tproxy_dp.DataplaneConfig {
+	return tproxy_dp.GetDataplaneConfig(p.Dataplane, p.Metadata)
+}
+
+type ManagementMode string
 
 const (
-	KumaManagedType     ManageType = "kuma"
-	ExternalManagedType ManageType = "external"
+	// When kuma acts as a workload identity provider and SDS server.
+	KumaManagementMode ManagementMode = "kuma"
+	// When there is an external SDS server which provides workload identities.
+	ExternalManagementMode ManagementMode = "external"
 )
 
 type WorkloadIdentity struct {
+	// KRI identifies which MeshIdentity targets this Proxy.
 	KRI kri.Identifier
-	// or creator function?
-	ManageType ManageType
-	// Expiration
+	// ManagementMode indicates which system provides the identity for the Proxy.
+	ManagementMode ManagementMode
 	ExpirationTime *time.Time
 	GenerationTime *time.Time
-	// CommonTlsContext configurer
-	IdentitySourceConfigurer   func() bldrs_common.Configurer[tlsv3.SdsSecretConfig]
+	// IdentitySourceConfigurer returns a function that configures the identity secret,
+	// including the secret name and whether it’s served by Kuma’s SDS server or an external SDS server.
+	IdentitySourceConfigurer func() bldrs_common.Configurer[tlsv3.SdsSecretConfig]
+	// ValidationSourceConfigurer returns a function that configures the validation secret,
+	// including the secret name and whether it’s served by Kuma’s SDS server or an external SDS server.
 	ValidationSourceConfigurer func() bldrs_common.Configurer[tlsv3.SdsSecretConfig]
-
-	// Additionalresources
+	// AdditionalResources contains Envoy resources that can be added to the resource set.
+	// It provides a simple way to create provider-specific Envoy resources and propagate them to Envoy.
 	AdditionalResources *ResourceSet
 }
 
@@ -232,10 +241,6 @@ func (c *WorkloadIdentity) CertLifetime() time.Duration {
 
 func (i *WorkloadIdentity) ExpiringSoon() bool {
 	return core.Now().After(pointer.Deref(i.GenerationTime).Add(i.CertLifetime() / 5 * 4))
-}
-
-func (p *Proxy) GetTransparentProxy() *tproxy_dp.DataplaneConfig {
-	return tproxy_dp.GetDataplaneConfig(p.Dataplane, p.Metadata)
 }
 
 type ServerSideMTLSCerts struct {

@@ -27,6 +27,7 @@ import (
 	"github.com/kumahq/kuma/pkg/core"
 	"github.com/kumahq/kuma/pkg/core/kri"
 	meshidentity_api "github.com/kumahq/kuma/pkg/core/resources/apis/meshidentity/api/v1alpha1"
+	"github.com/kumahq/kuma/pkg/core/resources/apis/meshidentity/metadata"
 	"github.com/kumahq/kuma/pkg/core/resources/apis/meshidentity/providers"
 	core_system "github.com/kumahq/kuma/pkg/core/resources/apis/system"
 	"github.com/kumahq/kuma/pkg/core/resources/manager"
@@ -47,9 +48,9 @@ import (
 
 const (
 	DefaultAllowedClockSkew = 10 * time.Second
-	cacheExpirationTime     = 5 * time.Second
-	caCacheEntryKey         = "ca_pair"
-	OriginIdentityBundled   = "IdentityBundled"
+
+	cacheExpirationTime = 5 * time.Second
+	caCacheEntryKey     = "ca_pair"
 )
 
 var DefaultWorkloadCertValidityPeriod = k8s.Duration{Duration: 24 * time.Hour}
@@ -61,9 +62,10 @@ type bundledIdentityProvider struct {
 	roSecretManager manager.ReadOnlyResourceManager
 	secretManager   manager.ResourceManager
 	cache           *once.Cache
+	zone            string
 }
 
-func NewBundledIdentityProvider(roSecretManager manager.ReadOnlyResourceManager, secretManager manager.ResourceManager, metrics metrics.Metrics) (providers.IdentityProvider, error) {
+func NewBundledIdentityProvider(roSecretManager manager.ReadOnlyResourceManager, secretManager manager.ResourceManager, metrics metrics.Metrics, zone string) (providers.IdentityProvider, error) {
 	c, err := once.New(cacheExpirationTime, "ca_cache", metrics)
 	if err != nil {
 		return nil, err
@@ -74,6 +76,7 @@ func NewBundledIdentityProvider(roSecretManager manager.ReadOnlyResourceManager,
 		roSecretManager: roSecretManager,
 		secretManager:   secretManager,
 		cache:           c,
+		zone:            zone,
 	}, nil
 }
 
@@ -82,7 +85,7 @@ func (b *bundledIdentityProvider) Validate(ctx context.Context, identity *meshid
 		if pointer.DerefOr(identity.Spec.Provider.Bundled.Autogenerate.Enabled, false) {
 			return errors.Errorf("self-signed certificates are not allowed")
 		}
-		ca, err := b.GetRootCA(ctx, identity, identity.Meta.GetMesh())
+		ca, err := b.GetRootCA(ctx, identity)
 		if err != nil {
 			return err
 		}
@@ -98,8 +101,12 @@ func (b *bundledIdentityProvider) Validate(ctx context.Context, identity *meshid
 	return nil
 }
 
-func (b *bundledIdentityProvider) Initialize(ctx context.Context, identity *meshidentity_api.MeshIdentityResource, trustDomain string) error {
+func (b *bundledIdentityProvider) Initialize(ctx context.Context, identity *meshidentity_api.MeshIdentityResource) error {
 	if pointer.DerefOr(identity.Spec.Provider.Bundled.Autogenerate.Enabled, false) {
+		trustDomain, err := identity.Spec.GetTrustDomain(identity.GetMeta(), b.zone)
+		if err != nil {
+			return err
+		}
 		b.logger.V(1).Info("initializing provider", "identity", model.MetaToResourceKey(identity.GetMeta()), "trustDomain", trustDomain)
 		keyPair, err := GenerateRootCA(trustDomain)
 		if err != nil {
@@ -131,19 +138,18 @@ func (b *bundledIdentityProvider) Initialize(ctx context.Context, identity *mesh
 	return nil
 }
 
-func (b *bundledIdentityProvider) GetRootCA(ctx context.Context, identity *meshidentity_api.MeshIdentityResource, mesh string) ([]byte, error) {
+func (b *bundledIdentityProvider) GetRootCA(ctx context.Context, identity *meshidentity_api.MeshIdentityResource) ([]byte, error) {
 	bundled := pointer.Deref(identity.Spec.Provider.Bundled)
 	var err error
 	var cert []byte
 	if bundled.Autogenerate == nil || !pointer.Deref(bundled.Autogenerate.Enabled) && bundled.CA != nil {
-		cert, err = bundled.CA.Certificate.ReadByControlPlane(ctx, b.secretManager, mesh)
+		cert, err = bundled.CA.Certificate.ReadByControlPlane(ctx, b.secretManager, identity.Meta.GetMesh())
 		if err != nil {
 			return nil, err
 		}
 	} else {
-		// ca
 		ca := core_system.NewSecretResource()
-		if err := b.roSecretManager.Get(ctx, ca, core_store.GetByKey(RootCAName(model.GetDisplayName(identity.GetMeta())), mesh)); err != nil {
+		if err := b.roSecretManager.Get(ctx, ca, core_store.GetByKey(RootCAName(model.GetDisplayName(identity.GetMeta())), identity.Meta.GetMesh())); err != nil {
 			return nil, err
 		}
 		cert = ca.Spec.Data.GetValue()
@@ -193,7 +199,7 @@ func (b *bundledIdentityProvider) getCAKeyPair(ctx context.Context, identity *me
 	return ca.(*util_tls.KeyPair), nil
 }
 
-func (b *bundledIdentityProvider) CreateIdentity(ctx context.Context, identity *meshidentity_api.MeshIdentityResource, proxy *xds.Proxy, trustDomain string) (*xds.WorkloadIdentity, error) {
+func (b *bundledIdentityProvider) CreateIdentity(ctx context.Context, identity *meshidentity_api.MeshIdentityResource, proxy *xds.Proxy) (*xds.WorkloadIdentity, error) {
 	pair, err := b.getCAKeyPair(ctx, identity, proxy.Dataplane.Meta.GetMesh())
 	if err != nil {
 		return nil, err
@@ -211,7 +217,10 @@ func (b *bundledIdentityProvider) CreateIdentity(ctx context.Context, identity *
 	if err != nil {
 		return nil, err
 	}
-
+	trustDomain, err := identity.Spec.GetTrustDomain(identity.GetMeta(), b.zone)
+	if err != nil {
+		return nil, err
+	}
 	spiffeID, err := identity.Spec.GetSpiffeID(trustDomain, proxy.Dataplane.GetMeta())
 	if err != nil {
 		return nil, err
@@ -255,7 +264,7 @@ func (b *bundledIdentityProvider) CreateIdentity(ctx context.Context, identity *
 
 	return &xds.WorkloadIdentity{
 		KRI:                        identifier,
-		ManageType:                 xds.KumaManagedType,
+		ManagementMode:             xds.KumaManagementMode,
 		ExpirationTime:             pointer.To(template.NotAfter),
 		GenerationTime:             pointer.To(now),
 		IdentitySourceConfigurer:   sourceConfigurer(identifier.String()),
@@ -279,10 +288,9 @@ func additionalResources(secretName string, keyPair *util_tls.KeyPair) (*xds.Res
 	if err != nil {
 		return nil, err
 	}
-	core.Log.Info("TEST", "identitySecret", identitySecret)
 	resources.Add(&xds.Resource{
 		Name:     secretName,
-		Origin:   OriginIdentityBundled,
+		Origin:   metadata.OriginIdentityBundled,
 		Resource: identitySecret,
 	})
 	return resources, nil
@@ -314,7 +322,7 @@ func generateKey(caPrivateKey crypto.PrivateKey) (crypto.PublicKey, crypto.Priva
 		privateKey = priv
 
 	case *rsa.PrivateKey:
-		priv, err := rsa.GenerateKey(rand.Reader, DefaultKeySize)
+		priv, err := rsa.GenerateKey(rand.Reader, defaultKeySize)
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to generate rsa key: %w", err)
 		}
@@ -345,25 +353,21 @@ func init() {
 func isSelfSigned(certPEM []byte) (bool, error) {
 	block, _ := pem.Decode(certPEM)
 	if block == nil || block.Type != "CERTIFICATE" {
-		return false, errors.New("failed to decode PEM certificate")
+		return false, errors.New("failed to decode PEM block or block is not of type CERTIFICATE")
 	}
-
 	cert, err := x509.ParseCertificate(block.Bytes)
 	if err != nil {
 		return false, err
 	}
-
 	// Check if subject and issuer are the same
 	if !reflect.DeepEqual(cert.Subject.ToRDNSequence(), cert.Issuer.ToRDNSequence()) {
 		return false, nil
 	}
-
 	// Try to verify the certificate using its own public key
 	err = cert.CheckSignatureFrom(cert)
 	if err != nil {
 		return false, nil
 	}
-
 	return true, nil
 }
 

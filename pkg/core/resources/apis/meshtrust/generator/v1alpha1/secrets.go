@@ -7,16 +7,14 @@ import (
 	envoy_auth "github.com/envoyproxy/go-control-plane/envoy/extensions/transport_sockets/tls/v3"
 	"google.golang.org/protobuf/types/known/anypb"
 
-	"github.com/kumahq/kuma/pkg/core"
 	core_plugins "github.com/kumahq/kuma/pkg/core/plugins"
+	"github.com/kumahq/kuma/pkg/core/resources/apis/meshtrust/metadata"
 	core_xds "github.com/kumahq/kuma/pkg/core/xds"
 	bldrs_auth "github.com/kumahq/kuma/pkg/envoy/builders/auth"
 	bldrs_core "github.com/kumahq/kuma/pkg/envoy/builders/core"
 	xds_context "github.com/kumahq/kuma/pkg/xds/context"
 	"github.com/kumahq/kuma/pkg/xds/generator/system_names"
 )
-
-const OriginTrust = "trust"
 
 var _ core_plugins.CoreResourcePlugin = &plugin{}
 
@@ -30,18 +28,16 @@ func (p *plugin) Generate(rs *core_xds.ResourceSet, xdsCtx xds_context.Context, 
 	if proxy.WorkloadIdentity == nil {
 		return nil
 	}
-	switch proxy.WorkloadIdentity.ManageType {
-	case core_xds.KumaManagedType:
-		// add validation context secret
+	switch proxy.WorkloadIdentity.ManagementMode {
+	case core_xds.KumaManagementMode:
 		if len(xdsCtx.Mesh.TrustsByTrustDomain) > 0 {
 			config, err := validationCtx(xdsCtx)
 			if err != nil {
 				return err
 			}
-			core.Log.Info("create trust", "config", config)
 			rs.Add(&core_xds.Resource{
 				Name:     config.Name,
-				Origin:   OriginTrust,
+				Origin:   metadata.OriginMeshTrust,
 				Resource: config,
 			})
 		}

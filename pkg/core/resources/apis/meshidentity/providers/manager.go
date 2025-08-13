@@ -18,16 +18,14 @@ type IdentityProviderManager struct {
 	logger      logr.Logger
 	eventWriter events.Emitter
 	providers   IdentityProviders
-	zone        string
 }
 
-func NewIdentityProviderManager(providers IdentityProviders, eventWriter events.Emitter, zone string) IdentityProviderManager {
+func NewIdentityProviderManager(providers IdentityProviders, eventWriter events.Emitter) IdentityProviderManager {
 	logger := core.Log.WithName("identity-provider")
 	return IdentityProviderManager{
 		logger:      logger,
 		eventWriter: eventWriter,
 		providers:   providers,
-		zone:        zone,
 	}
 }
 
@@ -55,11 +53,7 @@ func (i *IdentityProviderManager) GetWorkloadIdentity(ctx context.Context, proxy
 		return nil, fmt.Errorf("identity provider %s not found", identity.Spec.Provider.Type)
 	}
 
-	trustDomain, err := identity.Spec.GetTrustDomain(proxy.Dataplane.GetMeta(), i.zone)
-	if err != nil {
-		return nil, err
-	}
-	workloadIdentity, err := provider.CreateIdentity(ctx, identity, proxy, trustDomain)
+	workloadIdentity, err := provider.CreateIdentity(ctx, identity, proxy)
 	if err != nil {
 		return nil, err
 	}
@@ -67,11 +61,11 @@ func (i *IdentityProviderManager) GetWorkloadIdentity(ctx context.Context, proxy
 		return nil, nil
 	}
 	event := events.WorkloadIdentityChangedEvent{
-		ResourceKey:       model.MetaToResourceKey(proxy.Dataplane.GetMeta()),
-		Operation:         events.Create,
-		Origin:            workloadIdentity.KRI,
+		ResourceKey: model.MetaToResourceKey(proxy.Dataplane.GetMeta()),
+		Operation:   events.Create,
+		Origin:      workloadIdentity.KRI,
 	}
-	if workloadIdentity.ManageType == xds.KumaManagedType {
+	if workloadIdentity.ManagementMode == xds.KumaManagementMode {
 		event.ExpirationTime = workloadIdentity.ExpirationTime
 		event.GenerationTime = workloadIdentity.GenerationTime
 	}
