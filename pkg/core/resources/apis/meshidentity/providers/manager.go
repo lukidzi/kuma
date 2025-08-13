@@ -52,7 +52,6 @@ func (i *IdentityProviderManager) GetWorkloadIdentity(ctx context.Context, proxy
 	if !found {
 		return nil, fmt.Errorf("identity provider %s not found", identity.Spec.Provider.Type)
 	}
-
 	workloadIdentity, err := provider.CreateIdentity(ctx, identity, proxy)
 	if err != nil {
 		return nil, err

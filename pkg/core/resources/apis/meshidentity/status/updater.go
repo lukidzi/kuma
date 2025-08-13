@@ -70,8 +70,6 @@ func (i *IdentityProviderReconciler) Start(stop <-chan struct{}) error {
 				message := "Successfully initialized"
 				generationConditionStatus := kube_meta.ConditionTrue
 				reason := "Ready"
-				// resolve trustDomain
-
 				initConditions := i.initialize(ctx, mid)
 				conditions = append(conditions, initConditions...)
 				for _, condition := range initConditions {

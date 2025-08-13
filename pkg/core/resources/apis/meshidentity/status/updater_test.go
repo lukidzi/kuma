@@ -10,11 +10,17 @@ import (
 	kube_meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	common_api "github.com/kumahq/kuma/api/common/v1alpha1"
+<<<<<<< HEAD
 	"github.com/kumahq/kuma/pkg/core/kri"
 	meshidentity_api "github.com/kumahq/kuma/pkg/core/resources/apis/meshidentity/api/v1alpha1"
 	"github.com/kumahq/kuma/pkg/core/resources/apis/meshidentity/providers"
 	"github.com/kumahq/kuma/pkg/core/resources/apis/meshidentity/providers/bundled"
 	meshtrust_api "github.com/kumahq/kuma/pkg/core/resources/apis/meshtrust/api/v1alpha1"
+=======
+	meshidentity_api "github.com/kumahq/kuma/pkg/core/resources/apis/meshidentity/api/v1alpha1"
+	"github.com/kumahq/kuma/pkg/core/resources/apis/meshidentity/providers"
+	"github.com/kumahq/kuma/pkg/core/resources/apis/meshidentity/providers/bundled"
+>>>>>>> master
 	"github.com/kumahq/kuma/pkg/core/resources/apis/system"
 	"github.com/kumahq/kuma/pkg/core/resources/manager"
 	"github.com/kumahq/kuma/pkg/core/resources/model"
