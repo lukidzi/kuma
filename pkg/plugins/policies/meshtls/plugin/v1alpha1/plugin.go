@@ -1,13 +1,18 @@
 package v1alpha1
 
 import (
+	"bytes"
+	"sort"
+
 	envoy_cluster "github.com/envoyproxy/go-control-plane/envoy/config/cluster/v3"
 	envoy_core "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	envoy_listener "github.com/envoyproxy/go-control-plane/envoy/config/listener/v3"
+	envoy_auth "github.com/envoyproxy/go-control-plane/envoy/extensions/transport_sockets/tls/v3"
 	envoy_tls "github.com/envoyproxy/go-control-plane/envoy/extensions/transport_sockets/tls/v3"
 	envoy_resource "github.com/envoyproxy/go-control-plane/pkg/resource/v3"
 	"github.com/envoyproxy/go-control-plane/pkg/wellknown"
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
+	"google.golang.org/protobuf/types/known/anypb"
 
 	common_tls "github.com/kumahq/kuma/api/common/v1alpha1/tls"
 	mesh_proto "github.com/kumahq/kuma/api/mesh/v1alpha1"
@@ -20,6 +25,7 @@ import (
 	core_mesh "github.com/kumahq/kuma/pkg/core/resources/apis/mesh"
 	core_xds "github.com/kumahq/kuma/pkg/core/xds"
 	xds_types "github.com/kumahq/kuma/pkg/core/xds/types"
+	bldrs_auth "github.com/kumahq/kuma/pkg/envoy/builders/auth"
 	bldrs_common "github.com/kumahq/kuma/pkg/envoy/builders/common"
 	bldrs_core "github.com/kumahq/kuma/pkg/envoy/builders/core"
 	bldrs_matcher "github.com/kumahq/kuma/pkg/envoy/builders/matcher"
@@ -391,6 +397,40 @@ func downstreamTLSContext(xdsCtx xds_context.Context, proxy *core_xds.Proxy, con
 		}
 	}
 
+	defaultValidationCtx := bldrs_tls.NewDefaultValidationContext().
+		Configure(bldrs_tls.SANs(sanMatchers))
+
+	validatorsPerTrustDomain := []*envoy_auth.SPIFFECertValidatorConfig_TrustDomain{}
+	for domain, trusts := range xdsCtx.Mesh.CAsByTrustDomain {
+		// concatenate multiple CAs
+		allCAs := [][]byte{}
+		for _, ca := range trusts {
+			allCAs = append(allCAs, []byte(ca))
+		}
+		concatenatedCA := bytes.Join(allCAs, []byte("\n"))
+		validator, err := bldrs_auth.NewSPIFFECertValidator().
+			Configure(
+				bldrs_auth.TrustDomainBundle(domain,
+					bldrs_core.NewDataSource().Configure(bldrs_core.InlineBytes(concatenatedCA)))).Build()
+		if err != nil {
+			return nil, err
+		}
+		validatorsPerTrustDomain = append(validatorsPerTrustDomain, validator)
+	}
+	// Order by trustdomain name to return in consistent order
+	sort.Slice(validatorsPerTrustDomain, func(i, j int) bool {
+		return validatorsPerTrustDomain[i].Name < validatorsPerTrustDomain[j].Name
+	})
+	if len(validatorsPerTrustDomain) > 0 {
+		typedConfig, err := anypb.New(&envoy_auth.SPIFFECertValidatorConfig{
+			TrustDomains: validatorsPerTrustDomain,
+		})
+		if err != nil {
+			return nil, err
+		}
+		defaultValidationCtx = defaultValidationCtx.Configure(bldrs_auth.SpiffeCustomValidator(typedConfig))
+	}
+
 	return bldrs_tls.NewDownstreamTLSContext().
 		Configure(
 			bldrs_tls.DownstreamCommonTlsContext(
@@ -410,8 +450,7 @@ func downstreamTLSContext(xdsCtx xds_context.Context, proxy *core_xds.Proxy, con
 							bldrs_tls.NewCombinedCertificateValidationContext().
 								Configure(
 									bldrs_tls.DefaultValidationContext(
-										bldrs_tls.NewDefaultValidationContext().
-											Configure(bldrs_tls.SANs(sanMatchers)),
+										defaultValidationCtx,
 									),
 								).
 								Configure(

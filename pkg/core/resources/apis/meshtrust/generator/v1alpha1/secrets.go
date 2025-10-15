@@ -56,9 +56,13 @@ func validationCtx(xdsCtx xds_context.Context) (*envoy_auth.Secret, error) {
 		// concatenate multiple CAs
 		allCAs := [][]byte{}
 		for _, ca := range trusts {
-			allCAs = append(allCAs, []byte(ca))
+			allCAs = append(allCAs, bytes.TrimSpace([]byte(ca)))
 		}
 		concatenatedCA := bytes.Join(allCAs, []byte("\n"))
+		// Always ensure the final PEM ends with a newline
+		if !bytes.HasSuffix(concatenatedCA, []byte("\n")) {
+			concatenatedCA = append(concatenatedCA, '\n')
+		}
 		validator, err := bldrs_auth.NewSPIFFECertValidator().
 			Configure(
 				bldrs_auth.TrustDomainBundle(domain,

@@ -1,10 +1,13 @@
 package meshroute
 
 import (
+	"bytes"
 	"sort"
 
+	envoy_auth "github.com/envoyproxy/go-control-plane/envoy/extensions/transport_sockets/tls/v3"
 	envoy_tls "github.com/envoyproxy/go-control-plane/envoy/extensions/transport_sockets/tls/v3"
 	"github.com/pkg/errors"
+	"google.golang.org/protobuf/types/known/anypb"
 
 	common_api "github.com/kumahq/kuma/api/common/v1alpha1"
 	mesh_proto "github.com/kumahq/kuma/api/mesh/v1alpha1"
@@ -15,6 +18,7 @@ import (
 	meshservice_api "github.com/kumahq/kuma/pkg/core/resources/apis/meshservice/api/v1alpha1"
 	core_model "github.com/kumahq/kuma/pkg/core/resources/model"
 	core_xds "github.com/kumahq/kuma/pkg/core/xds"
+	bldrs_auth "github.com/kumahq/kuma/pkg/envoy/builders/auth"
 	bldrs_common "github.com/kumahq/kuma/pkg/envoy/builders/common"
 	bldrs_core "github.com/kumahq/kuma/pkg/envoy/builders/core"
 	bldrs_matcher "github.com/kumahq/kuma/pkg/envoy/builders/matcher"
@@ -194,15 +198,51 @@ func UpstreamTLSContext(realResourceRef *resolve.RealResourceBackendRef, meshCtx
 		)
 	}
 
-	defaultValidation := bldrs_tls.DefaultValidationContext(
-		bldrs_tls.NewDefaultValidationContext().Configure(
-			bldrs_tls.SANs(sanMatchers),
-		),
+	defaultValidationCtx := bldrs_tls.NewDefaultValidationContext().Configure(
+		bldrs_tls.SANs(sanMatchers),
 	)
+
+	validatorsPerTrustDomain := []*envoy_auth.SPIFFECertValidatorConfig_TrustDomain{}
+	for domain, trusts := range meshCtx.CAsByTrustDomain {
+		// concatenate multiple CAs
+		allCAs := [][]byte{}
+		for _, ca := range trusts {
+			allCAs = append(allCAs, []byte(ca))
+		}
+		concatenatedCA := bytes.Join(allCAs, []byte("\n"))
+		validator, err := bldrs_auth.NewSPIFFECertValidator().
+			Configure(
+				bldrs_auth.TrustDomainBundle(domain,
+					bldrs_core.NewDataSource().Configure(bldrs_core.InlineBytes(concatenatedCA)))).Build()
+		if err != nil {
+			return nil, err
+		}
+		validatorsPerTrustDomain = append(validatorsPerTrustDomain, validator)
+	}
+	// Order by trustdomain name to return in consistent order
+	sort.Slice(validatorsPerTrustDomain, func(i, j int) bool {
+		return validatorsPerTrustDomain[i].Name < validatorsPerTrustDomain[j].Name
+	})
+	if len(validatorsPerTrustDomain) > 0 {
+		typedConfig, err := anypb.New(&envoy_auth.SPIFFECertValidatorConfig{
+			TrustDomains: validatorsPerTrustDomain,
+		})
+		if err != nil {
+			return nil, err
+		}
+		defaultValidationCtx = defaultValidationCtx.Configure(bldrs_auth.SpiffeCustomValidator(typedConfig))
+	}
+
 	combinedValidation := bldrs_tls.CombinedCertificateValidationContext(
 		bldrs_tls.NewCombinedCertificateValidationContext().
-			Configure(validationSds).
-			Configure(defaultValidation),
+			Configure(
+				bldrs_tls.DefaultValidationContext(
+					defaultValidationCtx,
+				),
+			).
+			Configure(
+				validationSds,
+			),
 	)
 	commonTlsContext := bldrs_tls.NewCommonTlsContext().
 		Configure(combinedValidation).

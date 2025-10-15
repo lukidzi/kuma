@@ -49,7 +49,11 @@ resources:
           '@type': type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.DownstreamTlsContext
           commonTlsContext:
             combinedValidationContext:
-              defaultValidationContext: {}
+              defaultValidationContext:
+                customValidatorConfig:
+                  name: envoy.tls.cert_validator.spiffe
+                  typedConfig:
+                    '@type': type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.SPIFFECertValidatorConfig
               validationContextSdsSecretConfig:
                 name: ca-bundle
                 sdsConfig:
@@ -121,7 +125,11 @@ resources:
           '@type': type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.DownstreamTlsContext
           commonTlsContext:
             combinedValidationContext:
-              defaultValidationContext: {}
+              defaultValidationContext:
+                customValidatorConfig:
+                  name: envoy.tls.cert_validator.spiffe
+                  typedConfig:
+                    '@type': type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.SPIFFECertValidatorConfig
               validationContextSdsSecretConfig:
                 name: ca-bundle
                 sdsConfig:

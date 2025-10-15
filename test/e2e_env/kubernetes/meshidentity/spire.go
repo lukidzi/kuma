@@ -2,6 +2,7 @@ package meshidentity
 
 import (
 	"fmt"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -126,7 +127,7 @@ spec:
 			Namespace: namespace,
 		})
 		Expect(err).ToNot(HaveOccurred())
-
+		time.Sleep(1*time.Hour)
 		// and it's a tls traffic
 		Eventually(func(g Gomega) {
 			s, err := admin.GetStats("listener.*_80.ssl.handshake")
