@@ -519,4 +519,4 @@ The following topics are covered in a separate MADR:
 | Annotations | `pkg/plugins/runtime/k8s/metadata/annotations.go` |
 
 [^1]: Resource model MADR link will be backfilled when created.
-[^2]: Zone proxy deployment topology MADR link will be backfilled when created.
+[^2]: [MADR 097](097-zone-proxy-deployment-topology.md) — Zone Proxy Deployment Topology.

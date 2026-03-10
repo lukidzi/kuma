@@ -12,6 +12,7 @@ import (
 	"github.com/kumahq/kuma/v2/pkg/core/kri"
 	"github.com/kumahq/kuma/v2/pkg/core/logs"
 	manager_dataplane "github.com/kumahq/kuma/v2/pkg/core/managers/apis/dataplane"
+	unified_naming "github.com/kumahq/kuma/v2/pkg/core/naming/unified-naming"
 	"github.com/kumahq/kuma/v2/pkg/core/permissions"
 	core_plugins "github.com/kumahq/kuma/v2/pkg/core/plugins"
 	"github.com/kumahq/kuma/v2/pkg/core/ratelimits"
@@ -28,7 +29,6 @@ import (
 	"github.com/kumahq/kuma/v2/pkg/util/pointer"
 	xds_context "github.com/kumahq/kuma/v2/pkg/xds/context"
 	"github.com/kumahq/kuma/v2/pkg/xds/envoy"
-	"github.com/kumahq/kuma/v2/pkg/xds/ingress"
 	"github.com/kumahq/kuma/v2/pkg/xds/template"
 	xds_topology "github.com/kumahq/kuma/v2/pkg/xds/topology"
 )
@@ -79,7 +79,7 @@ func (p *DataplaneProxyBuilder) Build(ctx context.Context, key core_model.Resour
 		RuntimeExtensions: map[string]interface{}{},
 	}
 	if dp.Spec.GetNetworking().HasZoneProxyListeners() {
-		proxy.DataplaneZoneListeners = p.buildDataplaneZoneListeners(ctx, dp, meshContext)
+		proxy.DataplaneZoneListeners = p.buildDataplaneZoneListeners(ctx, meta, dp, meshContext)
 	}
 	for k, pl := range core_plugins.Plugins().ProxyPlugins() {
 		err := pl.Apply(ctx, meshContext, proxy)
@@ -92,55 +92,33 @@ func (p *DataplaneProxyBuilder) Build(ctx context.Context, key core_model.Resour
 
 func (p *DataplaneProxyBuilder) buildDataplaneZoneListeners(
 	ctx context.Context,
+	meta *core_xds.DataplaneMetadata,
 	dp *core_mesh.DataplaneResource,
 	meshContext xds_context.MeshContext,
 ) *core_xds.DataplaneZoneListeners {
-	mesh := meshContext.Resource
-
-	availableServices := ingress.GetAvailableServices(
-		map[core_xds.MeshName]struct{}{},
-		meshContext.Resources.Dataplanes().Items,
-		meshContext.Resources.MeshGateways().Items,
-		meshContext.Resources.ExternalServices().Items,
-		nil,
-	)
+	unifiedNaming := unified_naming.Enabled(meta, meshContext.Resource)
 
 	ingressMeshResources := &core_xds.MeshIngressResources{
-		Mesh:        mesh,
-		EndpointMap: meshContext.IngressEndpointMap,
-		Resources:   meshContext.Resources.MeshLocalResources,
-	}
-
-	var remoteZoneIngresses []*core_mesh.ZoneIngressResource
-	for _, zi := range meshContext.Resources.ZoneIngresses().Items {
-		if zi.IsRemoteIngress(p.Zone) {
-			remoteZoneIngresses = append(remoteZoneIngresses, zi)
-		}
+		Mesh: meshContext.Resource,
+		EndpointMap: xds_topology.BuildDataplaneZoneIngressEndpointMap(
+			meshContext.Resource,
+			p.Zone,
+			meshContext.Resources.MeshServices().Items,
+			meshContext.Resources.MeshMultiZoneServices().Items,
+			meshContext.Resources.Dataplanes().Items,
+		),
+		Resources: meshContext.Resources.MeshLocalResources,
 	}
 
 	egressMeshResources := &core_xds.MeshResources{
-		Mesh:             mesh,
-		ExternalServices: meshContext.Resources.ExternalServices().Items,
-		EndpointMap: xds_topology.BuildEgressEndpointMap(
+		Mesh: meshContext.Resource,
+		EndpointMap: xds_topology.BuildDataplaneZoneEgressEndpointMap(
 			ctx,
-			mesh,
+			meshContext.Resource,
 			p.Zone,
-			remoteZoneIngresses,
-			meshContext.Resources.ExternalServices().Items,
 			meshContext.Resources.MeshExternalServices().Items,
 			meshContext.DataSourceLoader,
-		),
-		ExternalServicePermissionMap: permissions.BuildExternalServicesPermissionsMapForZoneEgress(
-			meshContext.Resources.ExternalServices().Items,
-			meshContext.Resources.TrafficPermissions().Items,
-		),
-		ExternalServiceFaultInjections: faultinjections.BuildExternalServiceFaultInjectionMapForZoneEgress(
-			meshContext.Resources.ExternalServices().Items,
-			meshContext.Resources.FaultInjections().Items,
-		),
-		ExternalServiceRateLimits: ratelimits.BuildExternalServiceRateLimitMapForZoneEgress(
-			meshContext.Resources.ExternalServices().Items,
-			meshContext.Resources.RateLimits().Items,
+			unifiedNaming,
 		),
 		Dynamic:   core_xds.ExternalServiceDynamicPolicies{},
 		Resources: meshContext.Resources.MeshLocalResources,
@@ -151,14 +129,12 @@ func (p *DataplaneProxyBuilder) buildDataplaneZoneListeners(
 		switch l.Type {
 		case mesh_proto.Dataplane_Networking_Listener_ZoneIngress:
 			result.IngressListeners = append(result.IngressListeners, &core_xds.DataplaneIngressListener{
-				Listener:          l,
-				MeshResources:     ingressMeshResources,
-				AvailableServices: availableServices,
+				Listener:      l,
+				MeshResources: ingressMeshResources,
 			})
 		case mesh_proto.Dataplane_Networking_Listener_ZoneEgress:
 			result.EgressListeners = append(result.EgressListeners, &core_xds.DataplaneEgressListener{
 				Listener:      l,
-				ZoneIngresses: remoteZoneIngresses,
 				MeshResources: egressMeshResources,
 			})
 		}

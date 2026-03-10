@@ -74,6 +74,55 @@ func BuildEgressEndpointMap(
 	return outbound
 }
 
+// BuildDataplaneZoneEgressEndpointMap builds endpoints only for MeshExternalServices reachable from the zone.
+// Used for embedded zone egress listeners in a Dataplane resource.
+func BuildDataplaneZoneEgressEndpointMap(
+	ctx context.Context,
+	mesh *core_mesh.MeshResource,
+	zone string,
+	meshExternalServices []*meshexternalservice_api.MeshExternalServiceResource,
+	loader datasource.Loader,
+	unifiedNaming bool,
+) core_xds.EndpointMap {
+	outbound := core_xds.EndpointMap{}
+	for _, mes := range meshExternalServices {
+		if mes.IsReachableFromZone(zone) {
+			err := createMeshExternalServiceEndpoint(ctx, outbound, mes, mesh, loader, unifiedNaming)
+			if err != nil {
+				outboundLog.Error(err, "unable to create MeshExternalService endpoint. Endpoint won't be included in the XDS.", "name", mes.Meta.GetName(), "mesh", mes.Meta.GetMesh())
+				continue
+			}
+		}
+	}
+	for serviceName, endpoints := range outbound {
+		var newEndpoints []core_xds.Endpoint
+		for _, endpoint := range endpoints {
+			newEndpoints = append(newEndpoints, endpoint)
+		}
+		outbound[serviceName] = newEndpoints
+	}
+	return outbound
+}
+
+// BuildDataplaneZoneIngressEndpointMap builds endpoints only for local MeshServices and MeshMultiZoneServices.
+// Used for embedded zone ingress listeners in a Dataplane resource.
+func BuildDataplaneZoneIngressEndpointMap(
+	mesh *core_mesh.MeshResource,
+	localZone string,
+	meshServices []*meshservice_api.MeshServiceResource,
+	meshMultiZoneServices []*meshmzservice_api.MeshMultiZoneServiceResource,
+	dataplanes []*core_mesh.DataplaneResource,
+) core_xds.EndpointMap {
+	outbound := core_xds.EndpointMap{}
+	meshServicesByKri := make(map[kri.Identifier]*meshservice_api.MeshServiceResource, len(meshServices))
+	for _, ms := range meshServices {
+		meshServicesByKri[kri.From(ms)] = ms
+	}
+	fillLocalMeshServices(outbound, meshServices, dataplanes, mesh, localZone)
+	fillMeshMultiZoneServices(outbound, meshServicesByKri, meshMultiZoneServices)
+	return outbound
+}
+
 func BuildIngressEndpointMap(
 	ctx context.Context,
 	mesh *core_mesh.MeshResource,
@@ -594,7 +643,7 @@ func fillExternalServicesReachableFromZone(
 	}
 	for _, mes := range meshExternalServices {
 		if mes.IsReachableFromZone(zone) {
-			err := createMeshExternalServiceEndpoint(ctx, outbound, mes, mesh, loader)
+			err := createMeshExternalServiceEndpoint(ctx, outbound, mes, mesh, loader, false)
 			if err != nil {
 				outboundLog.Error(err, "unable to create MeshExternalService endpoint. Endpoint won't be included in the XDS.", "name", mes.Meta.GetName(), "mesh", mes.Meta.GetMesh())
 				continue
@@ -622,6 +671,7 @@ func createMeshExternalServiceEndpoint(
 	mes *meshexternalservice_api.MeshExternalServiceResource,
 	mesh *core_mesh.MeshResource,
 	loader datasource.Loader,
+	unifiedNaming bool,
 ) error {
 	es := &core_xds.ExternalService{
 		Protocol:      mes.Spec.Match.Protocol,
@@ -658,8 +708,8 @@ func createMeshExternalServiceEndpoint(
 			Tags:            tags,
 			Locality:        locality,
 		}
-		legacyName := destinationname.MustResolve(false, mes, mes.Spec.Match)
-		outbounds[legacyName] = append(outbounds[legacyName], *outboundEndpoint)
+		name := destinationname.MustResolve(unifiedNaming, mes, mes.Spec.Match)
+		outbounds[name] = append(outbounds[name], *outboundEndpoint)
 	}
 	return nil
 }

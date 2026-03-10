@@ -341,15 +341,13 @@ type DataplaneZoneListeners struct {
 
 // DataplaneIngressListener holds xDS context for a single embedded ZoneIngress listener.
 type DataplaneIngressListener struct {
-	Listener          *mesh_proto.Dataplane_Networking_Listener
-	MeshResources     *MeshIngressResources
-	AvailableServices []*mesh_proto.ZoneIngress_AvailableService
+	Listener      *mesh_proto.Dataplane_Networking_Listener
+	MeshResources *MeshIngressResources
 }
 
 // DataplaneEgressListener holds xDS context for a single embedded ZoneEgress listener.
 type DataplaneEgressListener struct {
 	Listener      *mesh_proto.Dataplane_Networking_Listener
-	ZoneIngresses []*core_mesh.ZoneIngressResource
 	MeshResources *MeshResources
 }
 
