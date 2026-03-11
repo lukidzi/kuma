@@ -32,6 +32,15 @@ type APIVersion string
 // StreamID represents a stream opened by XDS
 type StreamID = int64
 
+// ZoneEgress holds the resolved bind address, port and workload-identity SAN
+// of a zone egress proxy. SAN is the SPIFFE ID when WorkloadIdentity is
+// enabled; empty for legacy mTLS deployments.
+type ZoneEgress struct {
+	Address string
+	Port    uint32
+	SAN     string
+}
+
 type ProxyId struct {
 	mesh string
 	name string

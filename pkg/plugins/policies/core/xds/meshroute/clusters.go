@@ -54,18 +54,32 @@ func GenerateClusters(
 			if meshCtx.IsExternalService(serviceName) {
 				switch {
 				case isMeshExternalService(meshCtx.EndpointMap[serviceName]):
-					// MeshExternalService is only available through egress
-					edsClusterBuilder.
-						Configure(envoy_clusters.EdsCluster()).
-						Configure(envoy_clusters.ClientSideMTLSCustomSNI(
-							proxy.SecretsTracker,
-							unifiedNaming,
-							meshCtx.Resource,
-							mesh_proto.ZoneEgressServiceName,
-							true,
-							SniForBackendRef(service.BackendRef().RealResourceBackendRef(), meshCtx, systemNamespace),
-							false,
-						))
+					// MeshExternalService is only available through egress.
+					// When WorkloadIdentity is enabled we build an UpstreamTlsContext that
+					// verifies the zone egress peer certificate using the egress SPIFFE IDs
+					// precomputed in MeshContext, instead of the SecretsTracker-based path.
+					if proxy.WorkloadIdentity != nil {
+						sni := SniForBackendRef(service.BackendRef().RealResourceBackendRef(), meshCtx, systemNamespace)
+						upstreamCtx, err := UpstreamTLSContextForEgress(proxy, meshCtx, sni)
+						if err != nil {
+							return nil, err
+						}
+						edsClusterBuilder.
+							Configure(envoy_clusters.EdsCluster()).
+							Configure(envoy_clusters.UpstreamTLSContext(upstreamCtx))
+					} else {
+						edsClusterBuilder.
+							Configure(envoy_clusters.EdsCluster()).
+							Configure(envoy_clusters.ClientSideMTLSCustomSNI(
+								proxy.SecretsTracker,
+								unifiedNaming,
+								meshCtx.Resource,
+								mesh_proto.ZoneEgressServiceName,
+								true,
+								SniForBackendRef(service.BackendRef().RealResourceBackendRef(), meshCtx, systemNamespace),
+								false,
+							))
+					}
 				case meshCtx.Resource.ZoneEgressEnabled():
 					// path for old ExternalService
 					edsClusterBuilder.
@@ -168,6 +182,63 @@ func GenerateClusters(
 	}
 
 	return resources, nil
+}
+
+// UpstreamTLSContextForEgress builds an UpstreamTlsContext for connecting to zone egress when
+// WorkloadIdentity is enabled. It uses the egress SPIFFE IDs stored in MeshContext (ZoneEgresses)
+// as the peer verification matchers and the given sni for SNI routing at the egress.
+func UpstreamTLSContextForEgress(proxy *core_xds.Proxy, meshCtx xds_context.MeshContext, sni string) (*envoy_tls.UpstreamTlsContext, error) {
+	sanMatchers := []*bldrs_common.Builder[envoy_tls.SubjectAltNameMatcher]{}
+	for _, ze := range meshCtx.ZoneEgresses {
+		if ze.SAN == "" {
+			continue
+		}
+		conf := bldrs_tls.NewSubjectAltNameMatcher().Configure(bldrs_tls.URI(bldrs_matcher.NewStringMatcher().Configure(bldrs_matcher.ExactMatcher(ze.SAN))))
+		sanMatchers = append(sanMatchers, conf)
+	}
+	var validationSds bldrs_common.Configurer[envoy_tls.CommonTlsContext_CombinedCertificateValidationContext]
+	if proxy.WorkloadIdentity.ExternalValidationSourceConfigurer != nil {
+		validationSds = bldrs_tls.ValidationContextSdsSecretConfig(
+			bldrs_tls.NewTlsCertificateSdsSecretConfigs().Configure(
+				proxy.WorkloadIdentity.ExternalValidationSourceConfigurer(),
+			),
+		)
+	} else {
+		validationSds = bldrs_tls.ValidationContextSdsSecretConfig(
+			bldrs_tls.NewTlsCertificateSdsSecretConfigs().Configure(
+				bldrs_tls.SdsSecretConfigSource(
+					system_names.SystemResourceNameCABundle,
+					bldrs_core.NewConfigSource().Configure(bldrs_core.Sds()),
+				),
+			),
+		)
+	}
+	defaultValidation := bldrs_tls.DefaultValidationContext(
+		bldrs_tls.NewDefaultValidationContext().Configure(
+			bldrs_tls.SANs(sanMatchers),
+		),
+	)
+	combinedValidation := bldrs_tls.CombinedCertificateValidationContext(
+		bldrs_tls.NewCombinedCertificateValidationContext().
+			Configure(validationSds).
+			Configure(defaultValidation),
+	)
+	commonTlsContext := bldrs_tls.NewCommonTlsContext().
+		Configure(combinedValidation).
+		Configure(bldrs_tls.TlsCertificateSdsSecretConfigs([]*bldrs_common.Builder[envoy_tls.SdsSecretConfig]{
+			bldrs_tls.NewTlsCertificateSdsSecretConfigs().Configure(
+				proxy.WorkloadIdentity.IdentitySourceConfigurer(),
+			),
+		})).
+		Configure(bldrs_tls.KumaAlpnProtocol())
+	upstreamCtx, err := bldrs_tls.NewUpstreamTLSContext().
+		Configure(bldrs_tls.SNI(sni)).
+		Configure(bldrs_tls.UpstreamCommonTlsContext(commonTlsContext)).
+		Build()
+	if err != nil {
+		return nil, err
+	}
+	return upstreamCtx, nil
 }
 
 func UpstreamTLSContext(realResourceRef *resolve.RealResourceBackendRef, meshCtx xds_context.MeshContext, proxy *core_xds.Proxy, sni string) (*envoy_tls.UpstreamTlsContext, error) {

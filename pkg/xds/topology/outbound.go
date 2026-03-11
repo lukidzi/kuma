@@ -96,9 +96,7 @@ func BuildDataplaneZoneEgressEndpointMap(
 	}
 	for serviceName, endpoints := range outbound {
 		var newEndpoints []core_xds.Endpoint
-		for _, endpoint := range endpoints {
-			newEndpoints = append(newEndpoints, endpoint)
-		}
+		newEndpoints = append(newEndpoints, endpoints...)
 		outbound[serviceName] = newEndpoints
 	}
 	return outbound
@@ -134,12 +132,13 @@ func BuildIngressEndpointMap(
 	externalServices []*core_mesh.ExternalServiceResource,
 	gateways []*core_mesh.MeshGatewayResource,
 	zoneEgresses []*core_mesh.ZoneEgressResource,
+	egressAddresses []core_xds.ZoneEgress,
 	loader datasource.Loader,
 	mtlsEnabled bool,
 ) core_xds.EndpointMap {
 	// Build EDS endpoint map just like for regular DPP, but without list of Ingress.
 	// This way we only keep local endpoints.
-	outbound := BuildEdsEndpointMap(ctx, mesh, localZone, meshServices, meshMultiZoneServices, meshExternalServices, dataplanes, nil, zoneEgresses, externalServices, loader, mtlsEnabled)
+	outbound := BuildEdsEndpointMap(ctx, mesh, localZone, meshServices, meshMultiZoneServices, meshExternalServices, dataplanes, nil, zoneEgresses, externalServices, loader, mtlsEnabled, egressAddresses)
 	fillLocalCrossMeshOutbounds(outbound, mesh, dataplanes, gateways, 1, localZone)
 	return outbound
 }
@@ -157,6 +156,7 @@ func BuildEdsEndpointMap(
 	externalServices []*core_mesh.ExternalServiceResource,
 	loader datasource.Loader,
 	mtlsEnabled bool,
+	egressAddresses []core_xds.ZoneEgress,
 ) core_xds.EndpointMap {
 	outbound := core_xds.EndpointMap{}
 
@@ -183,7 +183,7 @@ func BuildEdsEndpointMap(
 
 	fillRemoteMeshServices(outbound, meshServices, zoneIngresses, mesh, localZone, mtlsEnabled)
 
-	fillExternalServicesOutboundsThroughEgress(ctx, outbound, externalServices, meshExternalServices, zoneEgresses, mesh, localZone, loader)
+	fillExternalServicesOutboundsThroughEgress(ctx, outbound, externalServices, meshExternalServices, egressAddresses, mesh, localZone, loader)
 
 	// it has to be last because it reuses endpoints for other cases
 	fillMeshMultiZoneServices(outbound, meshServicesByKri, meshMultiZoneServices)
@@ -803,7 +803,7 @@ func fillExternalServicesOutboundsThroughEgress(
 	outbound core_xds.EndpointMap,
 	externalServices []*core_mesh.ExternalServiceResource,
 	meshExternalServices []*meshexternalservice_api.MeshExternalServiceResource,
-	zoneEgresses []*core_mesh.ZoneEgressResource,
+	egressAddresses []core_xds.ZoneEgress,
 	mesh *core_mesh.MeshResource,
 	localZone string,
 	loader datasource.Loader,
@@ -815,14 +815,10 @@ func fillExternalServicesOutboundsThroughEgress(
 			serviceName := serviceTags[mesh_proto.ServiceTag]
 			locality := GetLocality(localZone, getZone(serviceTags), mesh.LocalityAwareLbEnabled())
 
-			for _, ze := range zoneEgresses {
-				zeNetworking := ze.Spec.GetNetworking()
-				zeAddress := zeNetworking.GetAddress()
-				zePort := zeNetworking.GetPort()
-
+			for _, ze := range egressAddresses {
 				endpoint := core_xds.Endpoint{
-					Target: zeAddress,
-					Port:   zePort,
+					Target: ze.Address,
+					Port:   ze.Port,
 					Tags:   serviceTags,
 					// AS it's a role of zone egress to load balance traffic between
 					// instances, we can safely set weight to 1
@@ -853,14 +849,10 @@ func fillExternalServicesOutboundsThroughEgress(
 			}
 		}
 
-		for _, ze := range zoneEgresses {
-			zeNetworking := ze.Spec.GetNetworking()
-			zeAddress := zeNetworking.GetAddress()
-			zePort := zeNetworking.GetPort()
-
+		for _, ze := range egressAddresses {
 			endpoint := core_xds.Endpoint{
-				Target: zeAddress,
-				Port:   zePort,
+				Target: ze.Address,
+				Port:   ze.Port,
 				Tags:   serviceTags,
 				// AS it's a role of zone egress to load balance traffic between
 				// instances, we can safely set weight to 1
