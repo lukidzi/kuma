@@ -21,6 +21,7 @@ import (
 	meshmzservice_api "github.com/kumahq/kuma/v2/pkg/core/resources/apis/meshmultizoneservice/api/v1alpha1"
 	"github.com/kumahq/kuma/v2/pkg/core/resources/apis/meshservice"
 	meshservice_api "github.com/kumahq/kuma/v2/pkg/core/resources/apis/meshservice/api/v1alpha1"
+	meshzoneaddress_api "github.com/kumahq/kuma/v2/pkg/core/resources/apis/meshzoneaddress/api/v1alpha1"
 	core_xds "github.com/kumahq/kuma/v2/pkg/core/xds"
 	"github.com/kumahq/kuma/v2/pkg/util/pointer"
 	envoy_tags "github.com/kumahq/kuma/v2/pkg/xds/envoy/tags"
@@ -138,7 +139,7 @@ func BuildIngressEndpointMap(
 ) core_xds.EndpointMap {
 	// Build EDS endpoint map just like for regular DPP, but without list of Ingress.
 	// This way we only keep local endpoints.
-	outbound := BuildEdsEndpointMap(ctx, mesh, localZone, meshServices, meshMultiZoneServices, meshExternalServices, dataplanes, nil, zoneEgresses, externalServices, loader, mtlsEnabled, egressAddresses)
+	outbound := BuildEdsEndpointMap(ctx, mesh, localZone, meshServices, meshMultiZoneServices, meshExternalServices, dataplanes, nil, nil, zoneEgresses, externalServices, loader, mtlsEnabled, egressAddresses)
 	fillLocalCrossMeshOutbounds(outbound, mesh, dataplanes, gateways, 1, localZone)
 	return outbound
 }
@@ -152,6 +153,7 @@ func BuildEdsEndpointMap(
 	meshExternalServices []*meshexternalservice_api.MeshExternalServiceResource,
 	dataplanes []*core_mesh.DataplaneResource,
 	zoneIngresses []*core_mesh.ZoneIngressResource,
+	meshZoneAddresses []*meshzoneaddress_api.MeshZoneAddressResource,
 	zoneEgresses []*core_mesh.ZoneEgressResource,
 	externalServices []*core_mesh.ExternalServiceResource,
 	loader datasource.Loader,
@@ -181,7 +183,7 @@ func BuildEdsEndpointMap(
 
 	fillDataplaneOutbounds(outbound, dataplanes, mesh, endpointWeight, localZone, meshServiceDestinations)
 
-	fillRemoteMeshServices(outbound, meshServices, zoneIngresses, mesh, localZone, mtlsEnabled)
+	fillRemoteMeshServices(outbound, meshServices, zoneIngresses, meshZoneAddresses, mesh, localZone, mtlsEnabled)
 
 	fillExternalServicesOutboundsThroughEgress(ctx, outbound, externalServices, meshExternalServices, egressAddresses, mesh, localZone, loader)
 
@@ -229,6 +231,7 @@ func fillRemoteMeshServices(
 	outbound core_xds.EndpointMap,
 	services []*meshservice_api.MeshServiceResource,
 	zoneIngress []*core_mesh.ZoneIngressResource,
+	meshZoneAddresses []*meshzoneaddress_api.MeshZoneAddressResource,
 	mesh *core_mesh.MeshResource,
 	localZone string,
 	mtlsEnabled bool,
@@ -237,12 +240,41 @@ func fillRemoteMeshServices(
 		return
 	}
 
-	ziInstances := map[string]struct{}{}
-
 	// introduction of MeshIdentity doesn't requires mTLS on mesh
 	zoneToEndpoints := map[string][]core_xds.Endpoint{}
+
+	// MeshZoneAddress (mesh-scoped zone proxies) takes priority over legacy
+	// ZoneIngress for any zone that has at least one MeshZoneAddress.
+	mzaZones := map[string]struct{}{}
+	mzaInstances := map[string]struct{}{}
+	for _, mza := range meshZoneAddresses {
+		zone := mza.GetMeta().GetLabels()[mesh_proto.ZoneTag]
+		if zone == "" || zone == localZone {
+			continue
+		}
+		coordinates := buildCoordinates(mza.Spec.Address, uint32(mza.Spec.Port))
+		if _, ok := mzaInstances[coordinates]; ok {
+			continue
+		}
+		mzaInstances[coordinates] = struct{}{}
+		mzaZones[zone] = struct{}{}
+		mzaZone := zone
+		zoneToEndpoints[mzaZone] = append(zoneToEndpoints[mzaZone], core_xds.Endpoint{
+			Target:   mza.Spec.Address,
+			Port:     uint32(mza.Spec.Port),
+			Tags:     nil,
+			Weight:   1,
+			Locality: GetLocality(localZone, &mzaZone, mesh.LocalityAwareLbEnabled()),
+		})
+	}
+
+	// Fall back to legacy ZoneIngress for zones without a MeshZoneAddress.
+	ziInstances := map[string]struct{}{}
 	for _, zi := range zoneIngress {
 		if !zi.IsRemoteIngress(localZone) {
+			continue
+		}
+		if _, hasMZA := mzaZones[zi.Spec.Zone]; hasMZA {
 			continue
 		}
 
@@ -258,6 +290,7 @@ func fillRemoteMeshServices(
 			// unnecessary duplicated endpoints
 			continue
 		}
+		ziInstances[ziCoordinates] = struct{}{}
 
 		zoneToEndpoints[zi.Spec.Zone] = append(zoneToEndpoints[zi.Spec.Zone], core_xds.Endpoint{
 			Target:   ziAddress,

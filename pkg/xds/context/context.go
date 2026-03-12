@@ -93,7 +93,7 @@ type MeshContext struct {
 	ServicesInformation         map[string]*ServiceInformation
 	DataSourceLoader            datasource.Loader
 	ReachableServicesGraph      ReachableServicesGraph
-	CAsByTrustDomain map[string][]PEMBytes
+	CAsByTrustDomain            map[string][]PEMBytes
 	// ZoneEgresses holds one entry per zone egress instance (either a legacy ZoneEgress
 	// resource or a Dataplane with a ZoneEgress listener). Each entry carries the address,
 	// port and, when WorkloadIdentity is enabled, the SPIFFE ID (SAN) that clients must

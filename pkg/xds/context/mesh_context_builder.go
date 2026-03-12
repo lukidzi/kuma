@@ -199,6 +199,7 @@ func (m *meshContextBuilder) BuildIfChanged(ctx context.Context, meshName string
 		meshExternalServices,
 		dataplanes,
 		zoneIngresses,
+		resources.MeshZoneAddresses().Items,
 		zoneEgresses,
 		externalServices,
 		loader,
