@@ -63,7 +63,7 @@ func (r *MeshZoneAddressReconciler) Reconcile(ctx context.Context, req kube_ctrl
 	}
 
 	// Only handle Services labeled as zone-proxy ingress.
-	if svc.GetLabels()[metadata.KumaZoneProxyTypeLabel] != metadata.KumaZoneProxyTypeIngress {
+	if svc.GetLabels()[metadata.KumaZoneProxyTypeLabel] != KumaZoneProxyTypeIngress {
 		return kube_ctrl.Result{}, r.deleteIfExists(ctx, req.NamespacedName)
 	}
 
@@ -84,7 +84,7 @@ func (r *MeshZoneAddressReconciler) Reconcile(ctx context.Context, req kube_ctrl
 	}
 	if address == "" {
 		r.Eventf(svc, nil, kube_core.EventTypeWarning, NoPublicAddressForZoneProxyReason, "NoPublicAddress",
-			"unable to determine public address: Service type must be LoadBalancer, NodePort, or use spec.externalIPs")
+			"unable to determine public address for zone ingress Service; ensure it exposes a reachable external address (LoadBalancer, NodePort with suitable node addresses, or spec.externalIPs) and that the address is ready")
 		return kube_ctrl.Result{}, r.deleteIfExists(ctx, req.NamespacedName)
 	}
 
@@ -98,6 +98,15 @@ func (r *MeshZoneAddressReconciler) Reconcile(ctx context.Context, req kube_ctrl
 	}
 
 	result, err := kube_controllerutil.CreateOrUpdate(ctx, r.Client, mza, func() error {
+		// If the MeshZoneAddress already exists and is not owned by this Service,
+		// skip mutation to avoid clobbering user-managed resources.
+		if mza.GetGeneration() != 0 {
+			if owners := mza.GetOwnerReferences(); len(owners) == 0 || owners[0].UID != svc.GetUID() {
+				r.Eventf(svc, nil, kube_core.EventTypeWarning, NoPublicAddressForZoneProxyReason, "Conflict",
+					"MeshZoneAddress %s already exists and is not owned by this Service", req.Name)
+				return errors.Errorf("MeshZoneAddress already exists and is not owned by Service")
+			}
+		}
 		if mza.Labels == nil {
 			mza.Labels = map[string]string{}
 		}
@@ -132,7 +141,7 @@ func (r *MeshZoneAddressReconciler) Reconcile(ctx context.Context, req kube_ctrl
 
 // resolveCoordinates determines the public address and port for the Service.
 // Priority: externalIPs[0] → LoadBalancer (hostname > IP) → NodePort.
-// Returns ("", 0, nil) for unsupported Service types.
+// Returns ("", 0, nil) for unsupported Service types as callers emit a warning.
 func (r *MeshZoneAddressReconciler) resolveCoordinates(
 	ctx context.Context,
 	log logr.Logger,
@@ -228,10 +237,23 @@ func (r *MeshZoneAddressReconciler) deleteIfExists(ctx context.Context, key kube
 	return nil
 }
 
+const zoneProxyTypeLabelIndex = "metadata.labels.zone-proxy-type"
+
 func (r *MeshZoneAddressReconciler) SetupWithManager(mgr kube_ctrl.Manager) error {
+	if err := mgr.GetFieldIndexer().IndexField(
+		context.Background(), &kube_core.Service{}, zoneProxyTypeLabelIndex,
+		func(obj kube_client.Object) []string {
+			if v := obj.GetLabels()[metadata.KumaZoneProxyTypeLabel]; v != "" {
+				return []string{v}
+			}
+			return nil
+		},
+	); err != nil {
+		return errors.Wrap(err, "failed to index Service by zone-proxy-type label")
+	}
 	return kube_ctrl.NewControllerManagedBy(mgr).
 		Named("kuma-mesh-zone-address-controller").
-		For(&kube_core.Service{}, builder.WithPredicates(predicate.LabelChangedPredicate{})).
+		For(&kube_core.Service{}).
 		Watches(
 			&kube_discovery.EndpointSlice{},
 			kube_handler.EnqueueRequestsFromMapFunc(EndpointSliceToServicesMapper(r.Log, mgr.GetClient())),
@@ -240,22 +262,30 @@ func (r *MeshZoneAddressReconciler) SetupWithManager(mgr kube_ctrl.Manager) erro
 			&kube_core.Node{},
 			kube_handler.EnqueueRequestsFromMapFunc(r.nodeToZoneProxyServices(mgr.GetClient())),
 		).
+		Watches(
+			&kube_core.Namespace{},
+			kube_handler.EnqueueRequestsFromMapFunc(NamespaceToServiceMapper(r.Log, mgr.GetClient())),
+			builder.WithPredicates(predicate.LabelChangedPredicate{}),
+		).
 		Complete(r)
 }
 
-// nodeToZoneProxyServices re-queues all zone-proxy ingress Services when a
+// nodeToZoneProxyServices re-queues NodePort zone-proxy ingress Services when a
 // Node changes (needed for NodePort address resolution).
 func (r *MeshZoneAddressReconciler) nodeToZoneProxyServices(c kube_client.Client) kube_handler.MapFunc {
 	return func(ctx context.Context, _ kube_client.Object) []kube_ctrl.Request {
 		svcs := &kube_core.ServiceList{}
-		if err := c.List(ctx, svcs, kube_client.MatchingLabels{
-			metadata.KumaZoneProxyTypeLabel: metadata.KumaZoneProxyTypeIngress,
+		if err := c.List(ctx, svcs, kube_client.MatchingFields{
+			zoneProxyTypeLabelIndex: KumaZoneProxyTypeIngress,
 		}); err != nil {
 			r.Log.Error(err, "failed to list zone-proxy Services on node event")
 			return nil
 		}
 		reqs := make([]kube_ctrl.Request, 0, len(svcs.Items))
 		for _, svc := range svcs.Items {
+			if svc.Spec.Type != kube_core.ServiceTypeNodePort {
+				continue
+			}
 			reqs = append(reqs, kube_ctrl.Request{
 				NamespacedName: kube_types.NamespacedName{Namespace: svc.Namespace, Name: svc.Name},
 			})
