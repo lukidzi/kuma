@@ -346,6 +346,17 @@ func (c *UniversalCluster) CreateZoneEgress(
 	return app.dpApp.Start()
 }
 
+// CreateDataplaneProxy starts kuma-dp for an app registered as a regular
+// Dataplane (MADR-095 zone-proxy-as-sidecar model).  The dpyaml must be a
+// Dataplane resource manifest that may include a listeners section.
+func (c *UniversalCluster) CreateDataplaneProxy(app *UniversalApp, name, ip, dpyaml, token string) error {
+	if err := app.CreateDP(token, c.controlplane.Networking().BootstrapAddress(), name, "", ip, dpyaml, false, "", 0, nil, false, ""); err != nil {
+		return err
+	}
+	c.apps[name] = app
+	return app.dpApp.Start()
+}
+
 func (c *UniversalCluster) DeployApp(opt ...AppDeploymentOption) error {
 	var opts appDeploymentOptions
 	opts.apply(opt...)

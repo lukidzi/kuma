@@ -54,6 +54,16 @@ type TransparentProxyConfig struct {
 	ReachableServices    []string
 }
 
+// ZoneProxyDataplaneTemplateData is the data for a Dataplane resource with a
+// listeners section (MADR-095 zone-proxy-as-sidecar model).
+type ZoneProxyDataplaneTemplateData struct {
+	Mesh         string
+	ListenerType string // "ZoneIngress" or "ZoneEgress"
+	ListenerName string
+	Port         int
+	Workload     string
+}
+
 // ZoneIngressTemplateData represents zone ingress template data
 type ZoneIngressTemplateData struct {
 	Name              string
@@ -69,6 +79,21 @@ type ZoneEgressTemplateData struct {
 }
 
 var (
+	zoneProxyDataplaneTemplate = template.Must(template.New("zoneproxydataplane").Parse(`
+type: Dataplane
+mesh: {{ .Mesh }}
+name: {{ "{{ name }}" }}
+{{- if .Workload }}
+labels:
+  kuma.io/workload: {{ .Workload }}
+{{- end }}
+networking:
+  address: {{ "{{ address }}" }}
+  listeners:
+  - type: {{ .ListenerType }}
+    address: {{ "{{ address }}" }}
+    port: {{ .Port }}
+    name: {{ .ListenerName }}`))
 	dataplaneTemplate = template.Must(template.New("dataplane").Funcs(template.FuncMap{
 		"joinStrings": strings.Join,
 	}).Parse(`
@@ -152,6 +177,16 @@ func RenderDataplaneTemplate(data DataplaneTemplateData) (string, error) {
 	var buf bytes.Buffer
 	if err := dataplaneTemplate.Execute(&buf, data); err != nil {
 		return "", errors.Wrap(err, "failed to execute dataplane template")
+	}
+	return buf.String(), nil
+}
+
+// RenderZoneProxyDataplaneTemplate renders a Dataplane-with-listeners template
+// for the MADR-095 zone-proxy-as-sidecar model.
+func RenderZoneProxyDataplaneTemplate(data ZoneProxyDataplaneTemplateData) (string, error) {
+	var buf bytes.Buffer
+	if err := zoneProxyDataplaneTemplate.Execute(&buf, data); err != nil {
+		return "", errors.Wrap(err, "failed to execute zone proxy dataplane template")
 	}
 	return buf.String(), nil
 }
