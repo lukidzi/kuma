@@ -2,7 +2,6 @@ package meshproxy
 
 import (
 	"fmt"
-	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -20,11 +19,13 @@ import (
 	"github.com/kumahq/kuma/v2/test/framework/deployments/democlient"
 	"github.com/kumahq/kuma/v2/test/framework/deployments/testserver"
 	"github.com/kumahq/kuma/v2/test/framework/deployments/zoneproxy"
+	"github.com/kumahq/kuma/v2/test/framework/envoy_admin/stats"
 	"github.com/kumahq/kuma/v2/test/framework/envs/multizone"
 )
 
 func Connectivity() {
 	namespace := "meshproxy"
+	externalNamespace := "meshproxy-ext"
 	meshName := "meshproxy"
 
 	BeforeAll(func() {
@@ -41,6 +42,7 @@ func Connectivity() {
 		group := errgroup.Group{}
 		NewClusterSetup().
 			Install(NamespaceWithSidecarInjection(namespace)).
+			Install(Namespace(externalNamespace)).
 			Install(Parallel(
 				testserver.Install(
 					testserver.WithNamespace(namespace),
@@ -48,18 +50,21 @@ func Connectivity() {
 					testserver.WithEchoArgs("echo", "--instance", "kube-test-server-1"),
 				),
 				democlient.Install(democlient.WithNamespace(namespace), democlient.WithMesh(meshName)),
+				testserver.Install(
+					testserver.WithNamespace(externalNamespace),
+					testserver.WithName("external-service"),
+					testserver.WithEchoArgs("echo", "--instance", "kube-external-service"),
+				),
 				zoneproxy.Install(
 					zoneproxy.WithNamespace(namespace),
 					zoneproxy.WithMesh(meshName),
-					zoneproxy.WithIngressPort(10001),
-					zoneproxy.WithWorkload("zone-proxy-ingress"),
+					zoneproxy.WithIngressPort(11001),
 					zoneproxy.IngressOnly(),
 				),
 				zoneproxy.Install(
 					zoneproxy.WithNamespace(namespace),
 					zoneproxy.WithMesh(meshName),
-					zoneproxy.WithEgressPort(10002),
-					zoneproxy.WithWorkload("zone-proxy-egress"),
+					zoneproxy.WithEgressPort(11002),
 					zoneproxy.EgressOnly(),
 				),
 			)).
@@ -76,15 +81,13 @@ func Connectivity() {
 				zoneproxy.Install(
 					zoneproxy.WithNamespace(namespace),
 					zoneproxy.WithMesh(meshName),
-					zoneproxy.WithIngressPort(10001),
-					zoneproxy.WithWorkload("zone-proxy-ingress"),
+					zoneproxy.WithIngressPort(11001),
 					zoneproxy.IngressOnly(),
 				),
 				zoneproxy.Install(
 					zoneproxy.WithNamespace(namespace),
 					zoneproxy.WithMesh(meshName),
-					zoneproxy.WithEgressPort(10002),
-					zoneproxy.WithWorkload("zone-proxy-egress"),
+					zoneproxy.WithEgressPort(11002),
 					zoneproxy.EgressOnly(),
 				),
 			)).
@@ -94,15 +97,16 @@ func Connectivity() {
 			Install(Parallel(
 				DemoClientUniversal("demo-client", meshName, WithTransparentProxy(true), WithWorkload("demo-client")),
 				TestServerUniversal("test-server", meshName, WithArgs([]string{"echo", "--instance", "uni-test-server"}), WithWorkload("test-server")),
+				TestServerExternalServiceUniversal("external-service", 8080, false, WithDockerContainerName("kuma-es-4_external-service-meshproxy")),
 				zoneproxy.Install(
 					zoneproxy.WithMesh(meshName),
-					zoneproxy.WithIngressPort(10001),
+					zoneproxy.WithIngressPort(11001),
 					zoneproxy.WithWorkload("zone-proxy-ingress"),
 					zoneproxy.IngressOnly(),
 				),
 				zoneproxy.Install(
 					zoneproxy.WithMesh(meshName),
-					zoneproxy.WithEgressPort(10002),
+					zoneproxy.WithEgressPort(11002),
 					zoneproxy.WithWorkload("zone-proxy-egress"),
 					zoneproxy.EgressOnly(),
 				),
@@ -124,8 +128,50 @@ labels:
 spec:
   address: %s
   port: %d
-`, meshName, multizone.UniZone1.ZoneName(), ingressIP, 10001))).
+`, meshName, multizone.UniZone1.ZoneName(), ingressIP, 11001))).
 			Setup(multizone.UniZone1)).To(Succeed())
+
+		// MeshExternalService for the external server running in UniZone1.
+		extServiceIP := multizone.UniZone1.GetApp("external-service").GetIP()
+		Expect(NewClusterSetup().
+			Install(YamlUniversal(fmt.Sprintf(`
+type: MeshExternalService
+name: external-service
+mesh: %s
+labels:
+  kuma.io/origin: zone
+spec:
+  match:
+    type: HostnameGenerator
+    port: 8080
+    protocol: http
+  endpoints:
+    - address: %s
+      port: 8080
+`, meshName, extServiceIP))).
+			Setup(multizone.UniZone1)).To(Succeed())
+
+		// MeshExternalService for the external server running in KubeZone1.
+		Expect(NewClusterSetup().
+			Install(YamlK8s(fmt.Sprintf(`
+apiVersion: kuma.io/v1alpha1
+kind: MeshExternalService
+metadata:
+  name: external-service-kube
+  namespace: %s
+  labels:
+    kuma.io/origin: zone
+    kuma.io/mesh: %s
+spec:
+  match:
+    type: HostnameGenerator
+    port: 80
+    protocol: http
+  endpoints:
+    - address: external-service.%s.svc.cluster.local
+      port: 80
+`, Config.KumaNamespace, meshName, externalNamespace))).
+			Setup(multizone.KubeZone1)).To(Succeed())
 
 		// Create MeshIdentity for zone-proxy mTLS
 		meshIdentityYAML := fmt.Sprintf(`
@@ -206,14 +252,28 @@ spec:
 
 	E2EAfterAll(func() {
 		Expect(multizone.KubeZone1.TriggerDeleteNamespace(namespace)).To(Succeed())
+		Expect(multizone.KubeZone1.TriggerDeleteNamespace(externalNamespace)).To(Succeed())
 		Expect(multizone.KubeZone2.TriggerDeleteNamespace(namespace)).To(Succeed())
 		Expect(multizone.UniZone1.DeleteMeshApps(meshName)).To(Succeed())
 		Expect(multizone.Global.DeleteMesh(meshName)).To(Succeed())
 	})
 
-	It("should route cross-zone traffic via new zone proxies", func() {
-		time.Sleep(1 * time.Hour)
-		// Kubernetes client -> Universal zone
+	It("should route cross-zone traffic via new zone ingress proxies and record metrics on zone-proxy-ingress", func() {
+		uniIngressFilter := fmt.Sprintf(
+			"cluster.%s_test-server__%s_msvc_80.upstream_rq_active",
+			meshName, multizone.UniZone1.ZoneName(),
+		)
+		kubeZone1IngressFilter := fmt.Sprintf(
+			"cluster.kri_msvc_%s_%s_%s_test-server_main.upstream_rq_active",
+			meshName, multizone.KubeZone1.ZoneName(), namespace,
+		)
+		kubeZone2IngressFilter := fmt.Sprintf(
+			"cluster.%s_test-server_%s_%s_msvc_80.upstream_rq_active",
+			meshName, namespace, multizone.KubeZone2.ZoneName(),
+		)
+
+		// time.Sleep(1*time.Hour)
+		// Kubernetes client -> Universal zone via zone-proxy-ingress
 		Eventually(func(g Gomega) {
 			response, err := client.CollectEchoResponse(
 				multizone.KubeZone1, "demo-client",
@@ -224,7 +284,14 @@ spec:
 			g.Expect(response.Instance).To(Equal("uni-test-server"))
 		}, "30s", "1s").Should(Succeed())
 
-		// Universal client -> Kubernetes zone 1
+		// Verify traffic was routed through UniZone1's zone-proxy-ingress
+		Eventually(func(g Gomega) {
+			stat, err := multizone.UniZone1.GetAppEnvoyTunnel("zone-proxy-ingress").GetStats(uniIngressFilter)
+			g.Expect(err).ToNot(HaveOccurred())
+			g.Expect(stat).To(stats.BeGreaterThanZero())
+		}, "30s", "1s").Should(Succeed())
+
+		// Universal client -> Kubernetes zone 1 via zone-proxy-ingress
 		Eventually(func(g Gomega) {
 			response, err := client.CollectEchoResponse(
 				multizone.UniZone1, "demo-client",
@@ -234,7 +301,14 @@ spec:
 			g.Expect(response.Instance).To(Equal("kube-test-server-1"))
 		}, "30s", "1s").Should(Succeed())
 
-		// Universal client -> Kubernetes zone 2
+		// Verify traffic was routed through KubeZone1's zone-proxy-ingress
+		Eventually(func(g Gomega) {
+			stat, err := multizone.KubeZone1.GetEnvoyAdminTunnel("zone-proxy-ingress", namespace).GetStats(kubeZone1IngressFilter)
+			g.Expect(err).ToNot(HaveOccurred())
+			g.Expect(stat).To(stats.BeGreaterThanZero())
+		}, "30s", "1s").Should(Succeed())
+
+		// Universal client -> Kubernetes zone 2 via zone-proxy-ingress
 		Eventually(func(g Gomega) {
 			response, err := client.CollectEchoResponse(
 				multizone.UniZone1, "demo-client",
@@ -242,6 +316,59 @@ spec:
 			)
 			g.Expect(err).ToNot(HaveOccurred())
 			g.Expect(response.Instance).To(Equal("kube-test-server-2"))
+		}, "30s", "1s").Should(Succeed())
+
+		// Verify traffic was routed through KubeZone2's zone-proxy-ingress
+		Eventually(func(g Gomega) {
+			stat, err := multizone.KubeZone2.GetEnvoyAdminTunnel("zone-proxy-ingress", namespace).GetStats(kubeZone2IngressFilter)
+			g.Expect(err).ToNot(HaveOccurred())
+			g.Expect(stat).To(stats.BeGreaterThanZero())
+		}, "30s", "1s").Should(Succeed())
+	})
+
+	It("should route cross-zone traffic to MeshExternalService and record metrics on zone-proxy-egress", func() {
+		uniEgressFilter := fmt.Sprintf(
+			"cluster.%s_external-service__%s_extsvc_8080.upstream_rq_200",
+			meshName, multizone.UniZone1.ZoneName(),
+		)
+		kubeEgressFilter := fmt.Sprintf(
+			"cluster.kri_extsvc_%s_%s_%s_external-service-kube_80.upstream_rq_200",
+			meshName, multizone.KubeZone1.ZoneName(), Config.KumaNamespace,
+		)
+
+		// Kubernetes client -> external service
+		Eventually(func(g Gomega) {
+			response, err := client.CollectEchoResponse(
+				multizone.KubeZone1, "demo-client",
+				"http://external-service-kube.extsvc.mesh.local",
+				client.FromKubernetesPod(namespace, "demo-client"),
+			)
+			g.Expect(err).ToNot(HaveOccurred())
+			g.Expect(response.Instance).To(Equal("kube-external-service"))
+		}, "30s", "1s").Should(Succeed())
+
+		// Verify traffic was routed through KubeZone1's zone-proxy-egress
+		Eventually(func(g Gomega) {
+			stat, err := multizone.KubeZone1.GetEnvoyAdminTunnel("zone-proxy-egress", namespace).GetStats(kubeEgressFilter)
+			g.Expect(err).ToNot(HaveOccurred())
+			g.Expect(stat).To(stats.BeGreaterThanZero())
+		}, "30s", "1s").Should(Succeed())
+
+		// Universal client -> external service
+		Eventually(func(g Gomega) {
+			response, err := client.CollectEchoResponse(
+				multizone.UniZone1, "demo-client",
+				"http://external-service.extsvc.mesh.local:8080",
+			)
+			g.Expect(err).ToNot(HaveOccurred())
+			g.Expect(response.Instance).To(Equal("external-service"))
+		}, "30s", "1s").Should(Succeed())
+
+		// Verify traffic was routed through UniZone1's zone-proxy-egress
+		Eventually(func(g Gomega) {
+			stat, err := multizone.UniZone1.GetAppEnvoyTunnel("zone-proxy-egress").GetStats(uniEgressFilter)
+			g.Expect(err).ToNot(HaveOccurred())
+			g.Expect(stat).To(stats.BeGreaterThanZero())
 		}, "30s", "1s").Should(Succeed())
 	})
 }

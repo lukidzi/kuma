@@ -354,7 +354,19 @@ func (c *UniversalCluster) CreateDataplaneProxy(app *UniversalApp, name, ip, dpy
 		return err
 	}
 	c.apps[name] = app
+	c.networking[name] = app.universalNetworking
+	c.createEnvoyTunnel(name)
 	return app.dpApp.Start()
+}
+
+// GetAppEnvoyTunnel returns the Envoy admin tunnel for a named app (e.g. a
+// zone proxy deployed via CreateDataplaneProxy).
+func (c *UniversalCluster) GetAppEnvoyTunnel(name string) envoy_admin.Tunnel {
+	t, ok := c.envoyTunnels[name]
+	if !ok {
+		c.t.Fatalf("no envoy tunnel registered for app %q", name)
+	}
+	return t
 }
 
 func (c *UniversalCluster) DeployApp(opt ...AppDeploymentOption) error {

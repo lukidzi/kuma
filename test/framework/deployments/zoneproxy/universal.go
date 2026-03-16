@@ -42,7 +42,7 @@ func (d *universalDeployment) deployProxy(uniCluster *framework.UniversalCluster
 		uniCluster.GetTesting(),
 		uniCluster.Name(),
 		name,
-		"",
+		d.opts.Mesh,
 		mode,
 		framework.UniversalAppRunOptions{
 			DockerBackend: uniCluster.GetDockerBackend(),
