@@ -92,5 +92,5 @@ var (
 	_ = Describe("MeshIdentity", meshidentity.Identity, Ordered)
 	_ = Describe("Unified Resource Naming", unifiednaming.UnifiedNaming, Ordered)
 	_ = Describe("MeshIdentity Migration", meshidentity.Migration, Ordered)
-	_ = FDescribe("MeshProxy", meshproxy.Connectivity, Ordered)
+	_ = Describe("MeshProxy", meshproxy.Connectivity, Ordered)
 )
