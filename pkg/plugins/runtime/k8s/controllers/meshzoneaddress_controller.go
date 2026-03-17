@@ -27,6 +27,12 @@ import (
 )
 
 const (
+<<<<<<< HEAD
+=======
+	// KumaZoneProxyTypeIngress marks a Service as the public endpoint for a
+	// mesh-scoped zone ingress proxy.
+	KumaZoneProxyTypeIngress          = "ingress"
+>>>>>>> master
 	CreatedMeshZoneAddressReason      = "CreatedMeshZoneAddress"
 	UpdatedMeshZoneAddressReason      = "UpdatedMeshZoneAddress"
 	NoPublicAddressForZoneProxyReason = "NoPublicAddress"
