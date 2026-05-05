@@ -9,6 +9,8 @@ import (
 	"github.com/kumahq/kuma/v2/pkg/core"
 	"github.com/kumahq/kuma/v2/pkg/core/resources/apis/mesh"
 	"github.com/kumahq/kuma/v2/pkg/core/resources/apis/system"
+	"github.com/kumahq/kuma/v2/pkg/core/resources/model"
+	"github.com/kumahq/kuma/v2/pkg/core/resources/registry"
 	core_store "github.com/kumahq/kuma/v2/pkg/core/resources/store"
 )
 
@@ -17,13 +19,23 @@ type GlobalInsightService interface {
 }
 
 type defaultGlobalInsightService struct {
-	resourceStore core_store.ResourceStore
+	resourceStore         core_store.ResourceStore
+	globalScopedResources []model.ResourceTypeDescriptor
 }
 
 var _ GlobalInsightService = &defaultGlobalInsightService{}
 
 func NewDefaultGlobalInsightService(resourceStore core_store.ResourceStore) GlobalInsightService {
-	return &defaultGlobalInsightService{resourceStore: resourceStore}
+	// we don't need insights here as we decorate them separately
+	globalScopedResources := registry.Global().ObjectDescriptors(
+		model.HasScope(model.ScopeGlobal),
+		model.Not(model.IsInsight()),
+		model.TypeFilterFn(func(d model.ResourceTypeDescriptor) bool { return !d.AdminOnly }),
+	)
+	return &defaultGlobalInsightService{
+		resourceStore:         resourceStore,
+		globalScopedResources: globalScopedResources,
+	}
 }
 
 func (gis *defaultGlobalInsightService) GetGlobalInsight(ctx context.Context) (*api_types.GlobalInsightBase, error) {
@@ -38,7 +50,10 @@ func (gis *defaultGlobalInsightService) GetGlobalInsight(ctx context.Context) (*
 
 	gis.aggregateDataplanes(meshInsights, globalInsights)
 	gis.aggregatePolicies(meshInsights, globalInsights)
-	gis.aggregateResources(meshInsights, globalInsights)
+
+	if err := gis.aggregateResources(ctx, meshInsights, globalInsights); err != nil {
+		return nil, err
+	}
 
 	if err := gis.aggregateServices(ctx, globalInsights); err != nil {
 		return nil, err
@@ -100,9 +115,10 @@ func (gis *defaultGlobalInsightService) aggregatePolicies(
 }
 
 func (gis *defaultGlobalInsightService) aggregateResources(
+	ctx context.Context,
 	meshInsights *mesh.MeshInsightResourceList,
 	globalInsight *api_types.GlobalInsightBase,
-) {
+) error {
 	globalInsight.Resources = map[string]api_types.ResourceStats{}
 	for _, meshInsight := range meshInsights.GetItems() {
 		for resName, resStat := range meshInsight.GetSpec().(*mesh_proto.MeshInsight).Resources {
@@ -114,6 +130,15 @@ func (gis *defaultGlobalInsightService) aggregateResources(
 			globalInsight.Resources[resName] = stats
 		}
 	}
+
+	for _, desc := range gis.globalScopedResources {
+		list := desc.NewList()
+		if err := gis.resourceStore.List(ctx, list); err != nil {
+			return err
+		}
+		globalInsight.Resources[string(desc.Name)] = api_types.ResourceStats{Total: len(list.GetItems())}
+	}
+	return nil
 }
 
 func (gis *defaultGlobalInsightService) aggregateServices(

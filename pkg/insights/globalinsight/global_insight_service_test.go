@@ -33,6 +33,47 @@ var _ = Describe("Global Insight", func() {
 		Expect(err).ToNot(HaveOccurred())
 	})
 
+	It("should include HostnameGenerator in global insight resources", func() {
+		// given
+		globalInsightService := globalinsight.NewDefaultGlobalInsightService(rm)
+
+		err := builders.HostnameGenerator().WithName("hg-1").WithTemplate("{{.name}}.mesh").
+			WithMeshServiceMatchLabels(map[string]string{"app": "backend"}).
+			Create(rs)
+		Expect(err).ToNot(HaveOccurred())
+
+		err = builders.HostnameGenerator().WithName("hg-2").WithTemplate("{{.name}}.svc").
+			WithMeshServiceMatchLabels(map[string]string{"app": "frontend"}).
+			Create(rs)
+		Expect(err).ToNot(HaveOccurred())
+
+		// when
+		globalInsight, err := globalInsightService.GetGlobalInsight(context.Background())
+		Expect(err).ToNot(HaveOccurred())
+
+		globalInsight.CreatedAt = time.Time{}
+
+		// then
+		result, err := json.Marshal(globalInsight)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(result).To(matchers.MatchGoldenJSON(path.Join("testdata", "global_insight_hostname_generator.golden.json")))
+	})
+
+	It("should not include AdminOnly resources in global insight resources", func() {
+		// given
+		globalInsightService := globalinsight.NewDefaultGlobalInsightService(rm)
+
+		err := builders.GlobalSecret().WithName("gs-1").Create(rs)
+		Expect(err).ToNot(HaveOccurred())
+
+		// when
+		globalInsight, err := globalInsightService.GetGlobalInsight(context.Background())
+		Expect(err).ToNot(HaveOccurred())
+
+		// then
+		Expect(globalInsight.Resources).ToNot(HaveKey("GlobalSecret"))
+	})
+
 	It("should compute global insight", func() {
 		// given
 		globalInsightService := globalinsight.NewDefaultGlobalInsightService(rm)
