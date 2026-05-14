@@ -11,12 +11,13 @@ import (
 	"fmt"
 	"strings"
 
+	apimachineryvalidation "k8s.io/apimachinery/pkg/api/validation"
+
 	"github.com/kumahq/kuma/v2/pkg/core/kri"
 	"github.com/kumahq/kuma/v2/pkg/core/resources/registry"
 )
 
 const (
-	dnsLabelLimit    = 63
 	dnsHostnameLimit = 253
 	sniFormatPrefix  = "sni"
 )
@@ -45,8 +46,8 @@ func FromKRI(id kri.Identifier) string {
 //
 //   - Mesh, Name and SectionName are non-empty
 //   - if Namespace is non-empty, Zone must also be non-empty
-//   - no segment contains "."
-//   - each segment length ≤ 63 (DNS label limit)
+//   - Mesh, Name, Zone and Namespace conform to RFC 1035 ([a-z]([-a-z0-9]*[a-z0-9])?, max 63 chars)
+//   - SectionName conforms to RFC 1035 OR is an all-digit port number (1-5 digits, ≤63 chars)
 //   - total length ≤ 253 (DNS hostname limit)
 //
 // Returns nil for a compliant identifier, or for resource types whose KRI is
@@ -76,7 +77,6 @@ func ValidateKRI(id kri.Identifier) []error {
 	fields := []field{
 		{"mesh", id.Mesh},
 		{"name", id.Name},
-		{"port", id.SectionName},
 	}
 	if id.Zone != "" {
 		fields = append(fields, field{"zone", id.Zone})
@@ -85,18 +85,39 @@ func ValidateKRI(id kri.Identifier) []error {
 		fields = append(fields, field{"namespace", id.Namespace})
 	}
 	for _, f := range fields {
-		if strings.ContainsRune(f.value, '.') {
-			errs = append(errs, fmt.Errorf("%s %q contains '.'", f.name, f.value))
+		if msgs := apimachineryvalidation.NameIsDNS1035Label(f.value, false); len(msgs) > 0 {
+			errs = append(errs, fmt.Errorf("%s %q does not conform to RFC 1035: %s", f.name, f.value, strings.Join(msgs, "; ")))
 		}
-		if len(f.value) > dnsLabelLimit {
-			errs = append(errs, fmt.Errorf("%s %q is %d characters which exceeds the DNS label limit (%d)", f.name, f.value, len(f.value), dnsLabelLimit))
-		}
+	}
+	if msgs := validateSectionName(id.SectionName); len(msgs) > 0 {
+		errs = append(errs, fmt.Errorf("port %q does not conform to RFC 1035: %s", id.SectionName, strings.Join(msgs, "; ")))
 	}
 
 	if sni := FromKRI(id); len(sni) > dnsHostnameLimit {
 		errs = append(errs, fmt.Errorf("computed SNI for port %q is %d characters which exceeds the DNS hostname limit (%d)", id.SectionName, len(sni), dnsHostnameLimit))
 	}
 	return errs
+}
+
+// validateSectionName accepts either a valid DNS-1035 label or an all-digit
+// numeric port (1-5 digits). The numeric carve-out preserves backwards
+// compatibility for ports without an explicit name (the default formatting
+// is the decimal port number, which would otherwise fail RFC 1035 because
+// it starts with a digit).
+func validateSectionName(s string) []string {
+	if isAllDigits(s) && len(s) > 0 && len(s) <= 5 {
+		return nil
+	}
+	return apimachineryvalidation.NameIsDNS1035Label(s, false)
+}
+
+func isAllDigits(s string) bool {
+	for _, r := range s {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 func buildSegments(id kri.Identifier) []string {

@@ -343,9 +343,114 @@ var _ = Describe("FromKRI / ValidateKRI", func() {
 			},
 			expected: "sni.msvc.default.backend.65535",
 		}),
+		Entry("error mesh contains uppercase", kriTestCase{
+			id: kri.Identifier{
+				ResourceType: meshservice_api.MeshServiceType,
+				Mesh:         "Default",
+				Name:         "backend",
+				SectionName:  "http",
+			},
+			expectErr: true,
+		}),
+		Entry("error name contains underscore", kriTestCase{
+			id: kri.Identifier{
+				ResourceType: meshservice_api.MeshServiceType,
+				Mesh:         "default",
+				Name:         "back_end",
+				SectionName:  "http",
+			},
+			expectErr: true,
+		}),
+		Entry("error name starts with digit", kriTestCase{
+			id: kri.Identifier{
+				ResourceType: meshservice_api.MeshServiceType,
+				Mesh:         "default",
+				Name:         "1backend",
+				SectionName:  "http",
+			},
+			expectErr: true,
+		}),
+		Entry("error name starts with dash", kriTestCase{
+			id: kri.Identifier{
+				ResourceType: meshservice_api.MeshServiceType,
+				Mesh:         "default",
+				Name:         "-backend",
+				SectionName:  "http",
+			},
+			expectErr: true,
+		}),
+		Entry("error name ends with dash", kriTestCase{
+			id: kri.Identifier{
+				ResourceType: meshservice_api.MeshServiceType,
+				Mesh:         "default",
+				Name:         "backend-",
+				SectionName:  "http",
+			},
+			expectErr: true,
+		}),
+		Entry("error zone contains uppercase", kriTestCase{
+			id: kri.Identifier{
+				ResourceType: meshservice_api.MeshServiceType,
+				Mesh:         "default",
+				Zone:         "East",
+				Name:         "backend",
+				SectionName:  "http",
+			},
+			expectErr: true,
+		}),
+		Entry("error namespace contains underscore", kriTestCase{
+			id: kri.Identifier{
+				ResourceType: meshservice_api.MeshServiceType,
+				Mesh:         "default",
+				Zone:         "east",
+				Namespace:    "app_ns",
+				Name:         "backend",
+				SectionName:  "http",
+			},
+			expectErr: true,
+		}),
+		Entry("error sectionName contains uppercase", kriTestCase{
+			id: kri.Identifier{
+				ResourceType: meshservice_api.MeshServiceType,
+				Mesh:         "default",
+				Name:         "backend",
+				SectionName:  "HTTP",
+			},
+			expectErr: true,
+		}),
+		Entry("error sectionName mixes digits with letters starting with digit", kriTestCase{
+			// "8080x" — not all-digits (so the numeric carve-out doesn't apply)
+			// and starts with a digit (so it fails RFC 1035).
+			id: kri.Identifier{
+				ResourceType: meshservice_api.MeshServiceType,
+				Mesh:         "default",
+				Name:         "backend",
+				SectionName:  "8080x",
+			},
+			expectErr: true,
+		}),
+		Entry("error sectionName numeric but too long", kriTestCase{
+			// 6 digits exceeds the 5-digit (max port) numeric carve-out.
+			id: kri.Identifier{
+				ResourceType: meshservice_api.MeshServiceType,
+				Mesh:         "default",
+				Name:         "backend",
+				SectionName:  "123456",
+			},
+			expectErr: true,
+		}),
+		Entry("sectionName with letters then digits is valid", kriTestCase{
+			id: kri.Identifier{
+				ResourceType: meshservice_api.MeshServiceType,
+				Mesh:         "default",
+				Name:         "backend",
+				SectionName:  "http2",
+			},
+			expected: "sni.msvc.default.backend.http2",
+		}),
 	)
 
-	It("reports a DNS label limit violation", func() {
+	It("reports an RFC 1035 violation for an over-long label", func() {
 		errs := sni.ValidateKRI(kri.Identifier{
 			ResourceType: meshservice_api.MeshServiceType,
 			Mesh:         "default",
@@ -353,7 +458,7 @@ var _ = Describe("FromKRI / ValidateKRI", func() {
 			SectionName:  "http",
 		})
 		Expect(errs).ToNot(BeEmpty())
-		Expect(errs[0].Error()).To(ContainSubstring("DNS label limit"))
+		Expect(errs[0].Error()).To(ContainSubstring("RFC 1035"))
 	})
 
 	It("reports a DNS hostname limit violation", func() {
@@ -383,7 +488,7 @@ var _ = Describe("FromKRI / ValidateKRI", func() {
 		Expect(len(errs)).To(BeNumerically(">=", 2))
 	})
 
-	It("reports separate errors for each oversized label", func() {
+	It("reports separate errors for each non-conforming label", func() {
 		errs := sni.ValidateKRI(kri.Identifier{
 			ResourceType: meshservice_api.MeshServiceType,
 			Mesh:         strings.Repeat("a", 64),
@@ -393,7 +498,7 @@ var _ = Describe("FromKRI / ValidateKRI", func() {
 		})
 		labelErrs := 0
 		for _, e := range errs {
-			if strings.Contains(e.Error(), "DNS label limit") {
+			if strings.Contains(e.Error(), "RFC 1035") {
 				labelErrs++
 			}
 		}
@@ -429,6 +534,7 @@ var _ = Describe("FromKRI / ValidateKRI", func() {
 		Expect(errs).To(HaveLen(1))
 		Expect(errs[0].Error()).To(ContainSubstring("mesh"))
 		Expect(errs[0].Error()).To(ContainSubstring("de.fault"))
+		Expect(errs[0].Error()).To(ContainSubstring("RFC 1035"))
 	})
 
 	It("flags namespace set without zone independently of length", func() {
