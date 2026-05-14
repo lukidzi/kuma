@@ -8,9 +8,11 @@ import (
 	. "github.com/onsi/gomega"
 
 	"github.com/kumahq/kuma/v2/pkg/core/kri"
+	core_mesh "github.com/kumahq/kuma/v2/pkg/core/resources/apis/mesh"
 	meshexternalservice_api "github.com/kumahq/kuma/v2/pkg/core/resources/apis/meshexternalservice/api/v1alpha1"
 	meshmzservice_api "github.com/kumahq/kuma/v2/pkg/core/resources/apis/meshmultizoneservice/api/v1alpha1"
 	meshservice_api "github.com/kumahq/kuma/v2/pkg/core/resources/apis/meshservice/api/v1alpha1"
+	"github.com/kumahq/kuma/v2/pkg/core/resources/model"
 	"github.com/kumahq/kuma/v2/pkg/core/resources/sni"
 )
 
@@ -199,6 +201,148 @@ var _ = Describe("FromKRI / ValidateKRI", func() {
 			},
 			expectErr: true,
 		}),
+		Entry("error namespace contains dot", kriTestCase{
+			id: kri.Identifier{
+				ResourceType: meshservice_api.MeshServiceType,
+				Mesh:         "default",
+				Zone:         "east",
+				Namespace:    "app.ns",
+				Name:         "backend",
+				SectionName:  "http",
+			},
+			expectErr: true,
+		}),
+		Entry("error namespace exceeds 63 chars", kriTestCase{
+			id: kri.Identifier{
+				ResourceType: meshservice_api.MeshServiceType,
+				Mesh:         "default",
+				Zone:         "east",
+				Namespace:    strings.Repeat("a", 64),
+				Name:         "backend",
+				SectionName:  "http",
+			},
+			expectErr: true,
+		}),
+		Entry("error zone exceeds 63 chars", kriTestCase{
+			id: kri.Identifier{
+				ResourceType: meshservice_api.MeshServiceType,
+				Mesh:         "default",
+				Zone:         strings.Repeat("z", 64),
+				Name:         "backend",
+				SectionName:  "http",
+			},
+			expectErr: true,
+		}),
+		Entry("error mesh exceeds 63 chars", kriTestCase{
+			id: kri.Identifier{
+				ResourceType: meshservice_api.MeshServiceType,
+				Mesh:         strings.Repeat("m", 64),
+				Name:         "backend",
+				SectionName:  "http",
+			},
+			expectErr: true,
+		}),
+		Entry("zone exactly 63 chars", kriTestCase{
+			id: kri.Identifier{
+				ResourceType: meshservice_api.MeshServiceType,
+				Mesh:         "default",
+				Zone:         strings.Repeat("z", 63),
+				Name:         "backend",
+				SectionName:  "http",
+			},
+			expected: "sni.msvc.default." + strings.Repeat("z", 63) + ".backend.http",
+		}),
+		Entry("namespace exactly 63 chars", kriTestCase{
+			id: kri.Identifier{
+				ResourceType: meshservice_api.MeshServiceType,
+				Mesh:         "default",
+				Zone:         "east",
+				Namespace:    strings.Repeat("n", 63),
+				Name:         "backend",
+				SectionName:  "http",
+			},
+			expected: "sni.msvc.default.east." + strings.Repeat("n", 63) + ".backend.http",
+		}),
+		Entry("mesh exactly 63 chars", kriTestCase{
+			id: kri.Identifier{
+				ResourceType: meshservice_api.MeshServiceType,
+				Mesh:         strings.Repeat("m", 63),
+				Name:         "backend",
+				SectionName:  "http",
+			},
+			expected: "sni.msvc." + strings.Repeat("m", 63) + ".backend.http",
+		}),
+		Entry("sectionName exactly 63 chars", kriTestCase{
+			id: kri.Identifier{
+				ResourceType: meshservice_api.MeshServiceType,
+				Mesh:         "default",
+				Name:         "backend",
+				SectionName:  strings.Repeat("p", 63),
+			},
+			expected: "sni.msvc.default.backend." + strings.Repeat("p", 63),
+		}),
+		Entry("error sectionName exceeds 63 chars", kriTestCase{
+			id: kri.Identifier{
+				ResourceType: meshservice_api.MeshServiceType,
+				Mesh:         "default",
+				Name:         "backend",
+				SectionName:  strings.Repeat("p", 64),
+			},
+			expectErr: true,
+		}),
+		Entry("total length just under 253 chars passes", kriTestCase{
+			// 4 + 1 + 4 + 1 + 60 + 1 + 60 + 1 + 60 + 1 + 60 + 1 + 4 = 258 — still > 253
+			// trim to fit: 4 + 1 + 4 + 1 + 58 + 1 + 58 + 1 + 58 + 1 + 58 + 1 + 4 = 250
+			id: kri.Identifier{
+				ResourceType: meshservice_api.MeshServiceType,
+				Mesh:         strings.Repeat("a", 58),
+				Zone:         strings.Repeat("b", 58),
+				Namespace:    strings.Repeat("c", 58),
+				Name:         strings.Repeat("d", 58),
+				SectionName:  "http",
+			},
+			expected: "sni.msvc." + strings.Repeat("a", 58) + "." + strings.Repeat("b", 58) + "." + strings.Repeat("c", 58) + "." + strings.Repeat("d", 58) + ".http",
+		}),
+		Entry("MeshExternalService zone with namespace", kriTestCase{
+			id: kri.Identifier{
+				ResourceType: meshexternalservice_api.MeshExternalServiceType,
+				Mesh:         "prod",
+				Zone:         "west",
+				Namespace:    "external-ns",
+				Name:         "ext-backend",
+				SectionName:  "9000",
+			},
+			expected: "sni.extsvc.prod.west.external-ns.ext-backend.9000",
+		}),
+		Entry("MeshMultiZoneService zone with namespace", kriTestCase{
+			id: kri.Identifier{
+				ResourceType: meshmzservice_api.MeshMultiZoneServiceType,
+				Mesh:         "default",
+				Zone:         "east",
+				Namespace:    "global-ns",
+				Name:         "global-svc",
+				SectionName:  "http",
+			},
+			expected: "sni.mzsvc.default.east.global-ns.global-svc.http",
+		}),
+		Entry("name with hyphens is valid", kriTestCase{
+			id: kri.Identifier{
+				ResourceType: meshservice_api.MeshServiceType,
+				Mesh:         "default",
+				Name:         "back-end-service",
+				SectionName:  "http",
+			},
+			expected: "sni.msvc.default.back-end-service.http",
+		}),
+		Entry("numeric-only sectionName is valid", kriTestCase{
+			id: kri.Identifier{
+				ResourceType: meshservice_api.MeshServiceType,
+				Mesh:         "default",
+				Name:         "backend",
+				SectionName:  "65535",
+			},
+			expected: "sni.msvc.default.backend.65535",
+		}),
 	)
 
 	It("reports a DNS label limit violation", func() {
@@ -222,20 +366,81 @@ var _ = Describe("FromKRI / ValidateKRI", func() {
 			SectionName:  "http",
 		})
 		Expect(errs).ToNot(BeEmpty())
-		joined := ""
+		var joined strings.Builder
 		for _, e := range errs {
-			joined += e.Error() + "\n"
+			joined.WriteString(e.Error() + "\n")
 		}
-		Expect(joined).To(ContainSubstring("DNS hostname limit"))
+		Expect(joined.String()).To(ContainSubstring("DNS hostname limit"))
 	})
 
 	It("reports multiple independent violations at once", func() {
 		errs := sni.ValidateKRI(kri.Identifier{
 			ResourceType: meshservice_api.MeshServiceType,
 			Mesh:         "default",
-			Name:         "foo.bar",                 // dot in name
+			Name:         "foo.bar",               // dot in name
 			SectionName:  strings.Repeat("a", 64), // port > 63 chars
 		})
 		Expect(len(errs)).To(BeNumerically(">=", 2))
+	})
+
+	It("reports separate errors for each oversized label", func() {
+		errs := sni.ValidateKRI(kri.Identifier{
+			ResourceType: meshservice_api.MeshServiceType,
+			Mesh:         strings.Repeat("a", 64),
+			Zone:         strings.Repeat("b", 64),
+			Name:         strings.Repeat("c", 64),
+			SectionName:  "http",
+		})
+		labelErrs := 0
+		for _, e := range errs {
+			if strings.Contains(e.Error(), "DNS label limit") {
+				labelErrs++
+			}
+		}
+		Expect(labelErrs).To(BeNumerically(">=", 3))
+	})
+
+	It("returns nil for an unknown resource type", func() {
+		Expect(sni.ValidateKRI(kri.Identifier{
+			ResourceType: model.ResourceType("DoesNotExist"),
+			Mesh:         "default",
+			Name:         "backend",
+			SectionName:  "http",
+		})).To(BeNil())
+	})
+
+	It("returns nil for a registered but non-SNI resource type", func() {
+		// core_mesh.MeshResource is registered with short name "m", not in the SNI-capable set.
+		Expect(sni.ValidateKRI(kri.Identifier{
+			ResourceType: core_mesh.MeshType,
+			Mesh:         "default",
+			Name:         "backend",
+			SectionName:  "http",
+		})).To(BeNil())
+	})
+
+	It("emits an error message that names the offending field", func() {
+		errs := sni.ValidateKRI(kri.Identifier{
+			ResourceType: meshservice_api.MeshServiceType,
+			Mesh:         "de.fault",
+			Name:         "backend",
+			SectionName:  "http",
+		})
+		Expect(errs).To(HaveLen(1))
+		Expect(errs[0].Error()).To(ContainSubstring("mesh"))
+		Expect(errs[0].Error()).To(ContainSubstring("de.fault"))
+	})
+
+	It("flags namespace set without zone independently of length", func() {
+		errs := sni.ValidateKRI(kri.Identifier{
+			ResourceType: meshservice_api.MeshServiceType,
+			Mesh:         "default",
+			Namespace:    "ns",
+			Name:         "backend",
+			SectionName:  "http",
+		})
+		Expect(errs).To(HaveLen(1))
+		Expect(errs[0].Error()).To(ContainSubstring("namespace"))
+		Expect(errs[0].Error()).To(ContainSubstring("zone"))
 	})
 })
