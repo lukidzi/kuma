@@ -62,7 +62,7 @@ func GenerateClusters(
 					}
 					if proxy.WorkloadIdentity != nil {
 						kriID := service.BackendRef().Resource()
-						if err := core_sni.ValidateKRI(kriID); err != nil {
+						if errs := core_sni.ValidateKRI(kriID); len(errs) > 0 {
 							continue
 						}
 						sni := core_sni.FromKRI(kriID)
@@ -159,7 +159,7 @@ func GenerateClusters(
 						zoneMeshScoped := zone == "" || meshCtx.ZonesWithMeshScopedProxy[zone]
 						var sni string
 						if zoneMeshScoped && proxy.WorkloadIdentity != nil {
-							if err := core_sni.ValidateKRI(realResourceRef.Resource); err != nil {
+							if errs := core_sni.ValidateKRI(realResourceRef.Resource); len(errs) > 0 {
 								continue
 							}
 							sni = core_sni.FromKRI(realResourceRef.Resource)

@@ -1,6 +1,6 @@
 {
  "warnings": [
   "Invalid MeshMultiZoneService resource name: 'this-is-a-very-long-meshmultizoneservice-name-exceeding-sixty-three'. It does not conform to the DNS format (RFC 1035). This is deprecated. Errors: must be no more than 63 characters",
-  "name \"this-is-a-very-long-meshmultizoneservice-name-exceeding-sixty-three\" is 67 characters which exceeds DNS label limit (63), SNI computed for this resource is invalid and traffic may fail"
+  "Invalid MeshMultiZoneService SNI: name \"this-is-a-very-long-meshmultizoneservice-name-exceeding-sixty-three\" is 67 characters which exceeds the DNS label limit (63). It does not conform to the DNS format (RFC 1035). This is deprecated."
  ]
 }

@@ -167,7 +167,7 @@ func (c *ClusterGenerator) generateRealBackendRefCluster(
 	service := destinationname.MustResolve(false, dest, port)
 	var sni string
 	if meshCtx.ZonesWithMeshScopedProxy[backendRef.Resource.Zone] {
-		if err := core_sni.ValidateKRI(backendRef.Resource); err != nil {
+		if errs := core_sni.ValidateKRI(backendRef.Resource); len(errs) > 0 {
 			return nil, "", nil
 		}
 		sni = core_sni.FromKRI(backendRef.Resource)

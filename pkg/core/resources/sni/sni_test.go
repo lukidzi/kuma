@@ -22,12 +22,12 @@ var _ = Describe("FromKRI / ValidateKRI", func() {
 	}
 	DescribeTable("",
 		func(tc kriTestCase) {
-			err := sni.ValidateKRI(tc.id)
+			errs := sni.ValidateKRI(tc.id)
 			if tc.expectErr {
-				Expect(err).To(HaveOccurred())
+				Expect(errs).ToNot(BeEmpty())
 				return
 			}
-			Expect(err).ToNot(HaveOccurred())
+			Expect(errs).To(BeEmpty())
 			out := sni.FromKRI(tc.id)
 			Expect(out).To(Equal(tc.expected))
 			Expect(govalidator.IsDNSName(out)).To(BeTrue())
@@ -201,19 +201,19 @@ var _ = Describe("FromKRI / ValidateKRI", func() {
 		}),
 	)
 
-	It("returns an error mentioning DNS label limit", func() {
-		err := sni.ValidateKRI(kri.Identifier{
+	It("reports a DNS label limit violation", func() {
+		errs := sni.ValidateKRI(kri.Identifier{
 			ResourceType: meshservice_api.MeshServiceType,
 			Mesh:         "default",
 			Name:         strings.Repeat("a", 64),
 			SectionName:  "http",
 		})
-		Expect(err).To(HaveOccurred())
-		Expect(err.Error()).To(ContainSubstring("DNS label limit"))
+		Expect(errs).ToNot(BeEmpty())
+		Expect(errs[0].Error()).To(ContainSubstring("DNS label limit"))
 	})
 
-	It("returns an error mentioning DNS hostname limit", func() {
-		err := sni.ValidateKRI(kri.Identifier{
+	It("reports a DNS hostname limit violation", func() {
+		errs := sni.ValidateKRI(kri.Identifier{
 			ResourceType: meshservice_api.MeshServiceType,
 			Mesh:         strings.Repeat("a", 63),
 			Zone:         strings.Repeat("b", 63),
@@ -221,7 +221,21 @@ var _ = Describe("FromKRI / ValidateKRI", func() {
 			Name:         strings.Repeat("d", 63),
 			SectionName:  "http",
 		})
-		Expect(err).To(HaveOccurred())
-		Expect(err.Error()).To(ContainSubstring("DNS hostname limit"))
+		Expect(errs).ToNot(BeEmpty())
+		joined := ""
+		for _, e := range errs {
+			joined += e.Error() + "\n"
+		}
+		Expect(joined).To(ContainSubstring("DNS hostname limit"))
+	})
+
+	It("reports multiple independent violations at once", func() {
+		errs := sni.ValidateKRI(kri.Identifier{
+			ResourceType: meshservice_api.MeshServiceType,
+			Mesh:         "default",
+			Name:         "foo.bar",                 // dot in name
+			SectionName:  strings.Repeat("a", 64), // port > 63 chars
+		})
+		Expect(len(errs)).To(BeNumerically(">=", 2))
 	})
 })

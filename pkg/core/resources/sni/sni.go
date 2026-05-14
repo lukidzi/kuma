@@ -8,9 +8,8 @@
 package sni
 
 import (
+	"fmt"
 	"strings"
-
-	"github.com/pkg/errors"
 
 	"github.com/kumahq/kuma/v2/pkg/core/kri"
 	"github.com/kumahq/kuma/v2/pkg/core/resources/registry"
@@ -41,36 +40,63 @@ func FromKRI(id kri.Identifier) string {
 	return strings.Join(buildSegments(id), ".")
 }
 
-// ValidateKRI returns nil if the SNI that FromKRI would produce satisfies
-// the MADR-101 naming rules:
+// ValidateKRI returns every reason the SNI that FromKRI would produce does
+// not satisfy MADR-101 / DNS-1035 naming rules:
 //
 //   - Mesh, Name and SectionName are non-empty
 //   - if Namespace is non-empty, Zone must also be non-empty
 //   - no segment contains "."
 //   - each segment length ≤ 63 (DNS label limit)
 //   - total length ≤ 253 (DNS hostname limit)
-func ValidateKRI(id kri.Identifier) error {
+//
+// Returns nil for a compliant identifier, or for resource types whose KRI is
+// not rendered as an SNI. Callers can either check `len(errs) > 0` for a
+// pass/fail gate (e.g. silently skipping invalid resources in xDS) or surface
+// individual errors as Deprecations on Create/Update.
+func ValidateKRI(id kri.Identifier) []error {
+	desc, err := registry.Global().DescriptorFor(id.ResourceType)
+	if err != nil {
+		return nil
+	}
+	if _, ok := sniCapableShortNames[desc.ShortName]; !ok {
+		return nil
+	}
 	if id.Mesh == "" || id.Name == "" || id.SectionName == "" {
-		return errors.Errorf("SNI: mesh, name and sectionName must be non-empty: %+v", id)
+		return []error{fmt.Errorf("mesh, name and sectionName must be non-empty")}
 	}
+
+	var errs []error
 	if id.Namespace != "" && id.Zone == "" {
-		return errors.Errorf("SNI: namespace %q set without zone: %+v", id.Namespace, id)
+		errs = append(errs, fmt.Errorf("namespace %q is set without a zone", id.Namespace))
 	}
-	segments := buildSegments(id)
-	total := len(segments) - 1 // dots between segments
-	for _, s := range segments {
-		if strings.ContainsRune(s, '.') {
-			return errors.Errorf("SNI: segment %q contains '.': %+v", s, id)
+
+	type field struct {
+		name, value string
+	}
+	fields := []field{
+		{"mesh", id.Mesh},
+		{"name", id.Name},
+		{"port", id.SectionName},
+	}
+	if id.Zone != "" {
+		fields = append(fields, field{"zone", id.Zone})
+	}
+	if id.Namespace != "" {
+		fields = append(fields, field{"namespace", id.Namespace})
+	}
+	for _, f := range fields {
+		if strings.ContainsRune(f.value, '.') {
+			errs = append(errs, fmt.Errorf("%s %q contains '.'", f.name, f.value))
 		}
-		if len(s) > dnsLabelLimit {
-			return errors.Errorf("SNI: segment %q exceeds DNS label limit (%d > %d): %+v", s, len(s), dnsLabelLimit, id)
+		if len(f.value) > dnsLabelLimit {
+			errs = append(errs, fmt.Errorf("%s %q is %d characters which exceeds the DNS label limit (%d)", f.name, f.value, len(f.value), dnsLabelLimit))
 		}
-		total += len(s)
 	}
-	if total > dnsHostnameLimit {
-		return errors.Errorf("SNI: total length %d exceeds DNS hostname limit %d: %+v", total, dnsHostnameLimit, id)
+
+	if sni := FromKRI(id); len(sni) > dnsHostnameLimit {
+		errs = append(errs, fmt.Errorf("computed SNI for port %q is %d characters which exceeds the DNS hostname limit (%d)", id.SectionName, len(sni), dnsHostnameLimit))
 	}
-	return nil
+	return errs
 }
 
 func buildSegments(id kri.Identifier) []string {
