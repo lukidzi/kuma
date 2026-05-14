@@ -84,6 +84,7 @@ func (h *validatingHandler) Handle(_ context.Context, req admission.Request) adm
 		}
 
 		warnings = append(warnings, core_model.Deprecations(coreRes)...)
+		warnings = append(warnings, core_model.Warnings(coreRes)...)
 		return admission.Allowed("").WithWarnings(warnings...)
 	}
 }

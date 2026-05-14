@@ -515,7 +515,7 @@ func (r *resourceEndpoints) createResource(
 		return
 	}
 
-	resp := api_server_types.CreateOrUpdateSuccessResponse{Warnings: core_model.Deprecations(res)}
+	resp := api_server_types.CreateOrUpdateSuccessResponse{Warnings: append(core_model.Deprecations(res), core_model.Warnings(res)...)}
 	if err := response.WriteHeaderAndJson(http.StatusCreated, resp, "application/json"); err != nil {
 		log.Error(err, "Could not write the create response")
 	}
@@ -589,7 +589,7 @@ func (r *resourceEndpoints) updateResource(
 		return
 	}
 
-	resp := api_server_types.CreateOrUpdateSuccessResponse{Warnings: core_model.Deprecations(currentRes)}
+	resp := api_server_types.CreateOrUpdateSuccessResponse{Warnings: append(core_model.Deprecations(currentRes), core_model.Warnings(currentRes)...)}
 	if err := response.WriteHeaderAndJson(http.StatusOK, resp, "application/json"); err != nil {
 		log.Error(err, "Could not write the update response")
 	}
