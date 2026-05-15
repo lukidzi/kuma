@@ -49,147 +49,25 @@ func GenerateClusters(
 
 		for _, cluster := range service.Clusters() {
 			clusterName := cluster.Name()
-			edsClusterBuilder := envoy_clusters.NewClusterBuilder(proxy.APIVersion, clusterName)
+			builder := envoy_clusters.NewClusterBuilder(proxy.APIVersion, clusterName)
 			clusterTags := []envoy_tags.Tags{cluster.Tags()}
+
+			var configured bool
+			var err error
+
 			if meshCtx.IsExternalService(serviceName) {
-				switch {
-				case isMeshExternalService(meshCtx.EndpointMap[serviceName]):
-					realResourceRef := service.BackendRef().RealResourceBackendRef()
-					dest, port, ok := DestinationPortFromRef(meshCtx, realResourceRef)
-					if !ok {
-						continue
-					}
-					if proxy.WorkloadIdentity != nil {
-						kriID := service.BackendRef().Resource()
-						if err := tls.ValidateSNIForKRI(kriID); err != nil {
-							continue
-						}
-						sni := tls.SNIFromKRI(kriID)
-						// we only want to route when are mesh-scoped zone egresses
-						if len(meshCtx.ZoneEgresses) == 0 {
-							continue
-						}
-						egressSANs := meshCtx.ZoneEgressSANs()
-						if len(egressSANs) == 0 {
-							continue
-						}
-						upstreamCtx, err := UpstreamTLSContext(proxy, sni, egressSANs)
-						if err != nil {
-							return nil, err
-						}
-						edsClusterBuilder.
-							Configure(envoy_clusters.EdsCluster()).
-							Configure(envoy_clusters.UpstreamTLSContext(upstreamCtx))
-					} else {
-						sni := SniForBackendRef(realResourceRef, dest, port, systemNamespace)
-						edsClusterBuilder.
-							Configure(envoy_clusters.EdsCluster()).
-							Configure(envoy_clusters.ClientSideMTLSCustomSNI(
-								proxy.SecretsTracker,
-								unifiedNaming,
-								meshCtx.Resource,
-								mesh_proto.ZoneEgressServiceName,
-								true,
-								sni,
-								false,
-							))
-					}
-				case meshCtx.Resource.ZoneEgressEnabled():
-					// path for old ExternalService
-					edsClusterBuilder.
-						Configure(envoy_clusters.EdsCluster()).
-						Configure(envoy_clusters.ClientSideMTLS(
-							proxy.SecretsTracker,
-							unifiedNaming,
-							meshCtx.Resource,
-							mesh_proto.ZoneEgressServiceName,
-							tlsReady,
-							clusterTags,
-							false,
-						))
-				default:
-					// path for old ExternalService
-					endpoints := meshCtx.ExternalServicesEndpointMap[serviceName]
-					isIPv6 := proxy.Dataplane.IsIPv6()
-
-					edsClusterBuilder.
-						Configure(envoy_clusters.ProvidedCustomEndpointCluster(isIPv6, isMeshExternalService(endpoints), endpoints...)).
-						Configure(envoy_clusters.ClientSideTLS(endpoints))
-				}
-
-				switch protocol {
-				case core_meta.ProtocolHTTP:
-					edsClusterBuilder.Configure(envoy_clusters.Http())
-				case core_meta.ProtocolHTTP2, core_meta.ProtocolGRPC:
-					edsClusterBuilder.Configure(envoy_clusters.Http2())
-				default:
-				}
+				configured, err = buildExternalServiceCluster(builder, proxy, meshCtx, service, serviceName, clusterTags, tlsReady, protocol, unifiedNaming, systemNamespace)
 			} else {
-				edsClusterBuilder.
-					Configure(envoy_clusters.EdsCluster()).
-					Configure(envoy_clusters.Http2())
-
-				if upstreamMeshName := cluster.Mesh(); upstreamMeshName != "" {
-					for _, otherMesh := range meshCtx.Resources.Meshes().Items {
-						if otherMesh.GetMeta().GetName() == upstreamMeshName {
-							edsClusterBuilder.Configure(
-								envoy_clusters.CrossMeshClientSideMTLS(
-									proxy.SecretsTracker, unifiedNaming, meshCtx.Resource, otherMesh, serviceName, tlsReady, clusterTags,
-								),
-							)
-							break
-						}
-					}
-				} else {
-					if realResourceRef := service.BackendRef().RealResourceBackendRef(); realResourceRef != nil {
-						dest, port, ok := DestinationPortFromRef(meshCtx, realResourceRef)
-						if !ok {
-							continue
-						}
-						tlsReady = true // tls readiness is only relevant for MeshService
-						if common_api.TargetRefKind(realResourceRef.Resource.ResourceType) == common_api.MeshService {
-							ms := dest.(*meshservice_api.MeshServiceResource)
-							// we only check TLS status for local service
-							// services that are synced can be accessed only with TLS through ZoneIngress
-							tlsReady = !ms.IsLocalMeshService() || ms.Status.TLS.Status == meshservice_api.TLSReady
-							protocol = port.GetProtocol()
-						}
-						zone := realResourceRef.Resource.Zone
-						zoneMeshScoped := zone == "" || meshCtx.ZonesWithMeshScopedProxy[zone]
-						var sni string
-						if zoneMeshScoped && proxy.WorkloadIdentity != nil {
-							if err := tls.ValidateSNIForKRI(realResourceRef.Resource); err != nil {
-								continue
-							}
-							sni = tls.SNIFromKRI(realResourceRef.Resource)
-						} else {
-							sni = SniForBackendRef(realResourceRef, dest, port, systemNamespace)
-						}
-						// ClientSideMultiIdentitiesMTLS validate MTLS enabled on the mesh
-						if proxy.WorkloadIdentity != nil {
-							upstreamCtx, err := UpstreamTLSContext(proxy, sni, Identities(realResourceRef, meshCtx, true))
-							if err != nil {
-								return nil, err
-							}
-							edsClusterBuilder.Configure(envoy_clusters.UpstreamTLSContext(upstreamCtx))
-						} else {
-							edsClusterBuilder.Configure(envoy_clusters.ClientSideMultiIdentitiesMTLS(
-								proxy.SecretsTracker,
-								unifiedNaming,
-								meshCtx.Resource,
-								tlsReady,
-								sni,
-								Identities(realResourceRef, meshCtx, false),
-								len(meshCtx.CAsByTrustDomain) > 0,
-							))
-						}
-					} else {
-						edsClusterBuilder.Configure(envoy_clusters.ClientSideMTLS(proxy.SecretsTracker, unifiedNaming, meshCtx.Resource, serviceName, tlsReady, clusterTags, len(meshCtx.CAsByTrustDomain) > 0))
-					}
-				}
+				protocol, configured, err = buildInternalServiceCluster(builder, proxy, meshCtx, service, cluster, serviceName, clusterTags, tlsReady, protocol, unifiedNaming, systemNamespace)
+			}
+			if err != nil {
+				return nil, err
+			}
+			if !configured {
+				continue
 			}
 
-			edsCluster, err := edsClusterBuilder.Build()
+			edsCluster, err := builder.Build()
 			if err != nil {
 				return nil, errors.Wrapf(err, "build CDS for cluster %s failed", clusterName)
 			}
@@ -205,6 +83,218 @@ func GenerateClusters(
 	}
 
 	return resources, nil
+}
+
+// buildExternalServiceCluster configures a cluster for an external service.
+// Returns false when the cluster should be skipped (e.g. missing egress or failed SNI validation).
+func buildExternalServiceCluster(
+	builder *envoy_clusters.ClusterBuilder,
+	proxy *core_xds.Proxy,
+	meshCtx xds_context.MeshContext,
+	service *envoy_common.Service,
+	serviceName string,
+	clusterTags []envoy_tags.Tags,
+	tlsReady bool,
+	protocol core_meta.Protocol,
+	unifiedNaming bool,
+	systemNamespace string,
+) (bool, error) {
+	switch {
+	case isMeshExternalService(meshCtx.EndpointMap[serviceName]):
+		configured, err := configureMeshExternalServiceCluster(builder, proxy, meshCtx, service, unifiedNaming, systemNamespace)
+		if !configured || err != nil {
+			return configured, err
+		}
+	case meshCtx.Resource.ZoneEgressEnabled():
+		// path for old ExternalService
+		builder.
+			Configure(envoy_clusters.EdsCluster()).
+			Configure(envoy_clusters.ClientSideMTLS(
+				proxy.SecretsTracker,
+				unifiedNaming,
+				meshCtx.Resource,
+				mesh_proto.ZoneEgressServiceName,
+				tlsReady,
+				clusterTags,
+				false,
+			))
+	default:
+		// path for old ExternalService
+		endpoints := meshCtx.ExternalServicesEndpointMap[serviceName]
+		isIPv6 := proxy.Dataplane.IsIPv6()
+		builder.
+			Configure(envoy_clusters.ProvidedCustomEndpointCluster(isIPv6, isMeshExternalService(endpoints), endpoints...)).
+			Configure(envoy_clusters.ClientSideTLS(endpoints))
+	}
+
+	switch protocol {
+	case core_meta.ProtocolHTTP:
+		builder.Configure(envoy_clusters.Http())
+	case core_meta.ProtocolHTTP2, core_meta.ProtocolGRPC:
+		builder.Configure(envoy_clusters.Http2())
+	default:
+	}
+	return true, nil
+}
+
+// configureMeshExternalServiceCluster configures TLS for a MeshExternalService cluster.
+// Returns false when the cluster should be skipped (no egresses, failed SNI validation, or missing destination).
+func configureMeshExternalServiceCluster(
+	builder *envoy_clusters.ClusterBuilder,
+	proxy *core_xds.Proxy,
+	meshCtx xds_context.MeshContext,
+	service *envoy_common.Service,
+	unifiedNaming bool,
+	systemNamespace string,
+) (bool, error) {
+	realResourceRef := service.BackendRef().RealResourceBackendRef()
+	dest, port, ok := DestinationPortFromRef(meshCtx, realResourceRef)
+	if !ok {
+		return false, nil
+	}
+
+	if proxy.WorkloadIdentity != nil {
+		kriID := service.BackendRef().Resource()
+		if err := tls.ValidateSNIForKRI(kriID); err != nil {
+			return false, nil
+		}
+		sni := tls.SNIFromKRI(kriID)
+		// we only want to route when there are mesh-scoped zone egresses
+		if len(meshCtx.ZoneEgresses) == 0 {
+			return false, nil
+		}
+		egressSANs := meshCtx.ZoneEgressSANs()
+		if len(egressSANs) == 0 {
+			return false, nil
+		}
+		builder.Configure(envoy_clusters.EdsCluster())
+		if err := configureWorkloadIdentityTLS(builder, proxy, sni, egressSANs); err != nil {
+			return false, err
+		}
+	} else {
+		sni := SniForBackendRef(realResourceRef, dest, port, systemNamespace)
+		builder.
+			Configure(envoy_clusters.EdsCluster()).
+			Configure(envoy_clusters.ClientSideMTLSCustomSNI(
+				proxy.SecretsTracker,
+				unifiedNaming,
+				meshCtx.Resource,
+				mesh_proto.ZoneEgressServiceName,
+				true,
+				sni,
+				false,
+			))
+	}
+	return true, nil
+}
+
+// buildInternalServiceCluster configures a cluster for an internal (non-external) service.
+// Returns the (possibly updated) protocol, a configured flag, and any error.
+// Protocol may change when the real resource ref resolves a MeshService port.
+func buildInternalServiceCluster(
+	builder *envoy_clusters.ClusterBuilder,
+	proxy *core_xds.Proxy,
+	meshCtx xds_context.MeshContext,
+	service *envoy_common.Service,
+	cluster envoy_common.Cluster,
+	serviceName string,
+	clusterTags []envoy_tags.Tags,
+	tlsReady bool,
+	protocol core_meta.Protocol,
+	unifiedNaming bool,
+	systemNamespace string,
+) (core_meta.Protocol, bool, error) {
+	builder.
+		Configure(envoy_clusters.EdsCluster()).
+		Configure(envoy_clusters.Http2())
+
+	if upstreamMeshName := cluster.Mesh(); upstreamMeshName != "" {
+		for _, otherMesh := range meshCtx.Resources.Meshes().Items {
+			if otherMesh.GetMeta().GetName() == upstreamMeshName {
+				builder.Configure(
+					envoy_clusters.CrossMeshClientSideMTLS(
+						proxy.SecretsTracker, unifiedNaming, meshCtx.Resource, otherMesh, serviceName, tlsReady, clusterTags,
+					),
+				)
+				break
+			}
+		}
+		return protocol, true, nil
+	}
+
+	if realResourceRef := service.BackendRef().RealResourceBackendRef(); realResourceRef != nil {
+		return configureSameMeshRealRefCluster(builder, proxy, meshCtx, realResourceRef, protocol, unifiedNaming, systemNamespace)
+	}
+
+	builder.Configure(envoy_clusters.ClientSideMTLS(proxy.SecretsTracker, unifiedNaming, meshCtx.Resource, serviceName, tlsReady, clusterTags, len(meshCtx.CAsByTrustDomain) > 0))
+	return protocol, true, nil
+}
+
+// configureSameMeshRealRefCluster configures TLS for a same-mesh cluster backed by a real resource ref.
+// Returns false when the cluster should be skipped (missing destination or failed SNI validation).
+// Protocol may be updated when the ref resolves to a MeshService.
+func configureSameMeshRealRefCluster(
+	builder *envoy_clusters.ClusterBuilder,
+	proxy *core_xds.Proxy,
+	meshCtx xds_context.MeshContext,
+	realResourceRef *resolve.RealResourceBackendRef,
+	protocol core_meta.Protocol,
+	unifiedNaming bool,
+	systemNamespace string,
+) (core_meta.Protocol, bool, error) {
+	dest, port, ok := DestinationPortFromRef(meshCtx, realResourceRef)
+	if !ok {
+		return protocol, false, nil
+	}
+
+	tlsReady := true // tls readiness is only relevant for MeshService
+	if common_api.TargetRefKind(realResourceRef.Resource.ResourceType) == common_api.MeshService {
+		ms := dest.(*meshservice_api.MeshServiceResource)
+		// we only check TLS status for local service
+		// services that are synced can be accessed only with TLS through ZoneIngress
+		tlsReady = !ms.IsLocalMeshService() || ms.Status.TLS.Status == meshservice_api.TLSReady
+		protocol = port.GetProtocol()
+	}
+
+	zone := realResourceRef.Resource.Zone
+	zoneMeshScoped := zone == "" || meshCtx.ZonesWithMeshScopedProxy[zone]
+	var sni string
+	if zoneMeshScoped && proxy.WorkloadIdentity != nil {
+		if err := tls.ValidateSNIForKRI(realResourceRef.Resource); err != nil {
+			return protocol, false, nil
+		}
+		sni = tls.SNIFromKRI(realResourceRef.Resource)
+	} else {
+		sni = SniForBackendRef(realResourceRef, dest, port, systemNamespace)
+	}
+
+	// ClientSideMultiIdentitiesMTLS validates MTLS is enabled on the mesh
+	if proxy.WorkloadIdentity != nil {
+		if err := configureWorkloadIdentityTLS(builder, proxy, sni, Identities(realResourceRef, meshCtx, true)); err != nil {
+			return protocol, false, err
+		}
+	} else {
+		builder.Configure(envoy_clusters.ClientSideMultiIdentitiesMTLS(
+			proxy.SecretsTracker,
+			unifiedNaming,
+			meshCtx.Resource,
+			tlsReady,
+			sni,
+			Identities(realResourceRef, meshCtx, false),
+			len(meshCtx.CAsByTrustDomain) > 0,
+		))
+	}
+	return protocol, true, nil
+}
+
+// configureWorkloadIdentityTLS applies UpstreamTLSContext to the cluster builder for workload-identity paths.
+func configureWorkloadIdentityTLS(builder *envoy_clusters.ClusterBuilder, proxy *core_xds.Proxy, sni string, sans []string) error {
+	upstreamCtx, err := UpstreamTLSContext(proxy, sni, sans)
+	if err != nil {
+		return err
+	}
+	builder.Configure(envoy_clusters.UpstreamTLSContext(upstreamCtx))
+	return nil
 }
 
 func UpstreamTLSContext(proxy *core_xds.Proxy, sni string, sans []string) (*envoy_tls.UpstreamTlsContext, error) {
