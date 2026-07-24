@@ -930,8 +930,13 @@ var _ = Describe("PodReconciler", func() {
 						{
 							Address: "192.168.0.1",
 							Port:    80,
-							Tags: map[string]string{
-								"kuma.io/service": "example_demo_svc_80",
+							BackendRef: &mesh_proto.Dataplane_Networking_Outbound_BackendRef{
+								Kind: "MeshService",
+								Name: "example",
+								Port: 80,
+								Labels: map[string]string{
+									mesh_proto.KubeNamespaceTag: "demo",
+								},
 							},
 						},
 					},
@@ -1011,8 +1016,13 @@ var _ = Describe("PodReconciler", func() {
 						{
 							Address: "192.168.0.1",
 							Port:    80,
-							Tags: map[string]string{
-								"kuma.io/service": "example_demo_svc_80",
+							BackendRef: &mesh_proto.Dataplane_Networking_Outbound_BackendRef{
+								Kind: "MeshService",
+								Name: "example",
+								Port: 80,
+								Labels: map[string]string{
+									mesh_proto.KubeNamespaceTag: "demo",
+								},
 							},
 						},
 					},
