@@ -28,9 +28,6 @@ func Connectivity() {
 	identityName := "msconnectivity-identity"
 	autoGenerateUniversalClusterName := "autogenerate-universal"
 
-	zoneProxyName := meshName + "-zone-proxy"
-	ingressPort := uint32(11001)
-
 	var autoGenerateUniversalCluster *UniversalCluster
 
 	var testServerPodNames []string
@@ -122,10 +119,9 @@ spec:
 				),
 				democlient.Install(democlient.WithNamespace(namespace), democlient.WithMesh(meshName)),
 				zoneproxy.Install(
-					zoneproxy.WithName(zoneProxyName),
 					zoneproxy.WithNamespace(namespace),
 					zoneproxy.WithMesh(meshName),
-					zoneproxy.WithIngressPort(ingressPort),
+					zoneproxy.WithIngress(),
 				),
 			)).
 			SetupInGroup(multizone.KubeZone1, &group)
@@ -139,10 +135,9 @@ spec:
 					testserver.WithEchoArgs("echo", "--instance", "kube-test-server-2"),
 				),
 				zoneproxy.Install(
-					zoneproxy.WithName(zoneProxyName),
 					zoneproxy.WithNamespace(namespace),
 					zoneproxy.WithMesh(meshName),
-					zoneproxy.WithIngressPort(ingressPort),
+					zoneproxy.WithIngress(),
 				),
 			)).
 			SetupInGroup(multizone.KubeZone2, &group)
@@ -158,9 +153,8 @@ spec:
 					WithWorkload("test-server"),
 				),
 				zoneproxy.Install(
-					zoneproxy.WithName(zoneProxyName),
 					zoneproxy.WithMesh(meshName),
-					zoneproxy.WithIngressPort(ingressPort),
+					zoneproxy.WithIngress(),
 				),
 			)).
 			SetupInGroup(multizone.UniZone1, &group)
@@ -172,9 +166,8 @@ spec:
 					WithWorkload("test-server"),
 				),
 				zoneproxy.Install(
-					zoneproxy.WithName(zoneProxyName),
 					zoneproxy.WithMesh(meshName),
-					zoneproxy.WithIngressPort(ingressPort),
+					zoneproxy.WithIngress(),
 				),
 			)).
 			SetupInGroup(multizone.UniZone2, &group)
@@ -191,9 +184,8 @@ spec:
 				WithWorkload("test-server"),
 			)).
 			Install(zoneproxy.Install(
-				zoneproxy.WithName(zoneProxyName),
 				zoneproxy.WithMesh(meshName),
-				zoneproxy.WithIngressPort(ingressPort),
+				zoneproxy.WithIngress(),
 			)).
 			SetupInGroup(autoGenerateUniversalCluster, &group)
 
