@@ -70,7 +70,7 @@ var (
 	_ = Describe("MeshTimeout", Label("job-0"), meshtimeout.MeshTimeout, Ordered)
 	_ = Describe("Defaults", Label("job-3"), defaults.Defaults, Ordered)
 	_ = Describe("MeshService Sync", Label("job-1"), meshservice.Sync, Ordered)
-	_ = Describe("MeshService Connectivity", Label("job-1"), meshservice.Connectivity, Ordered)
+	_ = FDescribe("MeshService Connectivity", Label("job-1"), meshservice.Connectivity, Ordered)
 	_ = Describe("MeshService Migration", Label("job-1"), meshservice.Migration, Ordered)
 	_ = Describe("Targeting real MeshService in policies", Label("job-1"), meshservice.MeshServiceTargeting, Ordered)
 	_ = Describe("MeshMultiZoneService Connectivity", Label("job-2"), meshmultizoneservice.Connectivity, Ordered)

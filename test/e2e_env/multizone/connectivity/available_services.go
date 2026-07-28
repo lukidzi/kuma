@@ -17,6 +17,7 @@ import (
 	"github.com/kumahq/kuma/v3/test/framework/kumactl"
 )
 
+// TODO: remove once removed old ingress/egress
 func AvailableServices() {
 	statefulClusterName := "stateful-cluster"
 	meshName := "available-services"
