@@ -1,6 +1,7 @@
 package xds
 
 import (
+	"fmt"
 	"maps"
 	"net"
 	"slices"
@@ -8,8 +9,6 @@ import (
 	"strings"
 
 	"github.com/asaskevich/govalidator"
-	"github.com/pkg/errors"
-	"go.uber.org/multierr"
 
 	core_meta "github.com/kumahq/kuma/v3/pkg/core/metadata"
 	api "github.com/kumahq/kuma/v3/pkg/plugins/policies/meshpassthrough/api/v1alpha1"
@@ -55,10 +54,11 @@ type FilterChainMatch struct {
 	Routes    []Route
 }
 
-func GetOrderedMatchers(conf api.Conf) ([]FilterChainMatch, error) {
+func GetOrderedMatchers(conf api.Conf) ([]FilterChainMatch, []string) {
+	matches, warnings := skipConflictingMatches(pointer.Deref(conf.AppendMatch))
 	matcherWithRoutes := map[Matcher]map[Route]bool{}
 	portProtocols := map[uint32]map[core_meta.Protocol]bool{}
-	for _, match := range pointer.Deref(conf.AppendMatch) {
+	for _, match := range matches {
 		port := pointer.DerefOr[uint32](match.Port, 0)
 		protocol := core_meta.ParseProtocol(string(match.Protocol))
 		matchType, isWildcardDomain := getMatchType(match, protocol)
@@ -99,10 +99,6 @@ func GetOrderedMatchers(conf api.Conf) ([]FilterChainMatch, error) {
 			matcher.Value = match.Value
 			matcherWithRoutes[matcher] = map[Route]bool{}
 		}
-	}
-	// we cannot differentiate between HTTP, HTTP/2, and gRPC on the same port.
-	if err := validatePortAndProtocol(portProtocols); err != nil {
-		return nil, err
 	}
 	// Envoy first checks the port when performing matching. If there is a matcher for a specific port
 	// and one rule to match all ports alongside another for a specific port,
@@ -156,7 +152,7 @@ func GetOrderedMatchers(conf api.Conf) ([]FilterChainMatch, error) {
 			})
 	}
 	orderMatchers(filterChainMatchers)
-	return filterChainMatchers, nil
+	return filterChainMatchers, warnings
 }
 
 func getMatchType(match api.Match, protocol core_meta.Protocol) (MatchType, bool) {
@@ -189,24 +185,23 @@ func getMatchType(match api.Match, protocol core_meta.Protocol) (MatchType, bool
 	return matchType, isWildcardDomain
 }
 
-func validatePortAndProtocol(portProtocols map[uint32]map[core_meta.Protocol]bool) error {
-	var errs error
-	for port, protocols := range portProtocols {
-		var counter int
-		if _, found := protocols[core_meta.ProtocolHTTP]; found {
-			counter++
+// skipConflictingMatches drops matches that would produce a filter chain with
+// the same matching criteria as an earlier one. Envoy rejects the whole listener
+// when it cannot tell two filter chains apart, so ignoring a single match keeps
+// the rest of the configuration working. Such policies are rejected by the
+// validator, they can only come from a control plane that didn't validate them.
+func skipConflictingMatches(matches []api.Match) ([]api.Match, []string) {
+	accepted := []api.Match{}
+	warnings := []string{}
+	for _, match := range matches {
+		other, found := api.ConflictingMatch(accepted, match)
+		if !found {
+			accepted = append(accepted, match)
+			continue
 		}
-		if _, found := protocols[core_meta.ProtocolHTTP2]; found {
-			counter++
-		}
-		if _, found := protocols[core_meta.ProtocolGRPC]; found {
-			counter++
-		}
-		if counter > 1 {
-			errs = multierr.Append(errs, errors.Errorf("you cannot configure http, http2, grpc on the same port %d", port))
-		}
+		warnings = append(warnings, fmt.Sprintf("ignoring match %s for %q, it conflicts with match %s for %q because both apply to the same destination and port", match.Protocol, match.Value, accepted[other].Protocol, accepted[other].Value))
 	}
-	return errs
+	return accepted, warnings
 }
 
 func getOrderedRoutes(routesMap map[Route]bool) []Route {

@@ -1015,6 +1015,16 @@ endpoint it used to call is still registered — the vendored GUI bundle
 release cadence — but it is deprecated; new integrations should call
 `_policies` instead.
 
+### `MeshPassthrough` rejects matches with conflicting protocols
+
+Two matches for the same destination generate Envoy filter chains that cannot be told apart when they use a different protocol from the same group (`http`, `http2`, `grpc`, or `tcp` and `mysql`), and Envoy rejects the whole listener. A match without a port applies to all ports, so it conflicts with every match for the same destination on any port. Such policies are now rejected by validation, and a policy that was created before the upgrade has its conflicting matches ignored instead of breaking the passthrough listener.
+
+The previous validation also wrongly rejected matches with a layer 7 protocol next to a `tls` match on the same port. Those are accepted now, `tls` filter chains are matched on the transport protocol so they never conflict.
+
+**Action required**
+
+Fix `MeshPassthrough` policies that configure the same domain, IP or CIDR with more than one of `http`, `http2` and `grpc`, for example by giving every match an explicit port.
+
 ## Upgrade to `2.13.7`
 
 Patch releases normally do not require upgrade instructions. The entry below is included because the underlying change is a security fix that alters TLS verification behavior in a way some deployments may notice.

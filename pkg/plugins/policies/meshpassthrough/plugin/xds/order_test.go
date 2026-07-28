@@ -2,7 +2,6 @@ package xds_test
 
 import (
 	"fmt"
-	"strings"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -77,13 +76,13 @@ var _ = Describe("Match order", func() {
 						Type:     api.MatchType("Domain"),
 						Value:    "http2.com",
 						Port:     pointer.To[uint32](9000),
-						Protocol: api.ProtocolType("http2"),
+						Protocol: api.ProtocolType("http"),
 					},
 					{
 						Type:     api.MatchType("Domain"),
 						Value:    "grpc.com",
 						Port:     pointer.To[uint32](9001),
-						Protocol: api.ProtocolType("grpc"),
+						Protocol: api.ProtocolType("http"),
 					},
 					{
 						Type:     api.MatchType("Domain"),
@@ -250,20 +249,18 @@ var _ = Describe("Match order", func() {
 		}),
 	)
 	type invalidTestCase struct {
-		conf      api.Conf
-		errorMsgs []string
+		conf     api.Conf
+		warnings []string
 	}
-	DescribeTable("should fail when many protocols L7 on the same port",
+	DescribeTable("should skip matches producing conflicting filter chains",
 		func(given invalidTestCase) {
 			// when
-			_, err := plugin_xds.GetOrderedMatchers(given.conf)
+			matchers, warnings := plugin_xds.GetOrderedMatchers(given.conf)
 
 			// then
-			Expect(err).To(HaveOccurred())
-			for _, errorMsg := range given.errorMsgs {
-				Expect(err.Error()).To(ContainSubstring(errorMsg))
-			}
-			Expect(strings.Split(err.Error(), ";")).To(HaveLen(len(given.errorMsgs)))
+			Expect(warnings).To(Equal(given.warnings))
+			// and conflicting matches are not generated
+			Expect(matchers).ToNot(BeEmpty())
 		},
 		Entry("many different protocols", invalidTestCase{
 			conf: api.Conf{
@@ -306,7 +303,51 @@ var _ = Describe("Match order", func() {
 					},
 				},
 			},
-			errorMsgs: []string{"you cannot configure http, http2, grpc on the same port 8080", "you cannot configure http, http2, grpc on the same port 9001"},
+			warnings: []string{
+				`ignoring match http2 for "another.com", it conflicts with match http for "example.com" because both apply to the same destination and port`,
+				`ignoring match http2 for "http2.com", it conflicts with match http for "anotherhttp.com" because both apply to the same destination and port`,
+				`ignoring match grpc for "grpc.com", it conflicts with match http for "anotherhttp.com" because both apply to the same destination and port`,
+			},
+		}),
+		Entry("the same domain on a specific port and on all ports", invalidTestCase{
+			conf: api.Conf{
+				AppendMatch: &[]api.Match{
+					{
+						Type:     api.MatchType("Domain"),
+						Value:    "datadog.datadog.svc.cluster.local",
+						Port:     pointer.To[uint32](4317),
+						Protocol: api.ProtocolType("grpc"),
+					},
+					{
+						Type:     api.MatchType("Domain"),
+						Value:    "datadog.datadog.svc.cluster.local",
+						Protocol: api.ProtocolType("http"),
+					},
+				},
+			},
+			warnings: []string{
+				`ignoring match http for "datadog.datadog.svc.cluster.local", it conflicts with match grpc for "datadog.datadog.svc.cluster.local" because both apply to the same destination and port`,
+			},
+		}),
+		Entry("tcp and mysql on the same address", invalidTestCase{
+			conf: api.Conf{
+				AppendMatch: &[]api.Match{
+					{
+						Type:     api.MatchType("IP"),
+						Value:    "172.12.2.2",
+						Protocol: api.ProtocolType("tcp"),
+					},
+					{
+						Type:     api.MatchType("IP"),
+						Value:    "172.12.2.2",
+						Port:     pointer.To[uint32](3306),
+						Protocol: api.ProtocolType("mysql"),
+					},
+				},
+			},
+			warnings: []string{
+				`ignoring match mysql for "172.12.2.2", it conflicts with match tcp for "172.12.2.2" because both apply to the same destination and port`,
+			},
 		}),
 	)
 })

@@ -15,13 +15,18 @@ violations:
   message: protocol tcp is not supported for a domain
 - field: spec.default.appendMatch[4].value
   message: provided CIDR has incorrect value
-- field: spec.default.appendMatch[6].port
-  message: 'using the same port in multiple matches requires the same protocol for
-    the following protocols: [grpc http http2]'
+- field: spec.default.appendMatch[6].protocol
+  message: protocol http2 conflicts with protocol http defined in appendMatch[5],
+    matches for the same destination must use the same protocol when their ports overlap,
+    a match without a port applies to all ports
 - field: spec.default.appendMatch[7].value
   message: provided DNS has incorrect value, partial wildcard is currently not supported
 - field: spec.default.appendMatch[9].value
-  message: value google.com is already defiend for this port and protocol
+  message: value google.com is already defined for this port and protocol
+- field: spec.default.appendMatch[10].protocol
+  message: protocol http conflicts with protocol http2 defined in appendMatch[6],
+    matches for the same destination must use the same protocol when their ports overlap,
+    a match without a port applies to all ports
 - field: spec.default.appendMatch[10].port
   message: wildcard domains doesn't work for all ports and layer 7 protocol
 - field: spec.default.appendMatch[11].protocol
