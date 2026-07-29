@@ -1,4 +1,4 @@
-# Separate Status Writes From Spec Writes
+# Surviving Resource Write Conflicts in KDS Sync
 
 * Status: accepted
 
@@ -115,7 +115,7 @@ This also explains the current behaviour. Tearing down the stream *is* the resyn
 
 ## Design
 
-### Option 1: Retry the update on conflict
+### Option 1: Retry the update on conflict (chosen)
 
 When `store.IsConflict(err)` fires in the syncer's update loop, re-read the object, reapply the upstream spec and labels onto the fresh meta and status, and write again. Bounded retries; if they run out, fall through to the existing teardown.
 
@@ -126,7 +126,7 @@ On Kubernetes the re-read has to bypass the cache (`mgr.GetAPIReader()`). A cach
 * Bad, because it treats the symptom. The conflict still happens, we just pay for it in retries
 * Bad, because every future status writer has to remember to do the same dance
 
-### Option 2: Give status its own write path (chosen)
+### Option 2: Give status its own write path
 
 Add a status-scoped write to `ResourceStore` (`pkg/core/resources/store/store.go:12-16`) as a distinct method rather than an option on `Update`.
 
@@ -135,20 +135,31 @@ A method, not a flag, because `ResourceStore` has several decorators (strict, ca
 Per store:
 
 - Kubernetes: enable the status subresource on resources with `HasStatus` and route status writes through `Client.Status().Update()`. The API server then enforces the split. Writes to the main endpoint cannot change status, and writes to `/status` cannot change spec.
-- Postgres: `UPDATE resources SET status=$1 WHERE ... AND version=$n`. The column already exists.
+- Postgres: a status-only `UPDATE` that neither reads nor bumps `version`. The column already exists.
 - Memory: trivial.
 
-Then fix the writers. The global-to-zone syncer writes spec and labels only, and stops reading status entirely. The VIP allocator, hostname generator, and status updaters use the status write only.
+Then fix the writers. The global-to-zone syncer writes spec and labels only and stops reading status entirely. The VIP allocator (`status.vips`), all three hostname generators (`status.addresses`, `status.hostnameGenerators`), and the MeshMultiZoneService status updater (`status.meshServices`, `status.conditions`) become status-only writers.
+
+One writer does not fit the split, and an implementer will hit it immediately. The MeshService status updater writes both halves: `status.tls` and `status.dataplaneProxies`, but also `spec.identities` and `spec.state` (`pkg/core/resources/apis/meshservice/status/updater.go:145-169`). It is not a conflict source today, because it skips anything that is not a local MeshService (`updater.go:132`) while the syncer only ever writes synced ones, so the two never touch the same object. It still means "the zone writes only status" is not true in general, and this updater needs two calls rather than one.
 
 The interesting part is that the data is already separated everywhere. Postgres has a `status` column. The generated Kubernetes types have a separate `Status` field. KDS carries status as its own field and already strips it. The only place the split does not exist is the write API. This option closes that gap.
 
-Once the syncer no longer reads or writes status, it is not racing the allocator over anything. The race does not get smaller, it stops existing.
+**On its own this does not fix the outage on Kubernetes, and Kubernetes is the only place the outage happens.** `metadata.resourceVersion` is one counter for the whole object. A write through `/status` bumps it exactly like a write through the main endpoint, and both endpoints check it. The allocator writing `status.vips` still invalidates the version the syncer is holding, and the syncer's spec write still gets a 409. The status subresource separates which fields persist and who may write them. It does not separate optimistic concurrency.
 
-* Good, because the conflict class disappears instead of being tolerated
-* Good, because ownership becomes something the API enforces rather than something a comment asks for
-* Good, because the status-preservation code in `sync.go:237-245` gets deleted
+That is the same point the problem statement already makes: the rejection was never about which fields changed. Splitting the fields does not by itself change the answer.
+
+What the split does buy is the right to stop sending a version precondition on spec writes. Once a spec write physically cannot touch status, the syncer no longer needs a version guard to protect status from being clobbered, and on synced resources it is the only writer of spec. That is what makes Option 3 safe. Option 2 is the foundation for the fix rather than the fix.
+
+Postgres is different, because we own the version column there. A status write that neither reads nor bumps `version` is genuinely independent of a spec write, so on Postgres the conflict really does disappear.
+
+Cost is high. There are 11 concrete `ResourceStore` implementations (three real backends, four decorators, the remote store, the separate config and secrets k8s stores, and a test fake), four of which sit in the production wrapping chain, plus `ResourceManager` and the per-type managers.
+
+* Good, because it makes ownership something the API enforces rather than something a comment asks for
+* Good, because the status-preservation code in `sync.go:237-245` gets deleted, along with the read-copy-write of a field the syncer has no business touching
+* Good, because it removes the conflict outright on Postgres and unblocks Option 3 on Kubernetes
+* Bad, because on Kubernetes it does not fix the reported outage by itself
 * Bad, because enabling the status subresource changes API server behaviour and needs a careful rollout (see below)
-* Bad, because it touches all three stores
+* Bad, because it touches 11 store implementations and the manager layer
 
 ### Option 3: Server-side apply with field managers
 
@@ -156,12 +167,15 @@ On Kubernetes, replace both writers' updates with apply patches: `kds-syncer` ow
 
 Apply patches carry no version precondition, so conflicts become impossible rather than tolerated, and ownership shows up in `managedFields` where the next person debugging this can just read it.
 
-* Good, because it removes the precondition entirely
-* Good, because ownership is inspectable in `kubectl get -o yaml`
-* Bad, because it is Kubernetes-only and does nothing for Postgres
-* Bad, because it is a much larger change to the k8s store
+This is the only option that actually removes the conflict class on Kubernetes. Option 2 does not, for the `resourceVersion` reason above, and Option 1 tolerates conflicts rather than preventing them.
 
-Deferred. Option 2 is a prerequisite for it anyway.
+It depends on Option 2. Dropping the precondition is only safe once a spec write cannot clobber status, which is exactly what the status subresource guarantees. There is no server-side-apply usage anywhere in the codebase today, so this would be the first, on the store layer, which is not a small place to start.
+
+* Good, because it removes the precondition entirely, so the race cannot produce an error at all
+* Good, because ownership is inspectable in `kubectl get -o yaml` instead of living in comments
+* Bad, because it is Kubernetes-only and does nothing for Postgres
+* Bad, because it is a large change to the k8s store with no in-repo precedent
+* Bad, because field-manager conflicts become a new failure mode to understand and debug
 
 ### Cap the cost of the next conflict
 
@@ -171,7 +185,9 @@ Decouple the backoff reset in `resilient.go:73` from `backoffMaxTime`. A run tha
 
 Add `kds_stream_teardowns_total{reason}` and `store_conflict_retries_total{component}`. This outage was invisible until five unrelated suites failed. A counter turns the next one into a graph instead of a log archaeology session.
 
-### Rollout
+### Rollout, if Option 2 is ever taken
+
+This applies only to Option 2 and is a large part of why it is not the fix being shipped here.
 
 Enabling the status subresource changes how the API server treats existing writes. An old CP doing whole-object updates against a new CRD gets its status writes **silently dropped**. VIP allocation stops working and nothing logs an error. So the order matters:
 
@@ -191,22 +207,32 @@ This is a reliability fix, so the risks are worth stating plainly.
 
 Improved: a lost write race stops taking a zone's KDS stream offline, which today means dataplanes cannot be withdrawn, policies cannot be synced, and the zone reports offline for up to a minute per conflict.
 
-Risk: the rollout gap above. Between the CRD flip and the CP upgrade, status writes silently do nothing. This is the failure mode to guard, and it is the reason for the capability detection in step 1 rather than a straight cutover.
+Risk: retries hide slow failures. If conflicts become frequent for some new reason, the retry absorbs them and the only signal is the counter. That is why the counter ships with the retry rather than after it.
 
-Risk: the status subresource changes the shape of what `kubectl apply` does to these resources for users who edit them by hand. Status was never user-editable in practice, but the error they get on trying will change.
+Risk: the retry must re-read through an uncached client on Kubernetes. A cached re-read can return the same stale version and burn every attempt on a version that is already dead, turning a bounded retry into a guaranteed failure that looks like a flake.
 
-Unchanged: the stream teardown path stays as the last resort. We are removing the reason it fires, not the mechanism.
+Risk: the retry bound is a judgement call. Too low and it does not absorb a normal collision; too high and a genuinely wedged resource delays the resync that teardown would have forced.
+
+Unchanged: the stream teardown path stays as the last resort, and the delta xDS constraint still forbids skipping a resource. Nothing here weakens the guarantee that every change global sends is either applied or loudly retried.
+
+If Option 2 is taken later, its own risk is the rollout gap above: between the CRD flip and the CP upgrade, status writes silently do nothing.
 
 ## Implications for Kong Mesh
 
-The downstream project inherits the `ResourceStore` interface change and needs the same status write path for any resource it defines with a status. Its CRDs need the same subresource flip on the same schedule as the upstream ones, or status writes there hit the silent-drop failure mode described above.
+Nothing for the decision being shipped. The retry, the backoff threshold, and the counters are all internal to the control plane, with no interface or API change to inherit.
+
+If Option 2 is taken later, the downstream project inherits the `ResourceStore` interface change and needs the same status write path for any resource it defines with a status, plus the same CRD subresource flip on the same schedule, or status writes there hit the silent-drop failure mode described above.
 
 ## Decision
 
-Take Option 2: give status its own write path in `ResourceStore`, backed by the Kubernetes status subresource and a status-only `UPDATE` in Postgres. The global-to-zone syncer writes spec and labels. The VIP allocator, hostname generator, and status updaters write status. Neither touches the other's half, so they stop colliding.
+Ship Option 1, plus the backoff and metrics changes. That is the fix.
 
-Ship the conflict retry from Option 1 first as a small backportable fix, since it stops the bleeding on release branches without waiting for the store work. Keep it afterwards as defence in depth, because new status writers will appear.
+Concretely: the KDS syncer retries a conflicting update against a fresh uncached read instead of returning the error, falling through to the existing stream teardown only when retries are exhausted; the backoff reset threshold in `resilient.go:73` stops being tied to `backoffMaxTime`; and the two counters go in so the next occurrence is visible before it costs anyone a test run.
 
-Fix the backoff reset threshold and add the two counters alongside.
+This does not remove the race. It removes the outage, which is the part that hurts. A lost race goes back to costing milliseconds, the way it already does for the VIP allocator and every other writer that commit `735321cfb0` touched. The change is small, it backports cleanly to release branches, and it holds regardless of which store is underneath.
 
-Option 3 stays on the table as a Kubernetes-only follow-up once Option 2 has landed.
+Do not take Option 2 as the fix for this outage. It is the intuitive answer and it is wrong for the reported failure, because spec and status share `metadata.resourceVersion` on Kubernetes and Kubernetes is where the outage happens. Anyone reaching for it should know that going in, which is most of why this document exists.
+
+Option 2 remains worth doing on its own merits: it deletes the read-copy-write of status in the syncer, it makes ownership something the API enforces, and it does remove the conflict outright on Postgres. But it costs 11 store implementations plus the manager layer and a staged CRD rollout, and on Kubernetes it buys correctness groundwork rather than a fix. It should be justified as cleanup and as the prerequisite for Option 3, not sold as the answer here.
+
+Option 3 is what would end the conflict class on Kubernetes. Revisit it if conflict-retry churn shows up in the counters we are adding, which is the evidence that would justify the cost. Until then the retry is cheaper and sufficient.
