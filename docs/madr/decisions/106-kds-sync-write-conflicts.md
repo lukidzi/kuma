@@ -152,9 +152,19 @@ The interesting part is that the data is already separated everywhere. Postgres 
 
 That is the same point the problem statement already makes: the rejection was never about which fields changed. Splitting the fields does not by itself change the answer.
 
-What the split does buy is the right to stop sending a version precondition on spec writes. Once a spec write physically cannot touch status, the syncer no longer needs a version guard to protect status from being clobbered, and on synced resources it is the only writer of spec. That is what makes Option 3 safe. Option 2 is the foundation for the fix rather than the fix.
+The obvious follow-up is to stop sending the precondition on spec writes, since a spec write can no longer clobber status anyway. That is not available: the API server rejects an update of an existing object with no `resourceVersion`, with `metadata.resourceVersion: Invalid value: 0x0: must be specified for an update`. `Update` always carries the precondition. The only precondition-free writes are patches, which is Option 3.
+
+So Option 2 is the foundation for the fix rather than the fix, and only in combination with Option 3.
 
 Postgres is different, because we own the version column there. A status write that neither reads nor bumps `version` is genuinely independent of a spec write, so on Postgres the conflict really does disappear.
+
+#### Verified against a real API server
+
+These claims are easy to get backwards, so they were checked with envtest against Kubernetes 1.33, on a CRD with the status subresource enabled and a direct uncached client:
+
+- A write through `/status` moved `resourceVersion` from 207 to 208. A status-only write bumps the shared counter.
+- A spec write holding 207 then failed: `Operation cannot be fulfilled ... the object has been modified`. The 409 survives the split.
+- The same spec write with `resourceVersion` cleared was rejected as invalid, so the precondition cannot simply be dropped.
 
 Cost is high. There are 11 concrete `ResourceStore` implementations (three real backends, four decorators, the remote store, the separate config and secrets k8s stores, and a test fake), four of which sit in the production wrapping chain, plus `ResourceManager` and the per-type managers.
 
@@ -173,7 +183,9 @@ Apply patches carry no version precondition, so conflicts become impossible rath
 
 This is the only option that actually removes the conflict class on Kubernetes. Option 2 does not, for the `resourceVersion` reason above, and Option 1 tolerates conflicts rather than preventing them.
 
-It depends on Option 2. Dropping the precondition is only safe once a spec write cannot clobber status, which is exactly what the status subresource guarantees. There is no server-side-apply usage anywhere in the codebase today, so this would be the first, on the store layer, which is not a small place to start.
+The same envtest run confirms it works. With `kds-syncer` applying `spec` and `vip-allocator` applying `status.vips`, a spec apply issued after the status apply succeeded with no conflict, both values were present afterwards, and neither writer clobbered the other. No `resourceVersion` was involved at any point.
+
+It still depends on Option 2 in practice, because the status writers need `/status` to apply against. There is no server-side-apply usage anywhere in the codebase today, so this would be the first, on the store layer, which is not a small place to start.
 
 * Good, because it removes the precondition entirely, so the race cannot produce an error at all
 * Good, because ownership is inspectable in `kubectl get -o yaml` instead of living in comments
