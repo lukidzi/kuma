@@ -119,11 +119,15 @@ This also explains the current behaviour. Tearing down the stream *is* the resyn
 
 When `store.IsConflict(err)` fires in the syncer's update loop, re-read the object, reapply the upstream spec and labels onto the fresh meta and status, and write again. Bounded retries; if they run out, fall through to the existing teardown.
 
-On Kubernetes the re-read has to bypass the cache (`mgr.GetAPIReader()`). A cached re-read can hand back the same stale object and burn every attempt on the same version.
+The re-read is the delicate part on Kubernetes. The syncer holds a `ResourceStore`, and that abstraction has no way to ask for an uncached read: on Kubernetes it reads through the informer cache, which is what let the version go stale in the first place. A re-read issued immediately can hand back the same dead version and burn every attempt on it.
+
+Rather than punch an uncached-read escape hatch through `ResourceStore` for one caller, the retry pauses for a short jittered interval before re-reading, which is enough for the informer to observe the write that won. This is the same treatment commit `735321cfb0` gave the other writers. If the cache is still behind after the bounded attempts, the teardown backstop takes over and the full resync fixes it, so the worst case is the behaviour we have today rather than something new.
 
 * Good, because it is small and backportable
 * Good, because nothing is skipped, so the delta xDS constraint holds and the teardown stays as a backstop
+* Good, because it holds on any store, not just the one where the bug shows up
 * Bad, because it treats the symptom. The conflict still happens, we just pay for it in retries
+* Bad, because the re-read is cache-backed on Kubernetes, so it is timing-dependent rather than guaranteed
 * Bad, because every future status writer has to remember to do the same dance
 
 ### Option 2: Give status its own write path
@@ -177,13 +181,19 @@ It depends on Option 2. Dropping the precondition is only safe once a spec write
 * Bad, because it is a large change to the k8s store with no in-repo precedent
 * Bad, because field-manager conflicts become a new failure mode to understand and debug
 
-### Cap the cost of the next conflict
+### Make the next one visible
 
-Whichever option lands, a lost race must not cost a minute of zone downtime. Two changes, independent of the above:
+Add a counter for conflict retries in the syncer, and a reason-labelled counter for stream teardowns. This outage was invisible until five unrelated suites failed, and the only reason it was diagnosable afterwards was that the restart log happens to print `nextBackoff`. A counter turns the next one into a graph instead of a log archaeology session.
 
-Decouple the backoff reset in `resilient.go:73` from `backoffMaxTime`. A run that survives a fixed stability window, on the order of 10-15s, resets the counter. Today the reset threshold and the maximum delay are the same number, which creates a latch: below the threshold the cost is half a second, above it the cost pins at the cap, with nothing in between. Failure cost should track failure rate.
+The counter also carries the evidence for whether the deeper fix is ever needed. Sustained retry churn is what would justify the cost of Option 3; a flat line says the retry is doing its job.
 
-Add `kds_stream_teardowns_total{reason}` and `store_conflict_retries_total{component}`. This outage was invisible until five unrelated suites failed. A counter turns the next one into a graph instead of a log archaeology session.
+### The backoff cliff, left alone deliberately
+
+The reset threshold in `resilient.go:73` is a real second-order problem, and the problem statement above traces exactly how it turned a sequence of conflicts into three minutes of downtime. It is still not being changed here.
+
+Two reasons. The retry removes what was driving the counter up, so KDS stops reaching the cliff by this route at all. And `resilientComponent` wraps every resilient component in the control plane, not just KDS, so retuning when a component counts as recovered changes restart behaviour well outside the blast radius of this bug. That is a change worth making on its own evidence, with its own testing, not as a rider on a sync fix.
+
+If the teardown counter later shows components pinned at the cap, that is the evidence to revisit it.
 
 ### Rollout, if Option 2 is ever taken
 
@@ -209,7 +219,7 @@ Improved: a lost write race stops taking a zone's KDS stream offline, which toda
 
 Risk: retries hide slow failures. If conflicts become frequent for some new reason, the retry absorbs them and the only signal is the counter. That is why the counter ships with the retry rather than after it.
 
-Risk: the retry must re-read through an uncached client on Kubernetes. A cached re-read can return the same stale version and burn every attempt on a version that is already dead, turning a bounded retry into a guaranteed failure that looks like a flake.
+Risk: the re-read is cache-backed on Kubernetes, so the retry is timing-dependent. The jittered pause is a bet that the informer catches up within it. When the bet loses, the teardown backstop still runs, so the failure mode is today's behaviour rather than a new one, but the retry will not have helped.
 
 Risk: the retry bound is a judgement call. Too low and it does not absorb a normal collision; too high and a genuinely wedged resource delays the resync that teardown would have forced.
 
@@ -225,9 +235,11 @@ If Option 2 is taken later, the downstream project inherits the `ResourceStore` 
 
 ## Decision
 
-Ship Option 1, plus the backoff and metrics changes. That is the fix.
+Ship Option 1, plus the counters. That is the fix.
 
-Concretely: the KDS syncer retries a conflicting update against a fresh uncached read instead of returning the error, falling through to the existing stream teardown only when retries are exhausted; the backoff reset threshold in `resilient.go:73` stops being tied to `backoffMaxTime`; and the two counters go in so the next occurrence is visible before it costs anyone a test run.
+Concretely: the KDS syncer retries a conflicting update against a freshly read copy instead of returning the error, rebasing the upstream change onto the current version each attempt and restoring zone-owned status, and falls through to the existing stream teardown only when the retries are exhausted. The counters go in alongside so the next occurrence is visible before it costs anyone a test run.
+
+The backoff cliff is left as it is, for the reasons in the section above.
 
 This does not remove the race. It removes the outage, which is the part that hurts. A lost race goes back to costing milliseconds, the way it already does for the VIP allocator and every other writer that commit `735321cfb0` touched. The change is small, it backports cleanly to release branches, and it holds regardless of which store is underneath.
 
