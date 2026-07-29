@@ -45,10 +45,8 @@ import (
 )
 
 type K8sNetworkingState struct {
-	ZoneEgress  portforward.Tunnel `json:"zoneEgress"`
-	ZoneIngress portforward.Tunnel `json:"zoneIngress"`
-	KumaCp      portforward.Tunnel `json:"kumaCp"`
-	MADS        portforward.Tunnel `json:"mads"`
+	KumaCp portforward.Tunnel `json:"kumaCp"`
+	MADS   portforward.Tunnel `json:"mads"`
 }
 
 type K8sCluster struct {

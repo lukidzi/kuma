@@ -23,23 +23,13 @@ import (
 	test_model "github.com/kumahq/kuma/v3/pkg/test/resources/model"
 	. "github.com/kumahq/kuma/v3/test/framework"
 	"github.com/kumahq/kuma/v3/test/framework/client"
+	"github.com/kumahq/kuma/v3/test/framework/deployments/zoneproxy"
 	"github.com/kumahq/kuma/v3/test/framework/envs/universal"
 )
 
 func MeshExternalService() {
 	var tcpSinkDockerName string
 	meshNameNoDefaults := "mesh-external-service-no-default-policy"
-	meshDefaulMtlsOn := func(meshName string) InstallFunc {
-		return YamlUniversal(fmt.Sprintf(`
-type: Mesh
-name: "%s"
-mtls:
-  enabledBackend: ca-1
-  backends:
-  - name: ca-1
-    type: builtin
-`, meshName))
-	}
 	disableDefaultPassthrough := func(meshName string) InstallFunc {
 		return YamlUniversal(fmt.Sprintf(`
 type: MeshPassthrough
@@ -104,8 +94,18 @@ spec:
 		esHttp2ContainerName = fmt.Sprintf("%s_%s", universal.Cluster.Name(), esHttp2Name)
 
 		err := NewClusterSetup().
-			Install(meshDefaulMtlsOn(meshNameNoDefaults)).
+			// MeshExternalService traffic only leaves through a zone egress, and
+			// zone egresses are mesh scoped, so this mesh brings its own. The
+			// egress listener is only generated for proxies with a workload
+			// identity, hence MeshIdentity instead of mesh-wide mTLS.
+			Install(MeshUniversal(meshNameNoDefaults)).
+			Install(MeshIdentityBundled(meshNameNoDefaults, "identity-"+meshNameNoDefaults)).
+			Install(MeshTrafficPermissionAllowAllUniversal(meshNameNoDefaults)).
 			Install(disableDefaultPassthrough(meshNameNoDefaults)).
+			Install(zoneproxy.Install(
+				zoneproxy.WithMesh(meshNameNoDefaults),
+				zoneproxy.WithEgress(),
+			)).
 			Install(TcpSinkUniversal("mes-tcp-sink", WithDockerContainerName(tcpSinkDockerName))).
 			Install(TestServerExternalServiceUniversal(esHttpName, 80, false, WithDockerContainerName(esHttpContainerName))).
 			Install(TestServerExternalServiceUniversal(esHttpsName, 443, true, WithDockerContainerName(esHttpsContainerName))).

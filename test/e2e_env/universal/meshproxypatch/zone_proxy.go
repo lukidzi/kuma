@@ -69,6 +69,10 @@ spec:
 	BeforeAll(func() {
 		Expect(NewClusterSetup().
 			Install(Yaml(builders.Mesh().WithName(mesh).WithoutInitialPolicies())).
+			// The zone egress listener is only generated for proxies with a
+			// workload identity, so the mesh needs a MeshIdentity for the egress
+			// DPP to be a real egress.
+			Install(MeshIdentityBundled(mesh, "identity-"+mesh)).
 			Install(MeshTrafficPermissionAllowAllUniversal(mesh)).
 			Install(zoneproxy.Install(
 				zoneproxy.WithMesh(mesh),

@@ -45,10 +45,6 @@ func MultizoneUniversal() {
 		Expect(IngressUniversal(global.GetKuma().GenerateZoneIngressToken)(zoneUniversal)).To(Succeed())
 	}
 
-	installZoneEgress := func() {
-		Expect(EgressUniversal(global.GetKuma().GenerateZoneEgressToken)(zoneUniversal)).To(Succeed())
-	}
-
 	installDataplane := func() {
 		Expect(DemoClientUniversal(AppModeDemoClient, "default")(zoneUniversal)).To(Succeed())
 	}
@@ -95,18 +91,8 @@ func MultizoneUniversal() {
 		Eventually(has("zone-ingress-insights"), "30s", "1s").Should(BeFalse())
 	})
 
-	It("should delete ZoneEgressInsights when ZoneEgress is deleted", func() {
-		installZoneEgress()
-
-		Eventually(has("zoneegresses"), "30s", "1s").Should(BeTrue())
-		Eventually(has("zoneegressinsights"), "30s", "1s").Should(BeTrue())
-
-		killKumaDP(AppEgress)
-
-		Eventually(has("zoneegresses"), "30s", "1s").Should(BeFalse())
-		Eventually(has("zoneegressinsights"), "30s", "1s").Should(BeFalse())
-	})
-
+	// A mesh-scoped zone egress is an ordinary Dataplane, so its insight
+	// ownership is covered by the DataplaneInsight case below.
 	It("should delete DataplaneInsight when Dataplane is deleted", func() {
 		installDataplane()
 

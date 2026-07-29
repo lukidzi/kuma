@@ -46,6 +46,39 @@ spec:
 `, name, mesh))
 }
 
+// MeshIdentityBundledKubernetes is the Kubernetes counterpart of
+// MeshIdentityBundled, for single-zone suites that talk to a Kubernetes zone CP
+// directly instead of going through Global. The resource lives in the CP
+// namespace and carries kuma.io/origin=zone, like every other zone-created
+// policy on Kubernetes.
+func MeshIdentityBundledKubernetes(mesh string, name string) InstallFunc {
+	return YamlK8s(fmt.Sprintf(`
+apiVersion: kuma.io/v1alpha1
+kind: MeshIdentity
+metadata:
+  name: %s
+  namespace: %s
+  labels:
+    kuma.io/mesh: %s
+    kuma.io/origin: zone
+spec:
+  selector:
+    dataplane:
+      matchLabels: {}
+  spiffeID:
+    trustDomain: "{{ .Mesh }}.{{ .Zone }}.mesh.local"
+  provider:
+    type: Bundled
+    bundled:
+      meshTrustCreation: Enabled
+      insecureAllowSelfSigned: true
+      certificateParameters:
+        expiry: 24h
+      autogenerate:
+        enabled: true
+`, name, Config.KumaNamespace, mesh))
+}
+
 // MeshIdentityTrustDomain returns the trust domain MeshIdentityBundled renders
 // in the given zone. Use it to build MeshTrafficPermission rules.
 func MeshIdentityTrustDomain(mesh string, zone Cluster) string {

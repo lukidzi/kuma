@@ -8,10 +8,10 @@ import (
 
 	meshexternalservice_api "github.com/kumahq/kuma/v3/pkg/core/resources/apis/meshexternalservice/api/v1alpha1"
 	"github.com/kumahq/kuma/v3/pkg/plugins/policies/meshtcproute/api/v1alpha1"
-	"github.com/kumahq/kuma/v3/pkg/test/resources/samples"
 	. "github.com/kumahq/kuma/v3/test/framework"
 	"github.com/kumahq/kuma/v3/test/framework/client"
 	"github.com/kumahq/kuma/v3/test/framework/deployments/testserver"
+	"github.com/kumahq/kuma/v3/test/framework/deployments/zoneproxy"
 	"github.com/kumahq/kuma/v3/test/framework/envs/kubernetes"
 )
 
@@ -21,18 +21,22 @@ func Test() {
 
 	BeforeAll(func() {
 		Expect(NewClusterSetup().
-			// MeshExternalService traffic is only ever routed through ZoneEgress
-			// (see docs/madr/decisions/062-meshexternalservice-and-zoneegress.md),
-			// so the mesh needs mTLS plus an available ZoneEgress for the
+			// MeshExternalService traffic is only ever routed through a zone
+			// egress (see docs/madr/decisions/062-meshexternalservice-and-zoneegress.md),
+			// so the mesh needs its own mesh-scoped egress for the
 			// MeshTCPRoute-vs-MeshExternalService precedence case below to have
-			// a real backend to route to.
-			Install(Combine(
-				YamlK8s(samples.MeshMTLSBuilder().WithName(meshName).KubeYaml()),
-				WaitMeshKubernetesReady(meshName),
-			)).
+			// a real backend to route to. The egress listener is only generated
+			// for proxies with a workload identity, hence MeshIdentity.
+			Install(MeshKubernetes(meshName)).
+			Install(MeshIdentityBundledKubernetes(meshName, "identity-"+meshName)).
 			Install(MeshTrafficPermissionAllowAllKubernetes(meshName)).
 			Install(NamespaceWithSidecarInjection(namespace)).
 			Install(Parallel(
+				zoneproxy.Install(
+					zoneproxy.WithNamespace(namespace),
+					zoneproxy.WithMesh(meshName),
+					zoneproxy.WithEgress(),
+				),
 				testserver.Install(
 					testserver.WithName("test-client"),
 					testserver.WithMesh(meshName),

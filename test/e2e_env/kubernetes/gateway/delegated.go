@@ -9,7 +9,6 @@ import (
 	mcb_api "github.com/kumahq/kuma/v3/pkg/plugins/policies/meshcircuitbreaker/api/v1alpha1"
 	mr_api "github.com/kumahq/kuma/v3/pkg/plugins/policies/meshretry/api/v1alpha1"
 	mt_api "github.com/kumahq/kuma/v3/pkg/plugins/policies/meshtimeout/api/v1alpha1"
-	"github.com/kumahq/kuma/v3/pkg/test/resources/samples"
 	"github.com/kumahq/kuma/v3/test/e2e_env/kubernetes/gateway/delegated"
 	. "github.com/kumahq/kuma/v3/test/framework"
 	"github.com/kumahq/kuma/v3/test/framework/deployments/democlient"
@@ -17,6 +16,7 @@ import (
 	"github.com/kumahq/kuma/v3/test/framework/deployments/observability"
 	"github.com/kumahq/kuma/v3/test/framework/deployments/otelcollector"
 	"github.com/kumahq/kuma/v3/test/framework/deployments/testserver"
+	"github.com/kumahq/kuma/v3/test/framework/deployments/zoneproxy"
 	"github.com/kumahq/kuma/v3/test/framework/envs/kubernetes"
 )
 
@@ -47,9 +47,15 @@ spec:
   externalName: %s.%s.svc.cluster.local`, serviceName, config.Namespace, serviceName, config.NamespaceOutsideMesh)
 			}
 			BeforeAll(func() {
-				mesh := samples.MeshMTLSBuilder().WithName(config.Mesh)
 				err := NewClusterSetup().
-					Install(Yaml(mesh)).
+					// MeshExternalService traffic only leaves through a zone
+					// egress, and zone egresses are mesh scoped, so this mesh
+					// brings its own (installed below, in config.Namespace).
+					// The egress listener is only generated for proxies with a
+					// workload identity, hence MeshIdentity instead of
+					// mesh-wide mTLS.
+					Install(MeshKubernetes(config.Mesh)).
+					Install(MeshIdentityBundledKubernetes(config.Mesh, "identity-"+config.Mesh)).
 					Install(MeshTrafficPermissionAllowAllKubernetes(config.Mesh)).
 					Install(YamlK8s(fmt.Sprintf(`
 apiVersion: v1
@@ -102,6 +108,11 @@ metadata:
 						kic.KongIngressService(
 							kic.WithName(config.Mesh),
 							kic.WithNamespace(config.Namespace),
+						),
+						zoneproxy.Install(
+							zoneproxy.WithNamespace(config.Namespace),
+							zoneproxy.WithMesh(config.Mesh),
+							zoneproxy.WithEgress(),
 						),
 					)).
 					Install(YamlK8s(externalNameService("external-service"))).

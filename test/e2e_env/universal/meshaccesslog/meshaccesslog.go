@@ -12,6 +12,7 @@ import (
 
 	. "github.com/kumahq/kuma/v3/test/framework"
 	"github.com/kumahq/kuma/v3/test/framework/client"
+	"github.com/kumahq/kuma/v3/test/framework/deployments/zoneproxy"
 	"github.com/kumahq/kuma/v3/test/framework/envs/universal"
 )
 
@@ -42,7 +43,16 @@ spec:
 		externalServiceDockerName = fmt.Sprintf("%s_%s-%s", universal.Cluster.Name(), meshName, "test-server")
 		tcpSinkDockerName = fmt.Sprintf("%s_%s_%s", universal.Cluster.Name(), meshName, AppModeTcpSink)
 		Expect(NewClusterSetup().
-			Install(MTLSMeshUniversal(meshName)).
+			// The MeshExternalService case below leaves through a zone egress,
+			// and zone egresses are mesh scoped, so this mesh brings its own.
+			// The egress listener is only generated for proxies with a workload
+			// identity, hence MeshIdentity instead of mesh-wide mTLS.
+			Install(MeshUniversal(meshName)).
+			Install(MeshIdentityBundled(meshName, "identity-"+meshName)).
+			Install(zoneproxy.Install(
+				zoneproxy.WithMesh(meshName),
+				zoneproxy.WithEgress(),
+			)).
 			Install(
 				TestServerUniversal(
 					"test-server", meshName, WithArgs([]string{"echo", "--instance", "echo-v1"}), WithDockerContainerName(externalServiceDockerName), WithLabels(map[string]string{"kuma.io/service": "test-server"}),

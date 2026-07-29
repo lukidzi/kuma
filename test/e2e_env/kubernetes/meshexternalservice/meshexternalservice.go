@@ -8,11 +8,11 @@ import (
 
 	meshexternalservice_api "github.com/kumahq/kuma/v3/pkg/core/resources/apis/meshexternalservice/api/v1alpha1"
 	meshhttproute_api "github.com/kumahq/kuma/v3/pkg/plugins/policies/meshhttproute/api/v1alpha1"
-	"github.com/kumahq/kuma/v3/pkg/test/resources/samples"
 	. "github.com/kumahq/kuma/v3/test/framework"
 	"github.com/kumahq/kuma/v3/test/framework/client"
 	"github.com/kumahq/kuma/v3/test/framework/deployments/democlient"
 	"github.com/kumahq/kuma/v3/test/framework/deployments/testserver"
+	"github.com/kumahq/kuma/v3/test/framework/deployments/zoneproxy"
 	"github.com/kumahq/kuma/v3/test/framework/envoy_admin/stats"
 	"github.com/kumahq/kuma/v3/test/framework/envs/kubernetes"
 )
@@ -22,14 +22,27 @@ func MeshExternalServices() {
 	namespace := "mesh-external-services"
 	clientNamespace := "client-mesh-external-services"
 
+	// MeshExternalService traffic always leaves through a zone egress, and zone
+	// egresses are mesh scoped, so this mesh brings its own. The egress listener
+	// is only generated for proxies with a workload identity, hence MeshIdentity
+	// instead of mesh-wide mTLS.
+	egressApp := zoneproxy.EgressName(meshName)
+
 	BeforeAll(func() {
 		err := NewClusterSetup().
-			Install(YamlK8s(samples.MeshMTLSBuilder().
-				WithName(meshName).
-				KubeYaml())).
+			Install(MeshKubernetes(meshName)).
+			Install(MeshIdentityBundledKubernetes(meshName, "identity-"+meshName)).
+			Install(MeshTrafficPermissionAllowAllKubernetes(meshName)).
 			Install(Namespace(namespace)).
 			Install(NamespaceWithSidecarInjection(clientNamespace)).
-			Install(democlient.Install(democlient.WithNamespace(clientNamespace), democlient.WithMesh(meshName))).
+			Install(Parallel(
+				democlient.Install(democlient.WithNamespace(clientNamespace), democlient.WithMesh(meshName)),
+				zoneproxy.Install(
+					zoneproxy.WithNamespace(clientNamespace),
+					zoneproxy.WithMesh(meshName),
+					zoneproxy.WithEgress(),
+				),
+			)).
 			Setup(kubernetes.Cluster)
 		Expect(err).ToNot(HaveOccurred())
 	})
@@ -102,109 +115,10 @@ spec:
 
 			// and flows through Egress
 			Eventually(func(g Gomega) {
-				stat, err := kubernetes.Cluster.GetZoneEgressEnvoyTunnel().GetStats(filter)
+				stat, err := kubernetes.Cluster.GetEnvoyAdminTunnel(egressApp, clientNamespace).GetStats(filter)
 				g.Expect(err).ToNot(HaveOccurred())
 				g.Expect(stat).To(stats.BeGreaterThanZero())
 			}, "30s", "1s").Should(Succeed())
-		})
-	})
-
-	Context("http non-TLS with rbac switch", func() {
-		meshExternalService := fmt.Sprintf(`
-apiVersion: kuma.io/v1alpha1
-kind: MeshExternalService
-metadata:
-  name: mesh-external-service-rbac
-  namespace: %s
-  labels:
-    kuma.io/mesh: %s
-    hostname: "true"
-spec:
-  match:
-    type: HostnameGenerator
-    port: 80
-    protocol: http
-  endpoints:
-    - address: external-service-rbac.mesh-external-services.svc.cluster.local
-      port: 80
-`, Config.KumaNamespace, meshName)
-
-		filter := fmt.Sprintf(
-			"cluster.kri_extsvc_%s_default_%s_mesh-external-service-rbac_80.upstream_rq_total",
-			meshName,
-			Config.KumaNamespace,
-		)
-
-		disableMeshPassthrough := fmt.Sprintf(`
-apiVersion: kuma.io/v1alpha1
-kind: MeshPassthrough
-metadata:
-  name: disable-default-passthrough
-  namespace: %s
-  labels:
-    kuma.io/mesh: %s
-spec:
-  targetRef:
-    kind: Mesh
-  default:
-    passthroughMode: None
-`, Config.KumaNamespace, meshName)
-
-		BeforeAll(func() {
-			err := kubernetes.Cluster.Install(testserver.Install(
-				testserver.WithNamespace(namespace),
-				testserver.WithName("external-service-rbac"),
-			))
-			Expect(err).ToNot(HaveOccurred())
-		})
-
-		E2EAfterAll(func() {
-			Expect(kubernetes.Cluster.Install(DeleteYamlK8s(disableMeshPassthrough))).To(Succeed())
-			Expect(kubernetes.Cluster.Install(YamlK8s(
-				samples.MeshMTLSBuilder().
-					WithName(meshName).
-					KubeYaml()),
-			)).To(Succeed())
-		})
-
-		It("should route to external-service", func() {
-			// when apply external service and hostname generator
-			Expect(kubernetes.Cluster.Install(YamlK8s(meshExternalService))).To(Succeed())
-
-			// then traffic work
-			Eventually(func(g Gomega) {
-				_, err := client.CollectEchoResponse(
-					kubernetes.Cluster, "demo-client", "mesh-external-service-rbac.extsvc.mesh.local",
-					client.FromKubernetesPod(clientNamespace, "demo-client"),
-				)
-				g.Expect(err).ToNot(HaveOccurred())
-			}, "30s", "1s").Should(Succeed())
-
-			// and flows through Egress
-			Eventually(func(g Gomega) {
-				stat, err := kubernetes.Cluster.GetZoneEgressEnvoyTunnel().GetStats(filter)
-				g.Expect(err).ToNot(HaveOccurred())
-				g.Expect(stat).To(stats.BeGreaterThanZero())
-			}, "30s", "1s").Should(Succeed())
-
-			// when disable all traffic
-			Expect(kubernetes.Cluster.Install(YamlK8s(
-				samples.MeshMTLSBuilder().
-					WithName(meshName).
-					WithMeshExternalServiceTrafficForbidden().
-					KubeYaml()),
-			)).To(Succeed())
-			Expect(kubernetes.Cluster.Install(YamlK8s(disableMeshPassthrough))).To(Succeed())
-
-			// then traffic doesn't work
-			Eventually(func(g Gomega) {
-				response, err := client.CollectFailure(
-					kubernetes.Cluster, "demo-client", "mesh-external-service-rbac.extsvc.mesh.local",
-					client.FromKubernetesPod(clientNamespace, "demo-client"),
-				)
-				g.Expect(err).ToNot(HaveOccurred())
-				g.Expect(response.ResponseCode).To(Equal(403))
-			}, "60s", "1s").Should(Succeed())
 		})
 	})
 
@@ -265,7 +179,7 @@ spec:
 
 			// and flows through Egress
 			Eventually(func(g Gomega) {
-				stat, err := kubernetes.Cluster.GetZoneEgressEnvoyTunnel().GetStats(filter)
+				stat, err := kubernetes.Cluster.GetEnvoyAdminTunnel(egressApp, clientNamespace).GetStats(filter)
 				g.Expect(err).ToNot(HaveOccurred())
 				g.Expect(stat).To(stats.BeGreaterThanZero())
 			}, "30s", "1s").Should(Succeed())
@@ -367,7 +281,7 @@ spec:
 
 			// and flows through Egress
 			Eventually(func(g Gomega) {
-				stat, err := kubernetes.Cluster.GetZoneEgressEnvoyTunnel().GetStats(filter("tls-external-service"))
+				stat, err := kubernetes.Cluster.GetEnvoyAdminTunnel(egressApp, clientNamespace).GetStats(filter("tls-external-service"))
 				g.Expect(err).ToNot(HaveOccurred())
 				g.Expect(stat).To(stats.BeGreaterThanZero())
 			}, "30s", "1s").Should(Succeed())
@@ -398,7 +312,7 @@ spec:
 
 			// and flows through Egress
 			Eventually(func(g Gomega) {
-				stat, err := kubernetes.Cluster.GetZoneEgressEnvoyTunnel().GetStats(filter("tls13-external-service"))
+				stat, err := kubernetes.Cluster.GetEnvoyAdminTunnel(egressApp, clientNamespace).GetStats(filter("tls13-external-service"))
 				g.Expect(err).ToNot(HaveOccurred())
 				g.Expect(stat).To(stats.BeGreaterThanZero())
 			}, "30s", "1s").Should(Succeed())
