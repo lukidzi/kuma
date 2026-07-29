@@ -58,6 +58,7 @@ type UpdateOptions struct {
 	ModificationTime time.Time
 	Labels           map[string]string
 	ModifyLabels     bool
+	StatusPatch      bool
 }
 
 func ModifiedAt(modificationTime time.Time) UpdateOptionsFunc {
@@ -70,6 +71,26 @@ func UpdateWithLabels(labels map[string]string) UpdateOptionsFunc {
 	return func(opts *UpdateOptions) {
 		opts.Labels = labels
 		opts.ModifyLabels = true
+	}
+}
+
+// UpdateWithStatusPatch narrows the write to the resource's status and sends it
+// as a patch rather than a whole-object replace.
+//
+// Status and spec have different owners. On a Zone the spec and labels arrive
+// from the Global control plane while the status belongs to local components:
+// the VIP allocator owns Status.VIPs, the hostname generators own
+// Status.Addresses. Stores version the whole resource rather than its halves, so
+// a whole-object write carries a precondition over fields the caller does not
+// own, and any write by another owner invalidates it. A status patch carries no
+// such precondition, so writers that touch disjoint fields stop invalidating
+// each other.
+//
+// Stores that do not implement it fall back to a whole-object update, which is
+// the behavior every caller had before the option existed.
+func UpdateWithStatusPatch() UpdateOptionsFunc {
+	return func(opts *UpdateOptions) {
+		opts.StatusPatch = true
 	}
 }
 

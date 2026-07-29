@@ -2,6 +2,7 @@ package k8s
 
 import (
 	"context"
+	"encoding/json"
 	"maps"
 	"strings"
 	"sync"
@@ -11,6 +12,7 @@ import (
 	kube_apierrs "k8s.io/apimachinery/pkg/api/errors"
 	kube_meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 	kube_runtime "k8s.io/apimachinery/pkg/runtime"
+	kube_types "k8s.io/apimachinery/pkg/types"
 	kube_client "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
@@ -101,6 +103,10 @@ func (s *KubernetesStore) Update(ctx context.Context, r core_model.Resource, fs 
 		return errors.Wrapf(err, "failed to convert core model of type %s into k8s counterpart", r.Descriptor().Name)
 	}
 
+	if opts.StatusPatch {
+		return s.patchStatus(ctx, r, obj)
+	}
+
 	updateLabels := r.GetMeta().GetLabels()
 	if opts.ModifyLabels {
 		updateLabels = opts.Labels
@@ -118,6 +124,50 @@ func (s *KubernetesStore) Update(ctx context.Context, r core_model.Resource, fs 
 	}
 	err = s.Converter.ToCoreResource(obj, r)
 	if err != nil {
+		return errors.Wrap(err, "failed to convert k8s model into core counterpart")
+	}
+	return nil
+}
+
+// patchStatus writes only the status subtree, as a JSON merge patch carrying no
+// resourceVersion precondition.
+//
+// Kubernetes versions the whole object, so a whole-object update is rejected
+// whenever any other owner wrote in between — the KDS syncer replacing spec and
+// labels from the Global control plane, for instance — even though the two
+// writes touch disjoint fields. A merge patch scoped to status is unconditional,
+// so those writers stop invalidating each other.
+//
+// The body is taken from the serialized object rather than assembled from the
+// status struct so that it always matches the wire format the API server expects
+// for this type.
+func (s *KubernetesStore) patchStatus(ctx context.Context, r core_model.Resource, obj k8s_model.KubernetesObject) error {
+	encoded, err := json.Marshal(obj)
+	if err != nil {
+		return errors.Wrap(err, "failed to serialize k8s resource")
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(encoded, &fields); err != nil {
+		return errors.Wrap(err, "failed to inspect serialized k8s resource")
+	}
+	status, ok := fields["status"]
+	if !ok {
+		// The type has no status, or it serialized away entirely. Patching an
+		// empty object is a no-op rather than an error, which keeps the option
+		// safe to pass for any resource type.
+		status = json.RawMessage("{}")
+	}
+	patch, err := json.Marshal(map[string]json.RawMessage{"status": status})
+	if err != nil {
+		return errors.Wrap(err, "failed to build status patch")
+	}
+	if err := s.Client.Patch(ctx, obj, kube_client.RawPatch(kube_types.MergePatchType, patch)); err != nil {
+		if kube_apierrs.IsConflict(err) {
+			return store.ErrorResourceConflict(r.Descriptor().Name, r.GetMeta().GetName(), r.GetMeta().GetMesh())
+		}
+		return errors.Wrap(err, "failed to patch status of k8s resource")
+	}
+	if err := s.Converter.ToCoreResource(obj, r); err != nil {
 		return errors.Wrap(err, "failed to convert k8s model into core counterpart")
 	}
 	return nil

@@ -149,7 +149,11 @@ func (a *Allocator) allocateVIPs(ctx context.Context, typeDesc model.ResourceTyp
 		log.Info("allocating IP", "ip", ip.String())
 		resource.AllocateVIP(ip.String())
 
-		if err := a.resManager.Update(ctx, resource); err != nil {
+		// VIPs live in the status, which this allocator owns. Patching only the
+		// status keeps the write from carrying a precondition over spec and
+		// labels, which belong to the Global control plane and change underneath
+		// us at times we cannot predict.
+		if err := a.resManager.Update(ctx, resource, store.UpdateWithStatusPatch()); err != nil {
 			msg := "could not update the resource with allocated Kuma VIP. Will try to update in the next allocation window"
 			if store.IsConflict(err) {
 				log.Info(msg, "cause", "conflict", "interval", a.interval)
