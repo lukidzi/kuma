@@ -176,6 +176,38 @@ var _ = Describe("SyncResourceStoreDelta", func() {
 		}
 	})
 
+	It("should sync a resource another component wrote between the list and the update", func() {
+		// given a resource in the store
+		Expect(resourceStore.Create(context.Background(), meshBuilder(1), store.CreateByKey("mesh-1", model.NoMesh))).To(Succeed())
+
+		// and a component of the same control plane writing it right after the syncer
+		// listed it, which is what the VIP allocator and the status updaters do
+		writer := &writeAfterListStore{ResourceStore: resourceStore}
+		metrics, err := core_metrics.NewMetrics("")
+		Expect(err).ToNot(HaveOccurred())
+		racingSyncer, err := sync_store.NewResourceSyncer(core.Log, writer, store.NoTransactions{}, metrics, context.Background())
+		Expect(err).ToNot(HaveOccurred())
+
+		// when the upstream changes the resource
+		upstream := &mesh.MeshResourceList{}
+		Expect(upstream.AddItem(meshBuilder(2))).To(Succeed())
+		upstream.Items[0].Meta = &model2.ResourceMeta{Name: "mesh-1"}
+		err, nackError := racingSyncer.Sync(context.Background(), client_v2.UpstreamResponse{
+			Type:           upstream.GetItemType(),
+			AddedResources: upstream,
+		}, sync_store.IgnoreStatusChange())
+
+		// then the sync doesn't fail, a failure tears the KDS stream down
+		Expect(err).ToNot(HaveOccurred())
+		Expect(nackError).ToNot(HaveOccurred())
+		Expect(writer.writes).To(BeNumerically(">", 0))
+
+		// and the change from the upstream is stored
+		actual := mesh.NewMeshResource()
+		Expect(resourceStore.Get(context.Background(), actual, store.GetByKey("mesh-1", model.NoMesh))).To(Succeed())
+		Expect(actual.Spec).To(MatchProto(upstream.Items[0].Spec))
+	})
+
 	It("should ignore resources from upstream that it does not support", func() {
 		// given
 		upstream := &mesh.MeshResourceList{}
@@ -320,3 +352,30 @@ var _ = Describe("SyncResourceStoreDelta errors", func() {
 resource already exists: type="GlobalSecret" name="zone-token-signing-public-key-1" mesh=""`))
 	})
 })
+
+// writeAfterListStore writes every resource once it was listed, moving its version on
+// the way the components sharing the resource with the KDS syncer do.
+type writeAfterListStore struct {
+	store.ResourceStore
+	writes int
+}
+
+func (s *writeAfterListStore) List(ctx context.Context, list model.ResourceList, fs ...store.ListOptionsFunc) error {
+	if err := s.ResourceStore.List(ctx, list, fs...); err != nil {
+		return err
+	}
+	for _, item := range list.GetItems() {
+		// a copy of its own, so that the resource the syncer works with keeps the version
+		// it was listed with
+		fresh := list.NewItem()
+		key := model.MetaToResourceKey(item.GetMeta())
+		if err := s.ResourceStore.Get(ctx, fresh, store.GetBy(key)); err != nil {
+			return err
+		}
+		if err := s.ResourceStore.Update(ctx, fresh); err != nil {
+			return err
+		}
+		s.writes++
+	}
+	return nil
+}

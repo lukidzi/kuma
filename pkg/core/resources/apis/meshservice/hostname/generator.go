@@ -11,6 +11,7 @@ import (
 	meshservice_api "github.com/kumahq/kuma/v3/pkg/core/resources/apis/meshservice/api/v1alpha1"
 	"github.com/kumahq/kuma/v3/pkg/core/resources/manager"
 	"github.com/kumahq/kuma/v3/pkg/core/resources/model"
+	"github.com/kumahq/kuma/v3/pkg/core/resources/store"
 )
 
 type MeshServiceHostnameGenerator struct {
@@ -42,7 +43,7 @@ func (g *MeshServiceHostnameGenerator) UpdateResourceStatus(ctx context.Context,
 	}
 	service.Status.Addresses = addresses
 	service.Status.HostnameGenerators = statuses
-	if err := g.resManager.Update(ctx, resource); err != nil {
+	if err := g.resManager.Update(ctx, resource, store.UpdateOwnedFields(hostname.FieldOwner, hostname.OwnedFields...)); err != nil {
 		return errors.Wrap(err, "couldn't update MeshService status")
 	}
 	return nil

@@ -19,6 +19,7 @@ import (
 // MeshMultizoneServices are only created on global
 // +kubebuilder:object:root=true
 // +kubebuilder:resource:categories=kuma,scope=Namespaced,shortName=mzsvc
+// +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:JSONPath=".status.addresses[0].hostname",name=Hostname,type=string
 type MeshMultiZoneService struct {
 	metav1.TypeMeta   `json:",inline"`

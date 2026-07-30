@@ -23,6 +23,12 @@ import (
 
 // StatusUpdater periodically updates Workload resource status
 // based on associated DataplaneResource and DataplaneInsightResource.
+// fieldOwner is the name the updater writes the proxy counters of a Workload under.
+const fieldOwner = "kuma-workload-status"
+
+// ownedFields is the only part of a Workload the updater computes.
+var ownedFields = []string{store.FieldStatus + ".dataplaneProxies"}
+
 type StatusUpdater struct {
 	roResManager manager.ReadOnlyResourceManager
 	resManager   manager.ResourceManager
@@ -148,7 +154,7 @@ func findMatchingDataplanes(
 
 func (s *StatusUpdater) tryUpdateWorkload(ctx context.Context, workload *workload_api.WorkloadResource, log logr.Logger) {
 	log.Info("updating workload", "reason", []string{"data plane proxies"})
-	if err := s.resManager.Update(ctx, workload); err != nil {
+	if err := s.resManager.Update(ctx, workload, store.UpdateOwnedFields(fieldOwner, ownedFields...)); err != nil {
 		if store.IsConflict(err) {
 			log.Info("couldn't update workload, will try again in next interval")
 		} else {

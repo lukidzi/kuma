@@ -29,6 +29,7 @@ var _ = Describe("KubernetesStore template", func() {
 
 		return &k8s.KubernetesStore{
 			Client: k8sClient,
+			Reader: k8sClient,
 			Converter: &k8s.SimpleConverter{
 				KubeFactory: &k8s.SimpleKubeFactory{
 					KubeTypes: kubeTypes,

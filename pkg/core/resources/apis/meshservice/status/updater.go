@@ -27,6 +27,19 @@ import (
 	util_time "github.com/kumahq/kuma/v3/pkg/util/time"
 )
 
+// fieldOwner is the name the updater writes the state of a local MeshService under.
+const fieldOwner = "kuma-meshservice-status"
+
+// ownedFields are the parts of a MeshService the updater computes. The rest of the spec
+// belongs to whoever created the service, the rest of the status to the VIP allocator
+// and the hostname generator.
+var ownedFields = []string{
+	store.FieldSpec + ".identities",
+	store.FieldSpec + ".state",
+	store.FieldStatus + ".tls",
+	store.FieldStatus + ".dataplaneProxies",
+}
+
 type StatusUpdater struct {
 	roResManager manager.ReadOnlyResourceManager
 	resManager   manager.ResourceManager
@@ -169,7 +182,7 @@ func (s *StatusUpdater) updateStatus(ctx context.Context) error {
 
 		if len(changeReasons) > 0 {
 			log.Info("updating mesh service", "reason", changeReasons)
-			if err := s.resManager.Update(ctx, ms); err != nil {
+			if err := s.resManager.Update(ctx, ms, store.UpdateOwnedFields(fieldOwner, ownedFields...)); err != nil {
 				if store.IsConflict(err) {
 					log.Info("couldn't update mesh service, because it was modified in another place. Will try again in the next interval", "interval", s.interval)
 				} else {

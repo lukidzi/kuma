@@ -25,6 +25,14 @@ type ResourceHoldingVIPs interface {
 	AllocateVIP(vip string)
 }
 
+// fieldOwner is the name the allocator writes the VIPs under. It only owns status.vips,
+// so it neither loses the address it allocated to a concurrent writer of another field
+// nor makes that writer fail.
+const fieldOwner = "kuma-vip-allocator"
+
+// ownedFields is the only part of a resource the allocator writes.
+var ownedFields = []string{store.FieldStatus + ".vips"}
+
 // Allocator manages IPs for resources holding vips like MeshService/MeshExternalServices/MeshMultiZoneService.
 // Each time allocator starts it initiates the IPAM based on existing vips
 // We don't free addresses explicitly, but we always allocate next free IP to avoid a problem when we
@@ -149,7 +157,7 @@ func (a *Allocator) allocateVIPs(ctx context.Context, typeDesc model.ResourceTyp
 		log.Info("allocating IP", "ip", ip.String())
 		resource.AllocateVIP(ip.String())
 
-		if err := a.resManager.Update(ctx, resource); err != nil {
+		if err := a.resManager.Update(ctx, resource, store.UpdateOwnedFields(fieldOwner, ownedFields...)); err != nil {
 			msg := "could not update the resource with allocated Kuma VIP. Will try to update in the next allocation window"
 			if store.IsConflict(err) {
 				log.Info(msg, "cause", "conflict", "interval", a.interval)

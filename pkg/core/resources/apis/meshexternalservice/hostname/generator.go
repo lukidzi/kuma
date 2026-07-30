@@ -11,6 +11,7 @@ import (
 	meshexternalservice_api "github.com/kumahq/kuma/v3/pkg/core/resources/apis/meshexternalservice/api/v1alpha1"
 	"github.com/kumahq/kuma/v3/pkg/core/resources/manager"
 	"github.com/kumahq/kuma/v3/pkg/core/resources/model"
+	"github.com/kumahq/kuma/v3/pkg/core/resources/store"
 )
 
 type MeshExternalServiceHostnameGenerator struct {
@@ -42,7 +43,7 @@ func (g *MeshExternalServiceHostnameGenerator) UpdateResourceStatus(ctx context.
 	}
 	externalService.Status.Addresses = addresses
 	externalService.Status.HostnameGenerators = statuses
-	if err := g.resManager.Update(ctx, externalService); err != nil {
+	if err := g.resManager.Update(ctx, externalService, store.UpdateOwnedFields(hostname.FieldOwner, hostname.OwnedFields...)); err != nil {
 		return errors.Wrap(err, "couldn't update MeshExternalService status")
 	}
 	return nil

@@ -120,6 +120,9 @@ import (
 {{- end }}
 // +kubebuilder:object:root=true
 // +kubebuilder:resource:categories=kuma,scope=Namespaced,shortName={{ .ShortName }}
+{{- if .HasStatus }}
+// +kubebuilder:subresource:status
+{{- end }}
 {{- range $marker := .KubebuilderMarkers }}
 {{ $marker }}
 {{- end }}

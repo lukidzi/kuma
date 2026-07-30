@@ -180,12 +180,19 @@ func (c *memoryStore) Update(_ context.Context, r core_model.Resource, fs ...sto
 	// Name must be provided via r.GetMeta()
 	mesh := r.GetMeta().GetMesh()
 	_, record := c.findRecord(string(r.Descriptor().Name), r.GetMeta().GetName(), mesh)
-	if record == nil || meta.Version != record.Version {
+	if record == nil {
 		return store.ErrorResourceConflict(r.Descriptor().Name, r.GetMeta().GetName(), r.GetMeta().GetMesh())
 	}
-	meta.Version = meta.Version.Next()
+	// a caller that owns whole sections of the resource writes them without the version
+	// precondition, so that components writing the other sections don't conflict with it
+	partial := opts.OwnsWholeSections()
+	if !partial && meta.Version != record.Version {
+		return store.ErrorResourceConflict(r.Descriptor().Name, r.GetMeta().GetName(), r.GetMeta().GetMesh())
+	}
+	meta.Version = record.Version.Next()
 	meta.ModificationTime = opts.ModificationTime
-	if opts.ModifyLabels {
+	meta.Labels = record.Labels
+	if opts.ModifyLabels && (!partial || opts.OwnsSection(store.FieldLabels)) {
 		meta.Labels = maps.Clone(opts.Labels)
 	}
 	r.SetMeta(meta)
@@ -194,12 +201,14 @@ func (c *memoryStore) Update(_ context.Context, r core_model.Resource, fs ...sto
 	record.ModificationTime = meta.ModificationTime
 	record.Labels = meta.Labels
 
-	content, err := core_model.ToJSON(r.GetSpec())
-	if err != nil {
-		return err
+	if !partial || opts.OwnsSection(store.FieldSpec) {
+		content, err := core_model.ToJSON(r.GetSpec())
+		if err != nil {
+			return err
+		}
+		record.Spec = string(content)
 	}
-	record.Spec = string(content)
-	if r.Descriptor().HasStatus {
+	if r.Descriptor().HasStatus && (!partial || opts.OwnsSection(store.FieldStatus)) {
 		content, err := core_model.ToJSON(r.GetStatus())
 		if err != nil {
 			return err

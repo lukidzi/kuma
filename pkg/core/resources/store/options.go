@@ -2,6 +2,7 @@ package store
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	core_model "github.com/kumahq/kuma/v3/pkg/core/resources/model"
@@ -54,10 +55,23 @@ func CreateWithLabels(labels map[string]string) CreateOptionsFunc {
 	}
 }
 
+// Top level sections of a stored resource. They can be passed to UpdateOwnedFields
+// on their own, or be the first segment of a more specific field path like "status.vips".
+const (
+	FieldSpec   = "spec"
+	FieldStatus = "status"
+	FieldLabels = "labels"
+)
+
 type UpdateOptions struct {
 	ModificationTime time.Time
 	Labels           map[string]string
 	ModifyLabels     bool
+	// FieldOwner names the component the update is attributed to. It is set together
+	// with OwnedFields, see UpdateOwnedFields.
+	FieldOwner string
+	// OwnedFields lists the field paths the caller owns, see UpdateOwnedFields.
+	OwnedFields []string
 }
 
 func ModifiedAt(modificationTime time.Time) UpdateOptionsFunc {
@@ -71,6 +85,54 @@ func UpdateWithLabels(labels map[string]string) UpdateOptionsFunc {
 		opts.Labels = labels
 		opts.ModifyLabels = true
 	}
+}
+
+// UpdateOwnedFields narrows the update down to the listed field paths and attributes
+// them to the given owner. Resources of Kuma are written by more than one component at
+// a time (the KDS syncer owns spec and labels, the VIP allocator owns status.vips, ...),
+// and a whole object update makes every one of them collide on the version of the object
+// even when they touch disjoint fields.
+//
+// A store that can write the listed fields on their own does it without the version
+// precondition, so writers of other fields don't conflict. On Kubernetes this is a
+// server-side apply, which merges per field, so any path can be listed. Stores that can
+// only write whole sections (Postgres, memory) honor the ownership when every listed
+// path is a whole section, and fall back to a regular update otherwise.
+//
+// The owner has to be stable across restarts, Kubernetes tracks the fields under this
+// name and takes them away from the previous owner on the first apply.
+func UpdateOwnedFields(owner string, fields ...string) UpdateOptionsFunc {
+	return func(opts *UpdateOptions) {
+		opts.FieldOwner = owner
+		opts.OwnedFields = fields
+	}
+}
+
+// OwnsWholeSections returns true when the caller declared ownership and every owned
+// path is a whole top level section, so a store that writes section by section can
+// honor the ownership.
+func (o *UpdateOptions) OwnsWholeSections() bool {
+	if o.FieldOwner == "" || len(o.OwnedFields) == 0 {
+		return false
+	}
+	for _, field := range o.OwnedFields {
+		switch field {
+		case FieldSpec, FieldStatus, FieldLabels:
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+// OwnsSection returns true when any of the owned paths belongs to the given section.
+func (o *UpdateOptions) OwnsSection(section string) bool {
+	for _, field := range o.OwnedFields {
+		if field == section || strings.HasPrefix(field, section+".") {
+			return true
+		}
+	}
+	return false
 }
 
 type UpdateOptionsFunc func(*UpdateOptions)

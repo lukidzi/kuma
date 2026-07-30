@@ -32,6 +32,24 @@ import (
 
 var globalSyncLog = core.Log.WithName("kds-global-sync")
 
+// FieldOwner is the name the syncer writes resources under. The fields it owns are
+// written without a version precondition, so that components owning the other fields of
+// the same resource (VIP allocator, hostname generator, status updaters) don't make the
+// sync fail. A failed sync tears the KDS stream down and pushes the control plane into
+// the reconnect backoff, which is why the syncer can't just retry on a conflict.
+const FieldOwner = "kuma-kds-syncer"
+
+// ownedFields are the fields the syncer writes. It always brings the spec and the labels
+// from the upstream. The status is owned by the local components of a zone, on the
+// global the syncer is its only writer.
+func ownedFields(r core_model.Resource, opts *SyncOption) []string {
+	fields := []string{store.FieldSpec, store.FieldLabels}
+	if r.Descriptor().HasStatus && !opts.IgnoreStatusChange {
+		fields = append(fields, store.FieldStatus)
+	}
+	return fields
+}
+
 // ResourceSyncer allows to synchronize resources in Store
 type ResourceSyncer interface {
 	// Sync method takes 'upstream' as a basis and synchronize underlying store.
@@ -243,7 +261,10 @@ func (s *syncResourceStore) Sync(syncCtx context.Context, upstreamResponse clien
 					continue
 				}
 			}
-			onUpdate = append(onUpdate, OnUpdate{r: r, opts: []store.UpdateOptionsFunc{store.UpdateWithLabels(newLabels)}})
+			onUpdate = append(onUpdate, OnUpdate{r: r, opts: []store.UpdateOptionsFunc{
+				store.UpdateWithLabels(newLabels),
+				store.UpdateOwnedFields(FieldOwner, ownedFields(r, opts)...),
+			}})
 		}
 	}
 

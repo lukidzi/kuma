@@ -25,6 +25,17 @@ import (
 	util_time "github.com/kumahq/kuma/v3/pkg/util/time"
 )
 
+// fieldOwner is the name the updater writes the matched services under.
+const fieldOwner = "kuma-meshmultizoneservice-status"
+
+// ownedFields are the parts of a MeshMultiZoneService the updater computes. A
+// MeshMultiZoneService comes from the global control plane, so the rest of it belongs to
+// the KDS syncer, the VIP allocator and the hostname generator.
+var ownedFields = []string{
+	store.FieldStatus + ".meshServices",
+	store.FieldStatus + ".conditions",
+}
+
 type StatusUpdater struct {
 	roResManager manager.ReadOnlyResourceManager
 	resManager   manager.ResourceManager
@@ -126,7 +137,7 @@ func (s *StatusUpdater) updateStatus(ctx context.Context) error {
 			mzSvc.Status.MeshServices = matched
 			mzSvc.Status.Conditions = updateConditions(mzSvc.Status.Conditions, condition)
 			log.V(1).Info("updating matched mesh services", "matchedMeshServices", matched, "condition", condition.Type)
-			if err := s.resManager.Update(ctx, mzSvc); err != nil {
+			if err := s.resManager.Update(ctx, mzSvc, store.UpdateOwnedFields(fieldOwner, ownedFields...)); err != nil {
 				if store.IsConflict(err) {
 					log.Info("couldn't update mesh multi zone service, because it was modified in another place. Will try again in the next interval", "interval", s.interval)
 				} else {

@@ -8,6 +8,23 @@ does not have any particular instructions.
 
 ## Upgrade to `3.0.0`
 
+### Status is now a subresource of the Kuma CRDs
+
+Every Kuma CRD that has a status (`MeshService`, `MeshMultiZoneService`,
+`MeshExternalService`, `MeshIdentity`, `MeshTrust`, `MeshOpenTelemetryBackend`,
+`Workload`, `MeshAccessLog`, `MeshMetric`, `MeshTrace`) now declares
+`subresources.status`, so the Kubernetes API server ignores `.status` on writes to
+the object itself and only accepts it on the `/status` endpoint. The control plane
+writes it there, and its `ClusterRole` gained `get`, `update` and `patch` on the
+`<resource>/status` subresources.
+
+**Action required**
+
+Apply the new CRDs and the new `ClusterRole` before rolling out the new control
+plane, which the Helm chart and `kumactl install control-plane` do for you. Any
+external tooling that sets `.status` on these resources with a plain update has to
+move to the `/status` endpoint, a plain update silently drops the status now.
+
 ### Legacy `ExternalService` resource removed
 
 The legacy `ExternalService` resource has been removed. Its CRD, API

@@ -20,6 +20,7 @@ import (
 // (kuma-dp resolves the address at runtime using HOST_IP or 127.0.0.1).
 // +kubebuilder:object:root=true
 // +kubebuilder:resource:categories=kuma,scope=Namespaced,shortName=motb
+// +kubebuilder:subresource:status
 type MeshOpenTelemetryBackend struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

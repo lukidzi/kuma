@@ -27,6 +27,17 @@ import (
 	util_time "github.com/kumahq/kuma/v3/pkg/util/time"
 )
 
+// FieldOwner is the name the generator writes hostnames under. It only owns the two
+// status fields it fills in, so it doesn't collide with the KDS syncer or with the other
+// components writing the status of the same resource.
+const FieldOwner = "kuma-hostname-generator"
+
+// OwnedFields are the parts of a resource the generator writes.
+var OwnedFields = []string{
+	store.FieldStatus + ".addresses",
+	store.FieldStatus + ".hostnameGenerators",
+}
+
 type HostnameGenerator interface {
 	GetResources(context.Context) (model.ResourceList, error)
 	UpdateResourceStatus(context.Context, model.Resource, []hostnamegenerator_api.HostnameGeneratorStatus, []hostnamegenerator_api.Address) error

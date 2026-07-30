@@ -307,6 +307,65 @@ func ExecuteStoreTests(
 				Expect(ms.Spec).To(Equal(updated.Spec))
 			})
 
+			It("should write only the owned sections and ignore the version", func() {
+				// given a resource with a spec and a status
+				name := "ms-owned.demo"
+				updated := meshservice_api.MeshServiceResource{
+					Spec: &meshservice_api.MeshService{
+						Ports: []meshservice_api.Port{
+							{Port: 80, TargetPort: pointer.To(intstr.FromInt(80)), AppProtocol: "http"},
+						},
+					},
+					Status: &meshservice_api.MeshServiceStatus{
+						VIPs: []meshservice_api.VIP{{IP: "10.0.0.1"}},
+					},
+				}
+				err := s.Create(context.Background(), &updated, store.CreateByKey(name, mesh))
+				Expect(err).ToNot(HaveOccurred())
+
+				// and a copy read by the owner of the spec before the status was written
+				stale := meshservice_api.NewMeshServiceResource()
+				err = s.Get(context.Background(), stale, store.GetByKey(name, mesh))
+				Expect(err).ToNot(HaveOccurred())
+
+				// when the owner of the status writes it
+				updated.Status.VIPs[0].IP = "10.0.0.2"
+				err = s.Update(context.Background(), &updated, store.UpdateOwnedFields("status-owner", store.FieldStatus))
+
+				// then
+				Expect(err).ToNot(HaveOccurred())
+
+				// when the owner of the spec writes from the copy it read before
+				stale.Spec.Ports[0].Port = 81
+				err = s.Update(context.Background(), stale, store.UpdateOwnedFields("spec-owner", store.FieldSpec))
+
+				// then it doesn't conflict on the version it didn't see
+				Expect(err).ToNot(HaveOccurred())
+
+				// and neither of the two writes was lost
+				ms := meshservice_api.NewMeshServiceResource()
+				err = s.Get(context.Background(), ms, store.GetByKey(name, mesh))
+				Expect(err).ToNot(HaveOccurred())
+				Expect(ms.Spec.Ports[0].Port).To(Equal(int32(81)))
+				Expect(ms.Status.VIPs).To(Equal([]meshservice_api.VIP{{IP: "10.0.0.2"}}))
+			})
+
+			It("should return a conflict when the owned resource is gone", func() {
+				// given
+				name := "to-be-deleted.demo"
+				resource := createResource(name)
+
+				// when the resource is deleted
+				err := s.Delete(context.Background(), resource, store.DeleteByKey(name, mesh))
+				Expect(err).ToNot(HaveOccurred())
+
+				// and the owner of a section writes it
+				err = s.Update(context.Background(), resource, store.UpdateOwnedFields("spec-owner", store.FieldSpec))
+
+				// then the resource is not brought back to life
+				Expect(err).To(MatchError(store.ErrorResourceConflict(resource.Descriptor().Name, name, mesh)))
+			})
+
 			// todo(jakubdyszkiewicz) write tests for optimistic locking
 		})
 

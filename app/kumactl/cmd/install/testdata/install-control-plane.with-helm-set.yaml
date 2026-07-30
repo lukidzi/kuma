@@ -1179,6 +1179,8 @@ spec:
         type: object
     served: true
     storage: true
+    subresources:
+      status: {}
 ---
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
@@ -2249,7 +2251,8 @@ spec:
         type: object
     served: true
     storage: true
-    subresources: {}
+    subresources:
+      status: {}
 ---
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
@@ -2490,7 +2493,8 @@ spec:
         type: object
     served: true
     storage: true
-    subresources: {}
+    subresources:
+      status: {}
 ---
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
@@ -2667,6 +2671,8 @@ spec:
         type: object
     served: true
     storage: true
+    subresources:
+      status: {}
 ---
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
@@ -4892,7 +4898,8 @@ spec:
         type: object
     served: true
     storage: true
-    subresources: {}
+    subresources:
+      status: {}
 ---
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
@@ -6186,7 +6193,8 @@ spec:
         type: object
     served: true
     storage: true
-    subresources: {}
+    subresources:
+      status: {}
 ---
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
@@ -6660,6 +6668,8 @@ spec:
         type: object
     served: true
     storage: true
+    subresources:
+      status: {}
 ---
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
@@ -6948,6 +6958,8 @@ spec:
         type: object
     served: true
     storage: true
+    subresources:
+      status: {}
 ---
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
@@ -8182,7 +8194,8 @@ spec:
         type: object
     served: true
     storage: true
-    subresources: {}
+    subresources:
+      status: {}
 ---
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
@@ -9605,7 +9618,8 @@ spec:
         type: object
     served: true
     storage: true
-    subresources: {}
+    subresources:
+      status: {}
 ---
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
@@ -10537,6 +10551,40 @@ rules:
     resources:
       - meshes/finalizers
       - dataplanes/finalizers
+    verbs:
+      - get
+      - patch
+      - update
+  # policies and resources with a status expose it as a subresource, the control plane
+  # writes it separately from the object itself
+  - apiGroups:
+      - kuma.io
+    resources:
+      - meshaccesslogs/status
+      - meshcircuitbreakers/status
+      - meshfaultinjections/status
+      - meshhealthchecks/status
+      - meshhttproutes/status
+      - meshloadbalancingstrategies/status
+      - meshmetrics/status
+      - meshpassthroughs/status
+      - meshproxypatches/status
+      - meshratelimits/status
+      - meshretries/status
+      - meshtcproutes/status
+      - meshtimeouts/status
+      - meshtlses/status
+      - meshtraces/status
+      - meshtrafficpermissions/status
+      - hostnamegenerators/status
+      - meshexternalservices/status
+      - meshidentities/status
+      - meshmultizoneservices/status
+      - meshopentelemetrybackends/status
+      - meshservices/status
+      - meshtrusts/status
+      - meshzoneaddresses/status
+      - workloads/status
     verbs:
       - get
       - patch

@@ -133,6 +133,25 @@ rules:
       - get
       - patch
       - update
+  # policies and resources with a status expose it as a subresource, the control plane
+  # writes it separately from the object itself
+  - apiGroups:
+      - kuma.io
+    resources:
+  {{- range $policy, $v := .Values.plugins.policies }}
+  {{- if $v }}
+      - {{ $policy }}/status
+  {{- end}}
+  {{- end}}
+  {{- range $policy, $v := .Values.plugins.resources }}
+  {{- if $v }}
+      - {{ $policy }}/status
+  {{- end}}
+  {{- end}}
+    verbs:
+      - get
+      - patch
+      - update
   {{- if .Values.cni.enabled }}
   - apiGroups:
       - k8s.cni.cncf.io

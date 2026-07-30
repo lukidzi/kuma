@@ -165,12 +165,6 @@ func (r *pgxResourceStore) Update(ctx context.Context, resource core_model.Resou
 
 	opts := store.NewUpdateOptions(fs...)
 
-	version, err := strconv.Atoi(resource.GetMeta().GetVersion())
-	newVersion := version + 1
-	if err != nil {
-		return errors.Wrap(err, "failed to convert meta version to int")
-	}
-
 	updateLabels := resource.GetMeta().GetLabels()
 	if opts.ModifyLabels {
 		updateLabels = opts.Labels
@@ -185,30 +179,14 @@ func (r *pgxResourceStore) Update(ctx context.Context, resource core_model.Resou
 		return err
 	}
 
-	statement := `UPDATE resources SET spec=$1, version=$2, modification_time=$3, labels=$4, status=$5 WHERE name=$6 AND mesh=$7 AND type=$8 AND version=$9;`
-	args := []any{
-		string(bytes),
-		newVersion,
-		opts.ModificationTime.UTC(),
-		labels,
-		status,
-		resource.GetMeta().GetName(),
-		resource.GetMeta().GetMesh(),
-		resource.Descriptor().Name,
-		version,
-	}
-	tx, exist := store.TxFromCtx(ctx)
-	var result pgconn.CommandTag
-	if pgxTx, ok := tx.(pgx.Tx); exist && ok {
-		result, err = pgxTx.Exec(ctx, statement, args...)
+	var newVersion int
+	if opts.OwnsWholeSections() {
+		newVersion, err = r.updateOwnedSections(ctx, resource, opts, string(bytes), status, labels)
 	} else {
-		result, err = r.pool.Exec(ctx, statement, args...)
+		newVersion, err = r.updateWholeResource(ctx, resource, opts, string(bytes), status, labels)
 	}
 	if err != nil {
-		return errors.Wrapf(err, "failed to execute query %s", statement)
-	}
-	if rows := result.RowsAffected(); rows != 1 {
-		return store.ErrorResourceConflict(resource.Descriptor().Name, resource.GetMeta().GetName(), resource.GetMeta().GetMesh())
+		return err
 	}
 
 	// update resource's meta with new version
@@ -221,6 +199,101 @@ func (r *pgxResourceStore) Update(ctx context.Context, resource core_model.Resou
 	})
 
 	return nil
+}
+
+// updateWholeResource rewrites every column of the row and only succeeds when nobody
+// else wrote the resource since it was read.
+func (r *pgxResourceStore) updateWholeResource(
+	ctx context.Context,
+	resource core_model.Resource,
+	opts *store.UpdateOptions,
+	spec string,
+	status string,
+	labels string,
+) (int, error) {
+	version, err := strconv.Atoi(resource.GetMeta().GetVersion())
+	if err != nil {
+		return 0, errors.Wrap(err, "failed to convert meta version to int")
+	}
+	newVersion := version + 1
+
+	statement := `UPDATE resources SET spec=$1, version=$2, modification_time=$3, labels=$4, status=$5 WHERE name=$6 AND mesh=$7 AND type=$8 AND version=$9;`
+	args := []any{
+		spec,
+		newVersion,
+		opts.ModificationTime.UTC(),
+		labels,
+		status,
+		resource.GetMeta().GetName(),
+		resource.GetMeta().GetMesh(),
+		resource.Descriptor().Name,
+		version,
+	}
+
+	tx, exist := store.TxFromCtx(ctx)
+	var result pgconn.CommandTag
+	if pgxTx, ok := tx.(pgx.Tx); exist && ok {
+		result, err = pgxTx.Exec(ctx, statement, args...)
+	} else {
+		result, err = r.pool.Exec(ctx, statement, args...)
+	}
+	if err != nil {
+		return 0, errors.Wrapf(err, "failed to execute query %s", statement)
+	}
+	if rows := result.RowsAffected(); rows != 1 {
+		return 0, store.ErrorResourceConflict(resource.Descriptor().Name, resource.GetMeta().GetName(), resource.GetMeta().GetMesh())
+	}
+	return newVersion, nil
+}
+
+// updateOwnedSections rewrites only the columns the caller owns and drops the version
+// precondition, so that components writing the other sections of the same resource
+// don't conflict with it. The version is still bumped, everybody who writes the whole
+// resource keeps colliding with this write as before.
+func (r *pgxResourceStore) updateOwnedSections(
+	ctx context.Context,
+	resource core_model.Resource,
+	opts *store.UpdateOptions,
+	spec string,
+	status string,
+	labels string,
+) (int, error) {
+	setters := []string{"version=version+1", "modification_time=$1"}
+	args := []any{opts.ModificationTime.UTC()}
+	own := func(column string, value any) {
+		args = append(args, value)
+		setters = append(setters, fmt.Sprintf("%s=$%d", column, len(args)))
+	}
+	if opts.OwnsSection(store.FieldSpec) {
+		own("spec", spec)
+	}
+	if opts.OwnsSection(store.FieldStatus) {
+		own("status", status)
+	}
+	if opts.OwnsSection(store.FieldLabels) {
+		own("labels", labels)
+	}
+	args = append(args, resource.GetMeta().GetName(), resource.GetMeta().GetMesh(), resource.Descriptor().Name)
+	statement := fmt.Sprintf(
+		`UPDATE resources SET %s WHERE name=$%d AND mesh=$%d AND type=$%d RETURNING version;`,
+		strings.Join(setters, ", "), len(args)-2, len(args)-1, len(args),
+	)
+
+	tx, exist := store.TxFromCtx(ctx)
+	var row pgx.Row
+	if pgxTx, ok := tx.(pgx.Tx); exist && ok {
+		row = pgxTx.QueryRow(ctx, statement, args...)
+	} else {
+		row = r.pool.QueryRow(ctx, statement, args...)
+	}
+	var newVersion int
+	if err := row.Scan(&newVersion); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return 0, store.ErrorResourceConflict(resource.Descriptor().Name, resource.GetMeta().GetName(), resource.GetMeta().GetMesh())
+		}
+		return 0, errors.Wrapf(err, "failed to execute query %s", statement)
+	}
+	return newVersion, nil
 }
 
 func (r *pgxResourceStore) Delete(ctx context.Context, resource core_model.Resource, fs ...store.DeleteOptionsFunc) error {

@@ -28,6 +28,13 @@ import (
 	util_time "github.com/kumahq/kuma/v3/pkg/util/time"
 )
 
+// fieldOwner is the name the updater writes the conditions under. It writes the
+// conditions of MeshOpenTelemetryBackend and of the policies referencing it.
+const fieldOwner = "kuma-meshopentelemetrybackend-status"
+
+// ownedFields is the only part of a resource the updater computes.
+var ownedFields = []string{store.FieldStatus + ".conditions"}
+
 type StatusUpdater struct {
 	roResManager manager.ReadOnlyResourceManager
 	resManager   manager.ResourceManager
@@ -142,7 +149,7 @@ func (s *StatusUpdater) updateStatus(ctx context.Context) error {
 			log := s.logger.WithValues("meshopentelemetrybackend", name)
 			motb.Status.Conditions = updatedConditions
 			log.V(1).Info("updating OTEL backend status", "policyRefCount", count)
-			if err := s.resManager.Update(ctx, motb); err != nil {
+			if err := s.resManager.Update(ctx, motb, store.UpdateOwnedFields(fieldOwner, ownedFields...)); err != nil {
 				if store.IsConflict(err) {
 					log.Info("couldn't update MeshOpenTelemetryBackend, because it was modified in another place. Will try again in the next interval", "interval", s.interval)
 				} else {
@@ -422,7 +429,7 @@ func (s *StatusUpdater) updateResourceCondition(
 	}
 	*conditions = updateConditions(*conditions, condition)
 	log := s.logger.WithValues(logKey, resource.GetMeta().GetName(), "mesh", resource.GetMeta().GetMesh())
-	if err := s.resManager.Update(ctx, resource); err != nil {
+	if err := s.resManager.Update(ctx, resource, store.UpdateOwnedFields(fieldOwner, ownedFields...)); err != nil {
 		if store.IsConflict(err) {
 			log.Info("couldn't update status, will retry next interval", "resourceType", typeName, "interval", s.interval)
 		} else {
