@@ -2,6 +2,7 @@ package k8s
 
 import (
 	"context"
+	"encoding/json"
 	"maps"
 	"strings"
 	"sync"
@@ -11,7 +12,9 @@ import (
 	kube_apierrs "k8s.io/apimachinery/pkg/api/errors"
 	kube_meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 	kube_runtime "k8s.io/apimachinery/pkg/runtime"
+	kube_types "k8s.io/apimachinery/pkg/types"
 	kube_client "sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	"github.com/kumahq/kuma/v3/api/mesh/v1alpha1"
@@ -101,6 +104,10 @@ func (s *KubernetesStore) Update(ctx context.Context, r core_model.Resource, fs 
 		return errors.Wrapf(err, "failed to convert core model of type %s into k8s counterpart", r.Descriptor().Name)
 	}
 
+	if opts.StatusFieldOwner != "" {
+		return s.applyStatus(ctx, r, obj, opts.StatusFieldOwner)
+	}
+
 	updateLabels := r.GetMeta().GetLabels()
 	if opts.ModifyLabels {
 		updateLabels = opts.Labels
@@ -118,6 +125,79 @@ func (s *KubernetesStore) Update(ctx context.Context, r core_model.Resource, fs 
 	}
 	err = s.Converter.ToCoreResource(obj, r)
 	if err != nil {
+		return errors.Wrap(err, "failed to convert k8s model into core counterpart")
+	}
+	return nil
+}
+
+// applyStatus writes only the status subtree with Server-Side Apply, under the
+// caller's field owner.
+//
+// Kubernetes versions the whole object, so a whole-object update is rejected
+// whenever any other owner wrote in between — the KDS syncer replacing spec and
+// labels from the Global control plane, for instance — even though the two
+// writes touch disjoint fields. An apply carries no resource version, so it
+// cannot be rejected that way; the API server records the fields this owner
+// manages and merges everything else.
+//
+// The body is deliberately partial. Apply claims ownership of every field it
+// carries, so sending the whole converted object would make this owner the
+// manager of spec and labels too, and put it in a permanent dispute with the
+// component that actually owns them. Only identity and status go on the wire.
+//
+// ForceOwnership resolves the one conflict that remains in practice: a
+// whole-object update records an owner over every field it sets, including this
+// one's, and without force the next apply would be rejected until that owner
+// released it.
+func (s *KubernetesStore) applyStatus(ctx context.Context, r core_model.Resource, obj k8s_model.KubernetesObject, owner string) error {
+	gvk, err := apiutil.GVKForObject(obj, s.Scheme)
+	if err != nil {
+		return errors.Wrapf(err, "failed to resolve group-version-kind of type %s", r.Descriptor().Name)
+	}
+
+	encoded, err := json.Marshal(obj)
+	if err != nil {
+		return errors.Wrap(err, "failed to serialize k8s resource")
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(encoded, &fields); err != nil {
+		return errors.Wrap(err, "failed to inspect serialized k8s resource")
+	}
+	status, ok := fields["status"]
+	if !ok {
+		// The type has no status, or it serialized away entirely. Applying an
+		// empty object is a no-op rather than an error, which keeps the option
+		// safe to pass for any resource type.
+		status = json.RawMessage("{}")
+	}
+
+	meta := map[string]string{"name": obj.GetObjectMeta().GetName()}
+	if ns := obj.GetObjectMeta().GetNamespace(); ns != "" {
+		meta["namespace"] = ns
+	}
+	body, err := json.Marshal(map[string]any{
+		"apiVersion": gvk.GroupVersion().String(),
+		"kind":       gvk.Kind,
+		"metadata":   meta,
+		"status":     status,
+	})
+	if err != nil {
+		return errors.Wrap(err, "failed to build status apply patch")
+	}
+
+	if err := s.Client.Patch(
+		ctx,
+		obj,
+		kube_client.RawPatch(kube_types.ApplyPatchType, body),
+		kube_client.FieldOwner(owner),
+		kube_client.ForceOwnership,
+	); err != nil {
+		if kube_apierrs.IsConflict(err) {
+			return store.ErrorResourceConflict(r.Descriptor().Name, r.GetMeta().GetName(), r.GetMeta().GetMesh())
+		}
+		return errors.Wrap(err, "failed to apply status of k8s resource")
+	}
+	if err := s.Converter.ToCoreResource(obj, r); err != nil {
 		return errors.Wrap(err, "failed to convert k8s model into core counterpart")
 	}
 	return nil

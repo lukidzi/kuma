@@ -58,6 +58,7 @@ type UpdateOptions struct {
 	ModificationTime time.Time
 	Labels           map[string]string
 	ModifyLabels     bool
+	StatusFieldOwner string
 }
 
 func ModifiedAt(modificationTime time.Time) UpdateOptionsFunc {
@@ -70,6 +71,34 @@ func UpdateWithLabels(labels map[string]string) UpdateOptionsFunc {
 	return func(opts *UpdateOptions) {
 		opts.Labels = labels
 		opts.ModifyLabels = true
+	}
+}
+
+// UpdateWithStatusOwner narrows the write to the resource's status and applies
+// it as the named field owner, using Server-Side Apply where the store supports
+// it.
+//
+// Status and spec have different owners. On a Zone the spec and labels arrive
+// from the Global control plane while the status belongs to local components:
+// the VIP allocator owns Status.VIPs, the hostname generators own
+// Status.Addresses. A whole-object write carries a precondition over fields the
+// caller does not own, so any write by another owner invalidates it even though
+// the two touch disjoint fields.
+//
+// Server-Side Apply sends no resource version at all. The API server records
+// which fields each owner manages and merges the rest, so writers of disjoint
+// fields stop invalidating each other, and the only remaining conflict is a real
+// dispute over the same field.
+//
+// The name must be a stable constant. Field ownership is tracked per name, so a
+// name that varies by version or instance accumulates orphaned entries and
+// fragments ownership of the fields it writes.
+//
+// Stores that do not implement it fall back to a whole-object update, which is
+// the behavior every caller had before the option existed.
+func UpdateWithStatusOwner(owner string) UpdateOptionsFunc {
+	return func(opts *UpdateOptions) {
+		opts.StatusFieldOwner = owner
 	}
 }
 

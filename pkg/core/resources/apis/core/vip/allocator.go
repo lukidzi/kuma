@@ -19,6 +19,11 @@ import (
 	util_time "github.com/kumahq/kuma/v3/pkg/util/time"
 )
 
+// statusFieldOwner names this component in the field ownership the API server
+// records. It must stay constant across releases: ownership is tracked per name,
+// so changing it strands the entries written under the old one.
+const statusFieldOwner = "kuma-vip-allocator"
+
 type ResourceHoldingVIPs interface {
 	model.Resource
 	VIPs() []string
@@ -149,7 +154,11 @@ func (a *Allocator) allocateVIPs(ctx context.Context, typeDesc model.ResourceTyp
 		log.Info("allocating IP", "ip", ip.String())
 		resource.AllocateVIP(ip.String())
 
-		if err := a.resManager.Update(ctx, resource); err != nil {
+		// VIPs live in the status, which this allocator owns. Applying only the
+		// status keeps the write from carrying a precondition over spec and
+		// labels, which belong to the Global control plane and change underneath
+		// us at times we cannot predict.
+		if err := a.resManager.Update(ctx, resource, store.UpdateWithStatusOwner(statusFieldOwner)); err != nil {
 			msg := "could not update the resource with allocated Kuma VIP. Will try to update in the next allocation window"
 			if store.IsConflict(err) {
 				log.Info(msg, "cause", "conflict", "interval", a.interval)
