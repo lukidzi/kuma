@@ -3,7 +3,6 @@ package xds
 import (
 	"fmt"
 	"maps"
-	"net"
 	"slices"
 	"sort"
 	"strings"
@@ -62,228 +61,156 @@ type FilterChainMatch struct {
 // that would result in a listener rejected by Envoy are dropped and returned as warnings,
 // so a single incorrect match doesn't invalidate the whole passthrough listener.
 func GetOrderedMatchers(conf api.Conf) ([]FilterChainMatch, []string) {
-	warnings := newWarnings()
-	matcherWithRoutes := map[Matcher]map[Route]bool{}
-	portProtocols := map[uint32]map[core_meta.Protocol]bool{}
-	chainOwners := map[chainKey]chainOwner{}
+	builder := newChainBuilder()
 	for _, match := range pointer.Deref(conf.AppendMatch) {
-		port := pointer.DerefOr[uint32](match.Port, 0)
-		protocol := core_meta.ParseProtocol(string(match.Protocol))
-		matchType, isWildcardDomain := getMatchType(match, protocol)
-		matcher := Matcher{
-			Protocol:  protocol,
-			Port:      port,
-			MatchType: matchType,
+		builder.addMatch(match)
+	}
+	builder.expandPortlessMatchers()
+	return builder.orderedMatches(), builder.warnings.sorted()
+}
+
+// chainBuilder turns matches into filter chains. The first match claims the chain it
+// resolves to, a later match either merges into it (an L7 domain becoming another route)
+// or is dropped with a warning when it would duplicate the chain's Envoy matcher.
+type chainBuilder struct {
+	warnings *warnings
+	owners   map[chainKey]Matcher
+	ports    map[uint32]bool
+	chains   map[Matcher]map[Route]bool
+}
+
+func newChainBuilder() *chainBuilder {
+	return &chainBuilder{
+		warnings: newWarnings(),
+		owners:   map[chainKey]Matcher{},
+		ports:    map[uint32]bool{},
+		chains:   map[Matcher]map[Route]bool{},
+	}
+}
+
+func (b *chainBuilder) addMatch(match api.Match) {
+	protocol := core_meta.ParseProtocol(string(match.Protocol))
+	matchType, isWildcardDomain := getMatchType(match, protocol)
+	matcher := Matcher{
+		Protocol:  protocol,
+		Port:      pointer.DerefOr[uint32](match.Port, 0),
+		MatchType: matchType,
+	}
+	// L7 domains share one filter chain per port and become virtual host routes
+	isL7Domain := slices.Contains(l7Protocols, protocol) && matchType == Domain
+	if !isL7Domain {
+		matcher.Value = match.Value
+	}
+	if !b.claim(matcher, match.Value) {
+		return
+	}
+	b.ports[matcher.Port] = true
+	routes := map[Route]bool{}
+	if isL7Domain {
+		routeMatchType := Domain
+		if isWildcardDomain {
+			routeMatchType = WildcardDomain
 		}
-		// L7 domains share one filter chain per port and become virtual host routes
-		isL7Domain := slices.Contains(l7Protocols, protocol) && matchType == Domain
-		if !isL7Domain {
-			matcher.Value = match.Value
+		routes[Route{Value: match.Value, MatchType: routeMatchType}] = true
+	}
+	mergeChain(b.chains, matcher, routes)
+}
+
+// claim registers the matcher as the owner of the filter chain it resolves to. A chain
+// claimed by another matcher accepts no further ones, whatever this matcher adds has to
+// go through the owner.
+func (b *chainBuilder) claim(matcher Matcher, value string) bool {
+	key := newChainKey(matcher)
+	owner, found := b.owners[key]
+	if !found {
+		b.owners[key] = matcher
+		return true
+	}
+	if owner == matcher {
+		return true
+	}
+	if owner.Protocol != matcher.Protocol {
+		b.warnings.add(fmt.Sprintf(
+			"ignoring match %q with protocol %s, protocol %s is already configured for %s on %s, %s",
+			value, matcher.Protocol, owner.Protocol, key.describe(), describePort(matcher.Port), key.conflictReason(),
+		))
+	} else {
+		b.warnings.add(fmt.Sprintf(
+			"ignoring match %q with protocol %s, match %q already defines a filter chain for %s on %s",
+			value, matcher.Protocol, owner.Value, key.describe(), describePort(matcher.Port),
+		))
+	}
+	return false
+}
+
+// Envoy first checks the port when performing matching. If there is a matcher for a specific port
+// and one rule to match all ports alongside another for a specific port,
+// it might select the matcher for the specific port but fail to find a corresponding filter chain.
+// To avoid this issue, we also generate specific port matchers for rules intended to match all ports.
+func (b *chainBuilder) expandPortlessMatchers() {
+	expanded := map[Matcher]map[Route]bool{}
+	for matcher, routes := range b.chains {
+		mergeChain(expanded, matcher, routes)
+		if matcher.Port != 0 {
+			continue
 		}
-		key := newChainKey(port, protocol, matchType, match.Value)
-		if owner, found := chainOwners[key]; found {
-			if owner.protocol != protocol {
-				warnings.add(fmt.Sprintf(
-					"ignoring match %q with protocol %s, protocol %s is already configured for %s on %s, %s",
-					match.Value, protocol, owner.protocol, key.describe(), describePort(port), key.conflictReason(),
-				))
+		for port := range b.ports {
+			if port == 0 {
 				continue
 			}
-			if owner.matcher != matcher {
-				warnings.add(fmt.Sprintf(
-					"ignoring match %q with protocol %s, match %q already defines a filter chain for %s on %s",
-					match.Value, protocol, owner.value, key.describe(), describePort(port),
-				))
-				continue
-			}
-		} else {
-			chainOwners[key] = chainOwner{protocol: protocol, matcher: matcher, value: match.Value}
-		}
-		if _, found := portProtocols[port]; !found {
-			portProtocols[port] = map[core_meta.Protocol]bool{protocol: true}
-		} else {
-			portProtocols[port][protocol] = true
-		}
-		if isL7Domain {
-			routeMatchType := Domain
-			if isWildcardDomain {
-				routeMatchType = WildcardDomain
-			}
-			route := Route{
-				Value:     match.Value,
-				MatchType: routeMatchType,
-			}
-			if _, found := matcherWithRoutes[matcher]; found {
-				matcherWithRoutes[matcher][route] = true
-			} else {
-				matcherWithRoutes[matcher] = map[Route]bool{
-					route: true,
-				}
-			}
-		} else if _, found := matcherWithRoutes[matcher]; !found {
-			matcherWithRoutes[matcher] = map[Route]bool{}
-		}
-	}
-	// Envoy first checks the port when performing matching. If there is a matcher for a specific port
-	// and one rule to match all ports alongside another for a specific port,
-	// it might select the matcher for the specific port but fail to find a corresponding filter chain.
-	// To avoid this issue, we also generate specific port matchers for rules intended to match all ports.
-	matcherWithRoutesAndAdditionalPorts := map[Matcher]map[Route]bool{}
-	for matcher, routes := range matcherWithRoutes {
-		if _, found := matcherWithRoutesAndAdditionalPorts[matcher]; found {
-			for route := range routes {
-				matcherWithRoutesAndAdditionalPorts[matcher][Route{
-					Value:     route.Value,
-					MatchType: route.MatchType,
-				}] = true
-			}
-		} else {
-			matcherWithRoutesAndAdditionalPorts[matcher] = maps.Clone(routes)
-		}
-		if matcher.Port == 0 {
-			for port := range portProtocols {
-				if port == 0 {
-					continue
-				}
-				additionalMatcher := Matcher{
-					Protocol:  matcher.Protocol,
-					Port:      port,
-					MatchType: matcher.MatchType,
-					Value:     matcher.Value,
-				}
-				key := newChainKey(port, matcher.Protocol, matcher.MatchType, matcher.Value)
-				if owner, found := chainOwners[key]; found {
-					if owner.protocol != matcher.Protocol {
-						warnings.add(fmt.Sprintf(
-							"matches with protocol %s and no port are not applied to %s on port %d, protocol %s is already configured there",
-							matcher.Protocol, key.describe(), port, owner.protocol,
-						))
-						continue
-					}
-					if owner.matcher != additionalMatcher {
-						warnings.add(fmt.Sprintf(
-							"matches with protocol %s and no port are not applied to %s on port %d, match %q already defines a filter chain there",
-							matcher.Protocol, key.describe(), port, owner.value,
-						))
-						continue
-					}
-				}
-				if _, found := matcherWithRoutesAndAdditionalPorts[additionalMatcher]; found {
-					for route := range routes {
-						matcherWithRoutesAndAdditionalPorts[additionalMatcher][Route{
-							Value:     route.Value,
-							MatchType: route.MatchType,
-						}] = true
-					}
-				} else {
-					matcherWithRoutesAndAdditionalPorts[additionalMatcher] = maps.Clone(routes)
-				}
+			portMatcher := matcher
+			portMatcher.Port = port
+			if b.expandable(portMatcher) {
+				mergeChain(expanded, portMatcher, routes)
 			}
 		}
 	}
-	filterChainMatchers := []FilterChainMatch{}
-	for matcher, routes := range matcherWithRoutesAndAdditionalPorts {
-		filterChainMatchers = append(filterChainMatchers,
-			FilterChainMatch{
-				Protocol:  matcher.Protocol,
-				Port:      matcher.Port,
-				MatchType: matcher.MatchType,
-				Value:     matcher.Value,
-				Routes:    getOrderedRoutes(routes),
-			})
-	}
-	orderMatchers(filterChainMatchers)
-	return filterChainMatchers, warnings.sorted()
+	b.chains = expanded
 }
 
-// chainClass groups protocols whose filter chains can collide: chains of different
-// classes always differ in the transport or application protocols they match on.
-type chainClass int
-
-const (
-	tcpChain  chainClass = iota // tcp and mysql: raw_buffer with optional address and port
-	tlsChain                    // tls: tls transport with SNI or address and optional port
-	httpChain                   // http, http2 and grpc: raw_buffer and http/1.1,h2c with optional address and port
-)
-
-func protocolClass(protocol core_meta.Protocol) chainClass {
-	switch protocol {
-	case core_meta.ProtocolTLS:
-		return tlsChain
-	case core_meta.ProtocolHTTP, core_meta.ProtocolHTTP2, core_meta.ProtocolGRPC:
-		return httpChain
-	default:
-		return tcpChain
+// expandable reports whether a match without a port can be copied onto this port without
+// duplicating the filter chain already claimed there
+func (b *chainBuilder) expandable(matcher Matcher) bool {
+	key := newChainKey(matcher)
+	owner, found := b.owners[key]
+	if !found || owner == matcher {
+		return true
 	}
+	if owner.Protocol != matcher.Protocol {
+		b.warnings.add(fmt.Sprintf(
+			"matches with protocol %s and no port are not applied to %s on port %d, protocol %s is already configured there",
+			matcher.Protocol, key.describe(), matcher.Port, owner.Protocol,
+		))
+	} else {
+		b.warnings.add(fmt.Sprintf(
+			"matches with protocol %s and no port are not applied to %s on port %d, match %q already defines a filter chain there",
+			matcher.Protocol, key.describe(), matcher.Port, owner.Value,
+		))
+	}
+	return false
 }
 
-// chainKey identifies the filter chain a match ends up in: all domains of an L7
-// protocol and port share one chain, TLS domains get a chain per SNI, IPs and CIDRs
-// a chain per destination prefix range.
-type chainKey struct {
-	class   chainClass
-	port    uint32
-	address string
-	sni     string
+func (b *chainBuilder) orderedMatches() []FilterChainMatch {
+	matches := []FilterChainMatch{}
+	for matcher, routes := range b.chains {
+		matches = append(matches, FilterChainMatch{
+			Protocol:  matcher.Protocol,
+			Port:      matcher.Port,
+			MatchType: matcher.MatchType,
+			Value:     matcher.Value,
+			Routes:    getOrderedRoutes(routes),
+		})
+	}
+	orderMatchers(matches)
+	return matches
 }
 
-// chainOwner tells a conflicting matcher apart from one that merges into the chain
-type chainOwner struct {
-	protocol core_meta.Protocol
-	matcher  Matcher
-	value    string
-}
-
-func newChainKey(port uint32, protocol core_meta.Protocol, matchType MatchType, value string) chainKey {
-	key := chainKey{class: protocolClass(protocol), port: port}
-	switch matchType {
-	case IP, IPV6, CIDR, CIDRV6:
-		key.address = normalizePrefix(matchType, value)
-	case Domain, WildcardDomain:
-		if key.class == tlsChain {
-			key.sni = value
-		}
+func mergeChain(chains map[Matcher]map[Route]bool, matcher Matcher, routes map[Route]bool) {
+	if existing, found := chains[matcher]; found {
+		maps.Copy(existing, routes)
+	} else {
+		chains[matcher] = maps.Clone(routes)
 	}
-	return key
-}
-
-// normalizePrefix converts an address to the prefix range Envoy matches on, so an IP,
-// a CIDR covering only that IP and a non-canonical spelling all resolve to the same chain
-func normalizePrefix(matchType MatchType, value string) string {
-	switch matchType {
-	case IP:
-		return canonicalIP(value) + "/32"
-	case IPV6:
-		return canonicalIP(value) + "/128"
-	case CIDR, CIDRV6:
-		ip, prefixLen := getIpAndMask(value)
-		return fmt.Sprintf("%s/%d", ip, prefixLen)
-	}
-	return ""
-}
-
-func canonicalIP(value string) string {
-	if ip := net.ParseIP(value); ip != nil {
-		return ip.String()
-	}
-	return value
-}
-
-func (k chainKey) conflictReason() string {
-	if k.class == httpChain {
-		return fmt.Sprintf("only one of %v can be configured on the same port", l7Protocols)
-	}
-	return "both would produce the same filter chain matcher"
-}
-
-func (k chainKey) describe() string {
-	if k.sni != "" {
-		return fmt.Sprintf("domain %q", k.sni)
-	}
-	if k.address == "" {
-		return "domains"
-	}
-	return k.address
 }
 
 // warnings deduplicates messages, map iteration surfaces the same conflict multiple
@@ -306,25 +233,19 @@ func (w *warnings) sorted() []string {
 	return messages
 }
 
-func describePort(port uint32) string {
-	if port == 0 {
-		return "all ports"
-	}
-	return fmt.Sprintf("port %d", port)
-}
-
 func getMatchType(match api.Match, protocol core_meta.Protocol) (MatchType, bool) {
 	var matchType MatchType
 	isWildcardDomain := false
 	switch match.Type {
 	case api.MatchType("Domain"):
 		matchType = Domain
-		// for L7 protocol we want to aggregate routes
-		if strings.HasPrefix(match.Value, "*") && slices.Contains([]core_meta.Protocol{core_meta.ProtocolGRPC, core_meta.ProtocolHTTP, core_meta.ProtocolHTTP2}, protocol) {
-			matchType = Domain
-			isWildcardDomain = true
-		} else if strings.HasPrefix(match.Value, "*") {
-			matchType = WildcardDomain
+		if strings.HasPrefix(match.Value, "*") {
+			// L7 wildcard domains stay in the shared chain and aggregate as routes
+			if slices.Contains(l7Protocols, protocol) {
+				isWildcardDomain = true
+			} else {
+				matchType = WildcardDomain
+			}
 		}
 	case api.MatchType("IP"):
 		if govalidator.IsIPv6(match.Value) {
@@ -355,8 +276,7 @@ func getOrderedRoutes(routesMap map[Route]bool) []Route {
 		if routes[i].MatchType == Domain || routes[i].MatchType == WildcardDomain {
 			return sortDomains(routes[i].Value, routes[j].Value)
 		}
-
-		return routes[i].MatchType < routes[j].MatchType
+		return false
 	})
 	return routes
 }
@@ -372,23 +292,21 @@ func orderMatchers(matchers []FilterChainMatch) {
 		if matchers[i].Port != matchers[j].Port {
 			return matchers[i].Port > matchers[j].Port
 		}
-		if matchers[i].MatchType == Domain || matchers[i].MatchType == WildcardDomain {
+		switch matchers[i].MatchType {
+		case Domain, WildcardDomain:
 			return sortDomains(matchers[i].Value, matchers[j].Value)
-		}
-		if matchers[i].MatchType == CIDR || matchers[i].MatchType == CIDRV6 {
+		case CIDR, CIDRV6:
 			ipI, prefixI := getIpAndMask(matchers[i].Value)
 			ipJ, prefixJ := getIpAndMask(matchers[j].Value)
 			if prefixI == prefixJ {
 				return ipI > ipJ
 			}
 			return prefixI > prefixJ
-		}
-
-		if matchers[i].MatchType == IP || matchers[i].MatchType == IPV6 {
+		case IP, IPV6:
 			return matchers[i].Value > matchers[j].Value
+		default:
+			return len(matchers[i].Routes) > len(matchers[j].Routes)
 		}
-
-		return len(matchers[i].Routes) > len(matchers[j].Routes)
 	})
 }
 
@@ -396,22 +314,8 @@ func sortDomains(i string, j string) bool {
 	splitI := strings.Split(i, ".")
 	splitJ := strings.Split(j, ".")
 
-	lenI := len(splitI)
-	lenJ := len(splitJ)
-
-	if lenI != lenJ {
-		return lenI > lenJ
+	if len(splitI) != len(splitJ) {
+		return len(splitI) > len(splitJ)
 	}
-
 	return i < j
-}
-
-func getIpAndMask(cidr string) (string, uint32) {
-	_, ipNet, err := net.ParseCIDR(cidr)
-	if err != nil {
-		return "", 0
-	}
-	ip := ipNet.IP.String()
-	mask, _ := ipNet.Mask.Size()
-	return ip, uint32(mask)
 }
