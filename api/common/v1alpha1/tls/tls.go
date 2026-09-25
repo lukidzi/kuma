@@ -2,6 +2,7 @@
 package tls
 
 import (
+	"fmt"
 	"slices"
 
 	tlsv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/transport_sockets/tls/v3"
@@ -31,9 +32,11 @@ var allTlsVersions = []string{string(TLSVersionAuto), string(TLSVersion10), stri
 
 type Version struct {
 	// Min defines minimum supported version. One of `TLSAuto`, `TLS10`, `TLS11`, `TLS12`, `TLS13`.
+	// `TLSAuto` or unset means TLS 1.2.
 	// +kubebuilder:default=TLSAuto
 	Min *TlsVersion `json:"min,omitempty"`
 	// Max defines maximum supported version. One of `TLSAuto`, `TLS10`, `TLS11`, `TLS12`, `TLS13`.
+	// `TLSAuto` or unset means TLS 1.3.
 	// +kubebuilder:default=TLSAuto
 	Max *TlsVersion `json:"max,omitempty"`
 }
@@ -41,25 +44,25 @@ type Version struct {
 func ValidateVersion(version *Version) validators.ValidationError {
 	var verr validators.ValidationError
 	path := validators.Root()
-	specificMin := false
-	specificMax := false
+	minVersion := TLSVersion12
+	maxVersion := TLSVersion13
 	if version.Min != nil {
 		if !slices.Contains(allTlsVersions, string(*version.Min)) {
 			verr.AddErrorAt(path.Field("min"), validators.MakeFieldMustBeOneOfErr("min", allTlsVersions...))
 		} else if *version.Min != TLSVersionAuto {
-			specificMin = true
+			minVersion = *version.Min
 		}
 	}
 	if version.Max != nil {
 		if !slices.Contains(allTlsVersions, string(*version.Max)) {
 			verr.AddErrorAt(path.Field("max"), validators.MakeFieldMustBeOneOfErr("max", allTlsVersions...))
 		} else if *version.Max != TLSVersionAuto {
-			specificMax = true
+			maxVersion = *version.Max
 		}
 	}
 
-	if specificMin && specificMax && TlsVersionOrder[*version.Min] > TlsVersionOrder[*version.Max] {
-		verr.AddViolationAt(path.Field("min"), "min version must be lower than max")
+	if TlsVersionOrder[minVersion] > TlsVersionOrder[maxVersion] {
+		verr.AddViolationAt(path.Field("min"), fmt.Sprintf("min version %s must not be higher than max version %s", minVersion, maxVersion))
 	}
 
 	return verr

@@ -84,6 +84,10 @@ var _ = Describe("MeshExternalService", func() {
 				name: "external-service",
 				file: "min-higher-than-max-invalid",
 			}),
+			Entry("max tls version lower than default min", testCase{
+				name: "external-service",
+				file: "max-lower-than-default-min-invalid",
+			}),
 			Entry("name too long", testCase{
 				name: "external-service-very-long-very-long-very-long-very-long-very-long-very-long-very-long",
 				file: "name-too-long",

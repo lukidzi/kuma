@@ -323,6 +323,7 @@ var _ = Describe("TrafficRoute", func() {
 								FallbackToSystemCa:       true,
 								SkipHostnameVerification: true,
 								SANs:                     []core_xds.SAN{},
+								MaxTlsVersion:            pointer.To(tlsv3.TlsParameters_TLSv1_3),
 								OwnerResource: kri.Identifier{
 									ResourceType: meshexternalservice_api.MeshExternalServiceType,
 									Mesh:         "default",

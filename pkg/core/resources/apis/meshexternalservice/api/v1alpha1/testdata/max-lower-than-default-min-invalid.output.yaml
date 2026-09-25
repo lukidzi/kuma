@@ -1,0 +1,3 @@
+violations:
+- field: spec.tls.version.min
+  message: min version TLS12 must not be higher than max version TLS11

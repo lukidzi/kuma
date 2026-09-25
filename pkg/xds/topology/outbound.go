@@ -314,12 +314,11 @@ func setTlsConfiguration(ctx context.Context, tls *meshexternalservice_api.Tls, 
 	es.FallbackToSystemCa = true
 	es.AllowRenegotiation = tls.AllowRenegotiation
 
-	if tls.Version != nil {
-		if tls.Version.Min != nil {
-			es.MinTlsVersion = pointer.To(common_tls.ToTlsVersion(tls.Version.Min))
-		}
-		es.MaxTlsVersion = pointer.To(common_tls.ToUpstreamMaxTlsVersion(tls.Version.Max))
+	version := pointer.Deref(tls.Version)
+	if version.Min != nil {
+		es.MinTlsVersion = pointer.To(common_tls.ToTlsVersion(version.Min))
 	}
+	es.MaxTlsVersion = pointer.To(common_tls.ToUpstreamMaxTlsVersion(version.Max))
 	var err error
 	if tls.Verification != nil {
 		if tls.Verification.CaCert != nil {

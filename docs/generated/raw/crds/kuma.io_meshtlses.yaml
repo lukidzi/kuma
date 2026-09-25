@@ -83,8 +83,9 @@ spec:
                           properties:
                             max:
                               default: TLSAuto
-                              description: Max defines maximum supported version.
-                                One of `TLSAuto`, `TLS10`, `TLS11`, `TLS12`, `TLS13`.
+                              description: |-
+                                Max defines maximum supported version. One of `TLSAuto`, `TLS10`, `TLS11`, `TLS12`, `TLS13`.
+                                `TLSAuto` or unset means TLS 1.3.
                               enum:
                               - TLSAuto
                               - TLS10
@@ -94,8 +95,9 @@ spec:
                               type: string
                             min:
                               default: TLSAuto
-                              description: Min defines minimum supported version.
-                                One of `TLSAuto`, `TLS10`, `TLS11`, `TLS12`, `TLS13`.
+                              description: |-
+                                Min defines minimum supported version. One of `TLSAuto`, `TLS10`, `TLS11`, `TLS12`, `TLS13`.
+                                `TLSAuto` or unset means TLS 1.2.
                               enum:
                               - TLSAuto
                               - TLS10
